@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # AI assistant backend
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      # Configuration
+      - ENVIRONMENT=local_only
+      - DATABASE_URL=sqlite:///./storage/chat.db
+      - LLM_PROVIDER=ollama
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - MCP_SERVERS_CONFIG=/app/mcp-config-local.json
+      
+      # RAG
+      - VECTOR_DB_TYPE=chroma
+      - VECTOR_DB_PATH=/app/storage/vector_db
+      - EMBEDDING_PROVIDER=local
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=200
+      
+      # Privacy & offline mode
+      - LOCAL_ONLY=true
+      - OFFLINE_MODE=true
+      - HUGGINGFACE_OFFLINE=true
+      - DOWNLOAD_MODELS_ON_STARTUP=false
+    volumes:
+      - ./backend:/app
+      - ./mcp-config-local.json:/app/mcp-config-local.json
+      - backend_storage:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Chainlit frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - CHAINLIT_AUTH_SECRET=local-secret-key
+      - CHAINLIT_HOST=0.0.0.0
+      - CHAINLIT_PORT=8000
+      - BACKEND_API_URL=http://backend:8001
+      - BACKEND_URL=http://backend:8001
+      - LOCAL_ONLY=true
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+    command: chainlit run app.py --host 0.0.0.0 --port 8000
+
+volumes:
+  backend_storage:
+    driver: local 

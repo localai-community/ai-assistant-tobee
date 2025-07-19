@@ -1,0 +1,61 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "python",
+      "args": ["mcp-servers/filesystem/server.py"],
+      "env": {
+        "ALLOWED_PATHS": "/workspace,/tmp,/app/uploads,/app/storage",
+        "MAX_FILE_SIZE": "100485760",
+        "OFFLINE_MODE": "true"
+      }
+    },
+    "code-execution": {
+      "command": "python",
+      "args": ["mcp-servers/code-execution/server.py"],
+      "env": {
+        "EXECUTION_TIMEOUT": "30",
+        "ALLOWED_LANGUAGES": "python,javascript,bash",
+        "SANDBOX_MODE": "true",
+        "OFFLINE_MODE": "true",
+        "MAX_MEMORY_MB": "512"
+      }
+    },
+    "document-analysis": {
+      "command": "python",
+      "args": ["mcp-servers/document-analysis/server.py"],
+      "env": {
+        "USE_LOCAL_EMBEDDINGS": "true",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "VECTOR_DB_TYPE": "chroma",
+        "OFFLINE_MODE": "true"
+      }
+    },
+    "calculator": {
+      "command": "python",
+      "args": ["mcp-servers/calculator/server.py"],
+      "env": {
+        "PRECISION": "10",
+        "OFFLINE_MODE": "true"
+      }
+    },
+    "git": {
+      "command": "python",
+      "args": ["mcp-servers/git/server.py"],
+      "env": {
+        "ALLOWED_REPOS": "/workspace,/app/storage/repos",
+        "READ_ONLY": "false",
+        "OFFLINE_MODE": "true"
+      }
+    },
+    "database": {
+      "command": "python", 
+      "args": ["mcp-servers/database/server.py"],
+      "env": {
+        "DB_TYPE": "sqlite",
+        "DB_PATH": "/app/storage/chat.db",
+        "READ_ONLY": "false",
+        "OFFLINE_MODE": "true"
+      }
+    }
+  }
+} 

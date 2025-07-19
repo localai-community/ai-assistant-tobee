@@ -1,0 +1,63 @@
+graph TD
+    A["👤 User"] --> B["💬 Chainlit Frontend"]
+    B --> C["🔄 WebSocket"]
+    C --> D["🏗️ FastAPI Backend"]
+    
+    D --> E["🤖 Chat Engine"]
+    E --> F["📡 MCP Client"]
+    F --> G["🔧 MCP Tools"]
+    E --> R["🔍 RAG System"]
+    
+    E --> H["🧠 LLM Provider<br/>(Ollama/OpenAI)"]
+    
+    subgraph "🎯 Chainlit Features"
+        I["📤 File Uploads"]
+        J["⚡ Streaming Responses"]
+        K["🔘 Action Buttons"]
+        L["👥 User Sessions"]
+        M["🎨 Rich Components"]
+        N2["📊 Document Viewer"]
+    end
+    
+    subgraph "🔧 MCP Tools Integration"
+        N["📁 File Operations"]
+        O["🌐 Web Search"]
+        P["💻 Code Execution"]
+        Q["📊 Data Analysis"]
+        R2["📄 Document Analysis"]
+    end
+    
+    subgraph "🔍 RAG Components"
+        S["📝 Document Processor"]
+        T["🧮 Vector Embeddings"]
+        U["🗃️ Vector Database<br/>(Chroma/Pinecone)"]
+        V["🔎 Similarity Search"]
+        W["📋 Context Retrieval"]
+    end
+    
+    B --> I
+    B --> J
+    B --> K
+    B --> L
+    B --> M
+    B --> N2
+    
+    G --> N
+    G --> O
+    G --> P
+    G --> Q
+    G --> R2
+    
+    I --> S
+    R --> S
+    S --> T
+    T --> U
+    R --> V
+    V --> U
+    V --> W
+    W --> E
+    
+    style B fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#fff3e0
+    style R fill:#f1f8e9 

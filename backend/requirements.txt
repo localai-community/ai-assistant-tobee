@@ -1,0 +1,28 @@
+# Core web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# HTTP client for Ollama API
+httpx==0.25.2
+
+# RAG and AI
+langchain==0.0.350
+chromadb==0.4.18
+sentence-transformers==2.2.2
+
+# Document processing
+pymupdf>=1.23.0,<1.24.0
+python-docx==1.1.0
+unstructured[pdf,docx]>=0.10.0
+# Alternative PDF processing if PyMuPDF fails
+# pdfplumber>=0.9.0
+
+# Additional utilities
+python-multipart==0.0.6
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0 
