@@ -16,7 +16,7 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 - **[📋 Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Step-by-step development guide
 - **[🍎 GPU Setup Guide](docs/GPU_SETUP.md)** - GPU acceleration for M1/M2 Macs
 - **[🛠️ Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-- **[📊 System Diagram](docs/architecture-diagram.mmd)** - Visual architecture representation
+- **[📊 System Diagram](docs/architecture-diagram.svg)** - Visual architecture representation
 
 ## 🚀 Quick Start
 
@@ -24,8 +24,8 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 
 ```bash
 # 1. Clone and enter directory
-git clone https://github.com/leiarenee/localai.community.git
-cd localai.community
+git clone https://github.com/localai-community/ai-assistant.git
+cd ai-assistant
 
 # 2. Run the startup script and choose your option
 ./start.sh
@@ -72,4 +72,41 @@ cd localai.community
 
 **🎯 Perfect for: Privacy-conscious users, enterprises, air-gapped environments, and anyone wanting full control over their AI assistant.**
 
+## 📊 Current Implementation Status
+
+### ✅ **Implemented Features**
+- **Backend API**: FastAPI server with health checks and status endpoints
+- **Chat Service**: Direct Ollama integration with conversation management
+- **Frontend**: Chainlit-based chat interface with real-time messaging
+- **System Architecture**: Complete MCP and RAG system design
+- **Docker Support**: Multi-platform containerization
+- **GPU Acceleration**: Native M1/M2 Mac support
+
+### 🚧 **In Development**
+- **MCP Tools**: File operations, code execution, web search
+- **RAG System**: Document processing and vector search
+- **Authentication**: User management and session handling
+- **Advanced Features**: Streaming responses, conversation history
+
+### 📋 **Planned Features**
+- **Document Upload**: Web interface for file management
+- **Model Management**: Easy model installation and switching
+- **Advanced RAG**: Multi-modal document support
+- **Enterprise Features**: Multi-user, role-based access
+
 ![Architecture Preview](docs/architecture-diagram.svg)
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Ollama](https://ollama.ai) for local LLM inference
+- [Chainlit](https://chainlit.io) for the chat interface
+- [FastAPI](https://fastapi.tiangolo.com) for the backend API
+- [MCP](https://modelcontextprotocol.io) for tool integration
