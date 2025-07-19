@@ -6,11 +6,11 @@ This document outlines the architecture for a full-stack AI assistant applicatio
 
 ## System Architecture
 
-![AI Assistant Architecture](architecture-diagram.svg)
+![AI Assistant Architecture](img/architecture-diagram.svg)
 
 > **Note**: We use the SVG version for best quality and scalability.  
-> **Generate**: `mmdc -i docs/architecture-diagram.mmd -o docs/architecture-diagram.svg`  
-> **Source**: [architecture-diagram.mmd](architecture-diagram.mmd) | **Instructions**: [README.md](README.md)
+> **Generate**: `mmdc -i docs/img/architecture-diagram.mmd -o docs/img/architecture-diagram.svg`
+> **Source**: [architecture-diagram.mmd](img/architecture-diagram.mmd) | **Instructions**: [README.md](README.md)
 
 ## Technology Stack
 

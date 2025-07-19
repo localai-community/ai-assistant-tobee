@@ -16,7 +16,7 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 - **[📋 Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Step-by-step development guide
 - **[🍎 GPU Setup Guide](docs/GPU_SETUP.md)** - GPU acceleration for M1/M2 Macs
 - **[🛠️ Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-- **[📊 System Diagram](docs/architecture-diagram.svg)** - Visual architecture representation
+- **[📊 System Diagram](docs/img/architecture-diagram.svg)** - Visual architecture representation
 
 ## 🚀 Quick Start
 
@@ -94,7 +94,7 @@ cd ai-assistant
 - **Advanced RAG**: Multi-modal document support
 - **Enterprise Features**: Multi-user, role-based access
 
-![Architecture Preview](docs/architecture-diagram.svg)
+![Architecture Preview](docs/img/architecture-diagram.svg)
 
 ## 🤝 Contributing
 

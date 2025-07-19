@@ -1,0 +1,204 @@
+<svg width="120" height="120" viewBox="65 35 70 110" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient definitions -->
+    <linearGradient id="furGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d32f2f;stop-opacity:1" />
+      <stop offset="25%" style="stop-color:#a1887f;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8d6e63;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#546e7a;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="faceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d7ccc8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#bcaaa4;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="eyeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1976d2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d47a1;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="noseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#455a64;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#263238;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="clawGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d7ccc8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#bcaaa4;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="antennaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#607d8b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#455a64;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="antennaTipGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1976d2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d47a1;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="honeycombGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd54f;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffb300;stop-opacity:0.3" />
+    </linearGradient>
+    
+    <linearGradient id="honeycombBorderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff8f00;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#f57c00;stop-opacity:0.6" />
+    </linearGradient>
+    
+    <linearGradient id="metalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#90a4ae;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#607d8b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Professional Sloth Face with Ant Antennas and Bee Honeycomb -->
+  <g transform="translate(100, 100)">
+    <!-- Bee honeycomb pentagon mesh background -->
+    <!-- Outer ring of pentagons -->
+    <g opacity="0.4">
+      <!-- Top pentagons -->
+      <polygon points="0,-80 -15,-70 -15,-60 0,-50 15,-60 15,-70" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="-20,-75 -35,-65 -35,-55 -20,-45 -5,-55 -5,-65" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="20,-75 35,-65 35,-55 20,-45 5,-55 5,-65" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <!-- Side pentagons -->
+      <polygon points="-50,-40 -65,-30 -65,-20 -50,-10 -35,-20 -35,-30" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="50,-40 65,-30 65,-20 50,-10 35,-20 35,-30" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <!-- Lower side pentagons -->
+      <polygon points="-50,10 -65,20 -65,30 -50,40 -35,30 -35,20" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="50,10 65,20 65,30 50,40 35,30 35,20" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <!-- Bottom pentagons -->
+      <polygon points="0,50 -15,60 -15,70 0,80 15,70 15,60" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="-20,55 -35,65 -35,75 -20,85 -5,75 -5,65" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="20,55 35,65 35,75 20,85 5,75 5,65" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <!-- Inner ring of pentagons -->
+      <polygon points="0,-60 -10,-55 -10,-45 0,-40 10,-45 10,-55" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="-15,-55 -25,-50 -25,-40 -15,-35 -5,-40 -5,-50" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="15,-55 25,-50 25,-40 15,-35 5,-40 5,-50" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <polygon points="-35,-25 -45,-20 -45,-10 -35,-5 -25,-10 -25,-20" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="35,-25 45,-20 45,-10 35,-5 25,-10 25,-20" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <polygon points="-35,25 -45,30 -45,40 -35,45 -25,40 -25,30" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="35,25 45,30 45,40 35,45 25,40 25,30" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      
+      <polygon points="0,40 -10,45 -10,55 0,60 10,55 10,45" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="-15,45 -25,50 -25,60 -15,65 -5,60 -5,50" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+      <polygon points="15,45 25,50 25,60 15,65 5,60 5,50" fill="url(#honeycombGradient)" stroke="url(#honeycombBorderGradient)" stroke-width="1"/>
+    </g>
+    
+    <!-- Ant-like antennas -->
+    <!-- Left antenna -->
+    <path d="M-15,-35 Q-20,-45 -25,-50 Q-30,-55 -35,-60" fill="none" stroke="url(#antennaGradient)" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="-35" cy="-60" r="3" fill="url(#antennaTipGradient)">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Right antenna -->
+    <path d="M15,-35 Q20,-45 25,-50 Q30,-55 35,-60" fill="none" stroke="url(#antennaGradient)" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="35" cy="-60" r="3" fill="url(#antennaTipGradient)">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite" begin="1s"/>
+    </circle>
+    
+    <!-- Antenna base connections -->
+    <circle cx="-15" cy="-35" r="2" fill="url(#antennaGradient)"/>
+    <circle cx="15" cy="-35" r="2" fill="url(#antennaGradient)"/>
+    
+    <!-- Main sloth body - round and professional -->
+    <circle cx="0" cy="0" r="45" fill="url(#furGradient)" opacity="0.85"/>
+    
+    <!-- Sloth face - round and business-like -->
+    <ellipse cx="0" cy="-5" rx="30" ry="25" fill="url(#faceGradient)"/>
+    
+    <!-- Professional eyes -->
+    <circle cx="-12" cy="-8" r="8" fill="white"/>
+    <circle cx="12" cy="-8" r="8" fill="white"/>
+    
+    <!-- Eye pupils - professional blue -->
+    <circle cx="-12" cy="-8" r="5" fill="url(#eyeGradient)"/>
+    <circle cx="12" cy="-8" r="5" fill="url(#eyeGradient)"/>
+    
+    <!-- Professional eye highlights -->
+    <circle cx="-14" cy="-10" r="2.5" fill="white" opacity="0.9"/>
+    <circle cx="10" cy="-10" r="2.5" fill="white" opacity="0.9"/>
+    
+    <!-- AI processing indicators - professional -->
+    <circle cx="-12" cy="-8" r="1.5" fill="white">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="12" cy="-8" r="1.5" fill="white">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite" begin="1s"/>
+    </circle>
+    
+    <!-- Professional dark nose -->
+    <ellipse cx="0" cy="0" rx="2" ry="1.5" fill="url(#noseGradient)"/>
+    
+    <!-- Professional smile -->
+    <path d="M-8,10 Q0,18 8,10" fill="none" stroke="url(#noseGradient)" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Subtle professional cheeks -->
+    <circle cx="-18" cy="8" rx="4" ry="3" fill="url(#eyeGradient)" opacity="0.2"/>
+    <circle cx="18" cy="8" rx="4" ry="3" fill="url(#eyeGradient)" opacity="0.2"/>
+    
+    <!-- Professional dark claws -->
+    <g transform="translate(-35, 15)">
+      <!-- Left claw -->
+      <path d="M0,0 Q-5,-8 -8,-5 Q-10,-2 -8,2 Q-6,6 -2,8 Q2,10 6,8 Q8,6 8,2 Q8,-2 6,-5 Q4,-8 0,-8 Q-2,-8 -4,-6 Q-6,-4 -6,-2 Q-6,0 -4,2 Q-2,4 0,4 Q2,4 4,2 Q6,0 6,-2 Q6,-4 4,-6 Q2,-8 0,-8" fill="url(#clawGradient)"/>
+    </g>
+    
+    <g transform="translate(35, 15)">
+      <!-- Right claw -->
+      <path d="M0,0 Q5,-8 8,-5 Q10,-2 8,2 Q6,6 2,8 Q-2,10 -6,8 Q-8,6 -8,2 Q-8,-2 -6,-5 Q-4,-8 0,-8 Q2,-8 4,-6 Q6,-4 6,-2 Q6,0 4,2 Q2,4 0,4 Q-2,4 -4,2 Q-6,0 -6,-2 Q-6,-4 -4,-6 Q-2,-8 0,-8" fill="url(#clawGradient)"/>
+    </g>
+    
+    <!-- Professional fur texture -->
+    <path d="M-20,20 Q-10,25 0,20" fill="none" stroke="url(#furGradient)" stroke-width="1.5" opacity="0.7"/>
+    <path d="M-15,25 Q-5,30 5,25" fill="none" stroke="url(#furGradient)" stroke-width="1.5" opacity="0.7"/>
+    <path d="M-10,30 Q0,35 10,30" fill="none" stroke="url(#furGradient)" stroke-width="1.5" opacity="0.7"/>
+    
+    <!-- Professional fur patches -->
+    <ellipse cx="-15" cy="15" rx="3" ry="2" fill="url(#faceGradient)" opacity="0.6"/>
+    <ellipse cx="15" cy="15" rx="3" ry="2" fill="url(#faceGradient)" opacity="0.6"/>
+    
+    <!-- Professional expression lines -->
+    <path d="M-8,12 Q0,14 8,12" fill="none" stroke="url(#noseGradient)" stroke-width="1" opacity="0.6"/>
+    <path d="M-5,15 Q0,17 5,15" fill="none" stroke="url(#noseGradient)" stroke-width="1" opacity="0.6"/>
+    
+    <!-- Professional android indicators -->
+    <circle cx="-25" cy="-5" r="0.8" fill="url(#eyeGradient)" opacity="0.8">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="25" cy="-5" r="0.8" fill="url(#eyeGradient)" opacity="0.8">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="3s" repeatCount="indefinite" begin="1.5s"/>
+    </circle>
+    
+    <!-- Professional eyebrows -->
+    <path d="M-18,-15 Q-12,-12 -6,-15" fill="none" stroke="url(#noseGradient)" stroke-width="2" opacity="0.7"/>
+    <path d="M6,-15 Q12,-12 18,-15" fill="none" stroke="url(#noseGradient)" stroke-width="2" opacity="0.7"/>
+    
+    <!-- Professional hanging pose -->
+    <path d="M-5,35 Q0,40 5,35" fill="none" stroke="url(#clawGradient)" stroke-width="2" opacity="0.6"/>
+    
+    <!-- Professional details -->
+    <circle cx="-30" cy="-20" r="1" fill="url(#eyeGradient)" opacity="0.6">
+      <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="30" cy="-20" r="1" fill="url(#eyeGradient)" opacity="0.6">
+      <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2.5s" repeatCount="indefinite" begin="1.2s"/>
+    </circle>
+    
+    <!-- Antenna signal indicators -->
+    <circle cx="-35" cy="-60" r="1" fill="white" opacity="0.8">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="35" cy="-60" r="1" fill="white" opacity="0.8">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="1.5s" repeatCount="indefinite" begin="0.7s"/>
+    </circle>
+  </g>
+</svg> 

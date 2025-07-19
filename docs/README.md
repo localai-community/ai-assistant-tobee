@@ -10,9 +10,9 @@ Welcome to the LocalAI Community documentation. This directory contains comprehe
 - **[Architecture Overview](ARCHITECTURE.md)** - Complete technical specification
 
 ### 🏗️ Technical Reference
-- **[Architecture Diagram](architecture-diagram.mmd)** - Visual architecture representation (source)
-- **[Architecture Diagram (SVG)](architecture-diagram.svg)** - High-quality vector diagram
-- **[Architecture Diagram (SVG)](architecture-diagram.svg)** - Vector diagram
+- **[Architecture Diagram](img/architecture-diagram.mmd)** - Visual architecture representation (source)
+- **[Architecture Diagram (SVG)](img/architecture-diagram.svg)** - High-quality vector diagram
+- **[Architecture Diagram (SVG)](img/architecture-diagram.svg)** - Vector diagram
 
 ## 🎯 Quick Navigation
 
@@ -24,7 +24,7 @@ Welcome to the LocalAI Community documentation. This directory contains comprehe
 ### For Developers
 1. **[Implementation Plan](IMPLEMENTATION_PLAN.md)** - Development roadmap
 2. **[Architecture Overview](ARCHITECTURE.md)** - Technical specifications
-3. **[Architecture Diagram](architecture-diagram.mmd)** - System design
+3. **[Architecture Diagram](img/architecture-diagram.mmd)** - System design
 
 ### For Contributors
 1. **[Architecture Overview](ARCHITECTURE.md)** - Understand the system design
@@ -39,8 +39,11 @@ docs/
 ├── INTRODUCTION.md              # Vision, philosophy, and benefits
 ├── IMPLEMENTATION_PLAN.md       # Step-by-step development guide
 ├── ARCHITECTURE.md              # Technical specifications
-├── architecture-diagram.mmd     # Mermaid diagram source
-├── architecture-diagram.svg     # Vector diagram
+├── img/
+│   ├── architecture-diagram.mmd     # Mermaid diagram source
+│   ├── architecture-diagram.svg     # Vector diagram
+│   ├── logo.svg                     # Project logo
+│   └── logo.jpg                     # Logo (JPEG version)
 
 ```
 
@@ -50,10 +53,10 @@ To update the architecture diagrams:
 
 ```bash
 # Generate SVG (recommended)
-mmdc -i docs/architecture-diagram.mmd -o docs/architecture-diagram.svg
+mmdc -i docs/img/architecture-diagram.mmd -o docs/img/architecture-diagram.svg
 
 # Generate high-res PNG
-mmdc -i docs/architecture-diagram.mmd -o docs/architecture-diagram.svg
+mmdc -i docs/img/architecture-diagram.mmd -o docs/img/architecture-diagram.svg
 ```
 
 ## 📖 Documentation Philosophy
