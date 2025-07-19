@@ -1,4 +1,6 @@
-# LocalAI Community - Your Private AI Assistant
+# Meet Tobee - Your Private AI Assistant
+
+![Tobee](docs/img/logo.svg)
 
 A **fully open source**, **local-first** AI assistant with MCP (Model Context Protocol) and RAG (Retrieval-Augmented Generation) support. Runs completely offline with no external dependencies required.
 
