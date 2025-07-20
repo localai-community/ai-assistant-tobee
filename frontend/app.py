@@ -823,9 +823,6 @@ def main():
             
             # Handle streaming RAG responses differently since they're already displayed
             if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
-                # Debug: Show what we got back from the streaming function
-                st.error(f"🔍 RESPONSE_DATA RECEIVED: {response_data}")
-                
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -839,6 +836,11 @@ def main():
                     if response_data.get("rag_context") and response_data.get("has_context"):
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
+                        # Add debug info to the message content
+                        message_data["content"] += f"\n\n🔍 DEBUG: RAG context found: {response_data.get('rag_context', '')[:100]}..."
+                    else:
+                        # Add debug info if no RAG context
+                        message_data["content"] += f"\n\n🔍 DEBUG: No RAG context found. response_data keys: {list(response_data.keys()) if response_data else 'None'}"
                     
                     st.session_state.messages.append(message_data)
                     
@@ -848,8 +850,9 @@ def main():
                     # Force rerun to update sidebar
                     st.rerun()
                 else:
-                    st.error(f"🚨 RAG STREAMING ERROR BRANCH - response_data: {response_data}")
                     error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    # Add debug info to error message
+                    error_msg += f"\n\n🔍 DEBUG: Error branch taken. response_data: {response_data}"
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
