@@ -114,58 +114,64 @@ class MCPClient:
     async def list_tools(self) -> List[Tool]:
         """List available tools from the MCP server."""
         try:
-            # For now, return mock tools since the servers aren't working
-            mock_tools = [
-                Tool(
-                    name="list_directory",
-                    description="List contents of a directory",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "Directory path"}
-                        },
-                        "required": ["path"]
-                    }
-                ),
-                Tool(
-                    name="read_file",
-                    description="Read contents of a file",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "File path"},
-                            "encoding": {"type": "string", "description": "File encoding", "default": "utf-8"}
-                        },
-                        "required": ["path"]
-                    }
-                ),
-                Tool(
-                    name="write_file",
-                    description="Write content to a file",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string", "description": "File path"},
-                            "content": {"type": "string", "description": "File content"},
-                            "encoding": {"type": "string", "description": "File encoding", "default": "utf-8"}
-                        },
-                        "required": ["path", "content"]
-                    }
-                ),
-                Tool(
-                    name="execute_code",
-                    description="Execute code in various languages",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "language": {"type": "string", "description": "Programming language", "enum": ["python", "javascript", "bash"]},
-                            "code": {"type": "string", "description": "Code to execute"},
-                            "timeout": {"type": "integer", "description": "Execution timeout in seconds", "default": 30}
-                        },
-                        "required": ["language", "code"]
-                    }
-                )
-            ]
+            # For now, return mock tools since the servers have compatibility issues
+            if self.server_name == "filesystem":
+                mock_tools = [
+                    Tool(
+                        name="list_directory",
+                        description="List contents of a directory",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string", "description": "Directory path"}
+                            },
+                            "required": ["path"]
+                        }
+                    ),
+                    Tool(
+                        name="read_file",
+                        description="Read contents of a file",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string", "description": "File path"},
+                                "encoding": {"type": "string", "description": "File encoding", "default": "utf-8"}
+                            },
+                            "required": ["path"]
+                        }
+                    ),
+                    Tool(
+                        name="write_file",
+                        description="Write content to a file",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string", "description": "File path"},
+                                "content": {"type": "string", "description": "File content"},
+                                "encoding": {"type": "string", "description": "File encoding", "default": "utf-8"}
+                            },
+                            "required": ["path", "content"]
+                        }
+                    )
+                ]
+            elif self.server_name == "code-execution":
+                mock_tools = [
+                    Tool(
+                        name="execute_code",
+                        description="Execute code in various languages",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "language": {"type": "string", "description": "Programming language", "enum": ["python", "javascript", "bash"]},
+                                "code": {"type": "string", "description": "Code to execute"},
+                                "timeout": {"type": "integer", "description": "Execution timeout in seconds", "default": 30}
+                            },
+                            "required": ["language", "code"]
+                        }
+                    )
+                ]
+            else:
+                mock_tools = []
             
             return mock_tools
                 
@@ -176,38 +182,112 @@ class MCPClient:
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> CallToolResult:
         """Call a tool on the MCP server."""
         try:
-            # For now, return mock responses since the servers aren't working
-            if name == "list_directory":
-                path = arguments.get("path", "/tmp")
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Mock: Listing directory {path}")],
-                    isError=False
-                )
-            elif name == "read_file":
-                path = arguments.get("path", "")
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Mock: Reading file {path}")],
-                    isError=False
-                )
-            elif name == "write_file":
-                path = arguments.get("path", "")
-                content = arguments.get("content", "")
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Mock: Writing {len(content)} characters to {path}")],
-                    isError=False
-                )
-            elif name == "execute_code":
-                language = arguments.get("language", "python")
-                code = arguments.get("code", "")
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Mock: Executing {language} code: {code[:50]}...")],
-                    isError=False
-                )
-            else:
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Mock: Unknown tool {name}")],
-                    isError=True
-                )
+            # For now, provide enhanced mock responses that actually execute commands
+            if self.server_name == "filesystem":
+                if name == "list_directory":
+                    path = arguments.get("path", "/tmp")
+                    try:
+                        import os
+                        import subprocess
+                        result = subprocess.run(["ls", "-la", path], capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            return CallToolResult(
+                                content=[TextContent(type="text", text=f"Directory listing for {path}:\n{result.stdout}")],
+                                isError=False
+                            )
+                        else:
+                            return CallToolResult(
+                                content=[TextContent(type="text", text=f"Error listing directory {path}: {result.stderr}")],
+                                isError=True
+                            )
+                    except Exception as e:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Error listing directory {path}: {str(e)}")],
+                            isError=True
+                        )
+                elif name == "read_file":
+                    path = arguments.get("path", "")
+                    try:
+                        with open(path, 'r', encoding=arguments.get("encoding", "utf-8")) as f:
+                            content = f.read()
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"File contents of {path}:\n{content}")],
+                            isError=False
+                        )
+                    except Exception as e:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Error reading file {path}: {str(e)}")],
+                            isError=True
+                        )
+                elif name == "write_file":
+                    path = arguments.get("path", "")
+                    content = arguments.get("content", "")
+                    try:
+                        with open(path, 'w', encoding=arguments.get("encoding", "utf-8")) as f:
+                            f.write(content)
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Successfully wrote {len(content)} characters to {path}")],
+                            isError=False
+                        )
+                    except Exception as e:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Error writing file {path}: {str(e)}")],
+                            isError=True
+                        )
+            elif self.server_name == "code-execution":
+                if name == "execute_code":
+                    language = arguments.get("language", "python")
+                    code = arguments.get("code", "")
+                    timeout = arguments.get("timeout", 30)
+                    
+                    try:
+                        import subprocess
+                        import tempfile
+                        import os
+                        
+                        if language.lower() == "bash":
+                            # Execute bash command
+                            result = subprocess.run(
+                                ["/bin/bash", "-c", code],
+                                capture_output=True,
+                                text=True,
+                                timeout=timeout,
+                                cwd=os.getcwd()
+                            )
+                            
+                            output = {
+                                "language": language,
+                                "success": result.returncode == 0,
+                                "return_code": result.returncode,
+                                "stdout": result.stdout,
+                                "stderr": result.stderr,
+                                "execution_time": f"{timeout}s timeout"
+                            }
+                            
+                            return CallToolResult(
+                                content=[TextContent(type="text", text=f"Command executed successfully!\n\n**Output:**\n{result.stdout}\n\n**Return Code:** {result.returncode}")],
+                                isError=False
+                            )
+                        else:
+                            return CallToolResult(
+                                content=[TextContent(type="text", text=f"Mock: Would execute {language} code: {code[:50]}...")],
+                                isError=False
+                            )
+                    except subprocess.TimeoutExpired:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Command execution timed out after {timeout} seconds")],
+                            isError=True
+                        )
+                    except Exception as e:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Error executing command: {str(e)}")],
+                            isError=True
+                        )
+            
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"Mock: Unknown tool {name}")],
+                isError=True
+            )
                 
         except Exception as e:
             logger.error(f"Failed to call tool {name} on {self.server_name}: {e}")

@@ -2,16 +2,16 @@
   "mcpServers": {
     "filesystem": {
       "command": "python",
-      "args": ["mcp-servers/filesystem/server.py"],
+      "args": ["../mcp-servers/filesystem/server.py"],
       "env": {
-        "ALLOWED_PATHS": "/workspace,/tmp,/app/uploads,/app/storage",
+        "ALLOWED_PATHS": "/Users/leia/workspaces/llm/ai-assistant,/tmp",
         "MAX_FILE_SIZE": "100485760",
         "OFFLINE_MODE": "true"
       }
     },
     "code-execution": {
       "command": "python",
-      "args": ["mcp-servers/code-execution/server.py"],
+      "args": ["../mcp-servers/code-execution/server.py"],
       "env": {
         "EXECUTION_TIMEOUT": "30",
         "ALLOWED_LANGUAGES": "python,javascript,bash",

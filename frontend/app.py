@@ -66,6 +66,18 @@ st.markdown("""
         border-radius: 0.25rem;
         font-size: 0.9rem;
     }
+    .collapsible-section {
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        background-color: #fafafa;
+    }
+    .section-header {
+        font-weight: bold;
+        color: #1f77b4;
+        margin-bottom: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -418,211 +430,202 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # RAG Document Upload Section
-        st.header("📚 RAG Document Upload")
-        
-        if st.session_state.backend_health:
-            uploaded_file = st.file_uploader(
-                "Upload a document for RAG",
-                type=['pdf', 'docx', 'txt', 'md'],
-                help="Upload PDF, DOCX, TXT, or MD files to enable RAG functionality"
-            )
+        # RAG Section (Collapsible)
+        with st.expander("📚 RAG System", expanded=False):
+            st.markdown('<div class="section-header">Document Upload</div>', unsafe_allow_html=True)
             
-            if uploaded_file is not None:
-                if st.button("📤 Process Document"):
-                    with st.spinner("Processing document..."):
-                        result = upload_document_for_rag(uploaded_file)
-                        
-                        if result["success"]:
-                            data = result["data"]
-                            st.success(f"✅ {data.get('message', 'Document processed successfully')}")
-                            st.info(f"📊 Created {data.get('chunks_created', 0)} chunks")
+            if st.session_state.backend_health:
+                uploaded_file = st.file_uploader(
+                    "Upload a document for RAG",
+                    type=['pdf', 'docx', 'txt', 'md'],
+                    help="Upload PDF, DOCX, TXT, or MD files to enable RAG functionality"
+                )
+                
+                if uploaded_file is not None:
+                    if st.button("📤 Process Document"):
+                        with st.spinner("Processing document..."):
+                            result = upload_document_for_rag(uploaded_file)
                             
-                            # Wait a moment for the backend to update, then refresh stats
-                            import time
-                            time.sleep(1)
-                            
-                            # Refresh RAG stats
-                            new_stats = get_rag_stats()
-                            st.session_state.rag_stats = new_stats
-                            
-                            # Show updated stats immediately
-                            if new_stats.get("total_documents", 0) > 0:
-                                st.success(f"📚 Updated: {new_stats['total_documents']} documents in RAG system")
-                            
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {result['error']}")
-            
-            # RAG Statistics
-            if st.session_state.rag_stats:
-                st.subheader("📊 RAG Statistics")
-                stats = st.session_state.rag_stats
-                st.metric("Total Documents", stats.get("total_documents", 0))
-                st.metric("Total Chunks", stats.get("total_chunks", 0))
-                st.metric("Vector DB Size", f"{stats.get('vector_db_size_mb', 0):.1f} MB")
-                
-                # Debug info (can be removed later)
-                if st.checkbox("🔍 Show Debug Info"):
-                    st.json(stats)
-                
-                if st.button("🔄 Refresh RAG Stats"):
-                    new_stats = get_rag_stats()
-                    st.session_state.rag_stats = new_stats
-                    st.success(f"Stats refreshed: {new_stats.get('total_documents', 0)} documents")
-                    st.rerun()
-        else:
-            st.warning("Backend not available for document upload")
-        
-        st.markdown("---")
-        
-        # RAG Mode Toggle
-        st.header("🔍 RAG Mode")
-        use_rag = st.checkbox(
-            "Enable RAG for responses",
-            value=st.session_state.use_rag,
-            help="When enabled, responses will use document context from uploaded files"
-        )
-        st.session_state.use_rag = use_rag
-        
-        if use_rag:
-            if st.session_state.rag_stats.get("total_documents", 0) == 0:
-                st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
-            else:
-                st.success("✅ RAG mode enabled - responses will use document context")
-        
-        st.markdown("---")
-        
-        # MCP Tools Section
-        st.header("🛠️ MCP Tools")
-        
-        # Get MCP tools and health
-        if st.session_state.backend_health:
-            mcp_tools = get_mcp_tools()
-            mcp_health = get_mcp_health()
-            
-            if mcp_health.get("mcp_enabled", False):
-                st.success("✅ MCP Tools Available")
-                
-                # Show available tools
-                if mcp_tools:
-                    st.subheader("Available Tools:")
-                    for tool in mcp_tools:
-                        st.text(f"• {tool.get('name', 'Unknown')}")
-                        st.caption(f"  {tool.get('description', 'No description')}")
-                
-                # Show server status
-                servers = mcp_health.get("servers", {})
-                if servers:
-                    st.subheader("Server Status:")
-                    for server_name, status in servers.items():
-                        if status.get("running", False):
-                            st.success(f"✅ {server_name}")
-                        else:
-                            st.error(f"❌ {server_name}")
-                
-                # Tool count
-                st.metric("Total Tools", mcp_health.get("tools_count", 0))
-                
-                # Refresh button
-                if st.button("🔄 Refresh MCP Status"):
-                    st.session_state.mcp_tools = get_mcp_tools()
-                    st.session_state.mcp_health = get_mcp_health()
-                    st.rerun()
-            else:
-                st.warning("⚠️ MCP Tools not available")
-                if st.button("🔄 Check MCP Status"):
-                    st.session_state.mcp_health = get_mcp_health()
-                    st.rerun()
-        else:
-            st.warning("Backend not available for MCP tools")
-        
-        st.markdown("---")
-        
-        # Conversation selection
-        st.markdown("**Conversations**")
-        
-        if st.session_state.backend_health and st.session_state.conversations:
-            # Show "New Chat" option
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("💬 New Chat", key="new_chat_sidebar"):
-                    st.session_state.messages = []
-                    st.session_state.conversation_id = None
-                    st.session_state.auto_loaded = True  # Prevent auto-loading after manual new chat
-                    st.rerun()
-            with col2:
-                if st.button("🗑️ Delete All", key="delete_all"):
-                    # Clear all conversations from backend
-                    try:
-                        with httpx.Client() as client:
-                            response = client.delete(f"{BACKEND_URL}/api/v1/chat/conversations", timeout=5.0)
-                            if response.status_code == 200:
-                                data = response.json()
-                                st.session_state.conversations = []
-                                st.session_state.messages = []
-                                st.session_state.conversation_id = None
-                                st.session_state.auto_loaded = True
-                                st.success(f"✅ {data.get('message', 'All conversations deleted')}")
+                            if result["success"]:
+                                data = result["data"]
+                                st.success(f"✅ {data.get('message', 'Document processed successfully')}")
+                                st.info(f"📊 Created {data.get('chunks_created', 0)} chunks")
+                                
+                                # Wait a moment for the backend to update, then refresh stats
+                                import time
+                                time.sleep(1)
+                                
+                                # Refresh RAG stats
+                                new_stats = get_rag_stats()
+                                st.session_state.rag_stats = new_stats
+                                
+                                # Show updated stats immediately
+                                if new_stats.get("total_documents", 0) > 0:
+                                    st.success(f"📚 Updated: {new_stats['total_documents']} documents in RAG system")
+                                
                                 st.rerun()
                             else:
-                                st.error(f"Failed to delete conversations: {response.status_code}")
-                    except Exception as e:
-                        st.error(f"Failed to delete conversations: {str(e)}")
-            
-            # Show conversation list
-            st.markdown("**Recent Conversations:**")
-            for i, conv in enumerate(st.session_state.conversations):
-                # Create a short title from the first message
-                first_message = conv['messages'][0]['content'] if conv['messages'] else "Empty conversation"
-                short_title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+                                st.error(f"❌ {result['error']}")
                 
-                # Highlight current conversation
-                is_current = (st.session_state.conversation_id == conv['id'])
-                
-                # Create clickable text with different styling for current conversation
-                if is_current:
-                    st.markdown(f"**👈 {short_title}** *(current)*")
-                else:
-                    # Use a small, minimal button that looks like a link
-                    if st.button(f"📝 {short_title}", key=f"conv_{i}", use_container_width=True):
-                        st.session_state.conversation_id = conv["id"]
-                        st.session_state.messages = conv["messages"]
-                        st.session_state.auto_loaded = True
+                # RAG Statistics
+                if st.session_state.rag_stats:
+                    st.markdown('<div class="section-header">Statistics</div>', unsafe_allow_html=True)
+                    stats = st.session_state.rag_stats
+                    st.metric("Total Documents", stats.get("total_documents", 0))
+                    st.metric("Total Chunks", stats.get("total_chunks", 0))
+                    st.metric("Vector DB Size", f"{stats.get('vector_db_size_mb', 0):.1f} MB")
+                    
+                    # Debug info (can be removed later)
+                    if st.checkbox("🔍 Show Debug Info"):
+                        st.json(stats)
+                    
+                    if st.button("🔄 Refresh RAG Stats"):
+                        new_stats = get_rag_stats()
+                        st.session_state.rag_stats = new_stats
+                        st.success(f"Stats refreshed: {new_stats.get('total_documents', 0)} documents")
                         st.rerun()
-        else:
-            st.info("No conversations available")
-        
-        # Settings section at the bottom
-        st.markdown("---")  # Separator
-        st.header("Settings")
-        
-        # Model selection
-        if st.session_state.available_models:
-            selected_model = st.selectbox(
-                "Select Model",
-                st.session_state.available_models,
-                index=0
+            else:
+                st.warning("Backend not available for document upload")
+            
+            st.markdown('<div class="section-header">RAG Mode</div>', unsafe_allow_html=True)
+            use_rag = st.checkbox(
+                "Enable RAG for responses",
+                value=st.session_state.use_rag,
+                help="When enabled, responses will use document context from uploaded files"
             )
-        else:
-            st.warning("No models available")
+            st.session_state.use_rag = use_rag
+            
+            if use_rag:
+                if st.session_state.rag_stats.get("total_documents", 0) == 0:
+                    st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
+                else:
+                    st.success("✅ RAG mode enabled - responses will use document context")
         
-        # Temperature slider
-        temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
+        # MCP Tools Section (Collapsible)
+        with st.expander("🛠️ MCP Tools", expanded=False):
+            # Get MCP tools and health
+            if st.session_state.backend_health:
+                mcp_tools = get_mcp_tools()
+                mcp_health = get_mcp_health()
+                
+                if mcp_health.get("mcp_enabled", False):
+                    st.success("✅ MCP Tools Available")
+                    
+                    # Show available tools
+                    if mcp_tools:
+                        st.markdown('<div class="section-header">Available Tools</div>', unsafe_allow_html=True)
+                        for tool in mcp_tools:
+                            st.text(f"• {tool.get('name', 'Unknown')}")
+                            st.caption(f"  {tool.get('description', 'No description')}")
+                    
+                    # Show server status
+                    servers = mcp_health.get("servers", {})
+                    if servers:
+                        st.markdown('<div class="section-header">Server Status</div>', unsafe_allow_html=True)
+                        for server_name, status in servers.items():
+                            if status.get("running", False):
+                                st.success(f"✅ {server_name}")
+                            else:
+                                st.error(f"❌ {server_name}")
+                    
+                    # Tool count
+                    st.metric("Total Tools", mcp_health.get("tools_count", 0))
+                    
+                    # Refresh button
+                    if st.button("🔄 Refresh MCP Status"):
+                        st.session_state.mcp_tools = get_mcp_tools()
+                        st.session_state.mcp_health = get_mcp_health()
+                        st.rerun()
+                else:
+                    st.warning("⚠️ MCP Tools not available")
+                    if st.button("🔄 Check MCP Status"):
+                        st.session_state.mcp_health = get_mcp_health()
+                        st.rerun()
+            else:
+                st.warning("Backend not available for MCP tools")
         
-        # Backend status
-        st.header("Backend Status")
-        if st.session_state.backend_health:
-            st.success("✅ Connected")
-        else:
-            st.error("❌ Disconnected")
-            st.info(f"Backend URL: {BACKEND_URL}")
+        # Conversations Section (Collapsible)
+        with st.expander("💬 Conversations", expanded=True):
+            if st.session_state.backend_health and st.session_state.conversations:
+                # Show "New Chat" option
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💬 New Chat", key="new_chat_sidebar"):
+                        st.session_state.messages = []
+                        st.session_state.conversation_id = None
+                        st.session_state.auto_loaded = True  # Prevent auto-loading after manual new chat
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ Delete All", key="delete_all"):
+                        # Clear all conversations from backend
+                        try:
+                            with httpx.Client() as client:
+                                response = client.delete(f"{BACKEND_URL}/api/v1/chat/conversations", timeout=5.0)
+                                if response.status_code == 200:
+                                    data = response.json()
+                                    st.session_state.conversations = []
+                                    st.session_state.messages = []
+                                    st.session_state.conversation_id = None
+                                    st.session_state.auto_loaded = True
+                                    st.success(f"✅ {data.get('message', 'All conversations deleted')}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to delete conversations: {response.status_code}")
+                        except Exception as e:
+                            st.error(f"Failed to delete conversations: {str(e)}")
+                
+                # Show conversation list
+                st.markdown('<div class="section-header">Recent Conversations</div>', unsafe_allow_html=True)
+                for i, conv in enumerate(st.session_state.conversations):
+                    # Create a short title from the first message
+                    first_message = conv['messages'][0]['content'] if conv['messages'] else "Empty conversation"
+                    short_title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+                    
+                    # Highlight current conversation
+                    is_current = (st.session_state.conversation_id == conv['id'])
+                    
+                    # Create clickable text with different styling for current conversation
+                    if is_current:
+                        st.markdown(f"**👈 {short_title}** *(current)*")
+                    else:
+                        # Use a small, minimal button that looks like a link
+                        if st.button(f"📝 {short_title}", key=f"conv_{i}", use_container_width=True):
+                            st.session_state.conversation_id = conv["id"]
+                            st.session_state.messages = conv["messages"]
+                            st.session_state.auto_loaded = True
+                            st.rerun()
+            else:
+                st.info("No conversations available")
         
-        # Available models
-        if st.session_state.available_models:
-            st.header("Available Models")
-            for model in st.session_state.available_models:
-                st.text(f"• {model}")
+        # Settings Section (Collapsible)
+        with st.expander("⚙️ Settings", expanded=False):
+            # Model selection
+            if st.session_state.available_models:
+                st.markdown('<div class="section-header">Model Configuration</div>', unsafe_allow_html=True)
+                selected_model = st.selectbox(
+                    "Select Model",
+                    st.session_state.available_models,
+                    index=0
+                )
+                
+                # Temperature slider
+                temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
+            else:
+                st.warning("No models available")
+            
+            # Backend status
+            st.markdown('<div class="section-header">Backend Status</div>', unsafe_allow_html=True)
+            if st.session_state.backend_health:
+                st.success("✅ Connected")
+            else:
+                st.error("❌ Disconnected")
+                st.info(f"Backend URL: {BACKEND_URL}")
+            
+            # Available models
+            if st.session_state.available_models:
+                st.markdown('<div class="section-header">Available Models</div>', unsafe_allow_html=True)
+                for model in st.session_state.available_models:
+                    st.text(f"• {model}")
         
 
     

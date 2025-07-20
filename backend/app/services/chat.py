@@ -119,54 +119,122 @@ class ChatService:
         """Detect potential tool calls in user message."""
         tool_calls = []
         
-        # Simple pattern matching for tool calls
-        # This could be enhanced with more sophisticated parsing
+        # Enhanced pattern matching for tool calls
         patterns = [
+            # Terminal commands
+            r"run\s+(.+?)(?=\n|$)",
+            r"execute\s+(.+?)(?=\n|$)",
+            r"run\s+command\s+(.+?)(?=\n|$)",
+            r"execute\s+command\s+(.+?)(?=\n|$)",
+            r"run\s+`(.+?)`",
+            r"execute\s+`(.+?)`",
+            r"run\s+terminal\s+command\s+(.+?)(?=\n|$)",
+            r"run\s+bash\s+command\s+(.+?)(?=\n|$)",
+            
+            # Code execution
             r"execute\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
             r"run\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
+            
+            # File operations
             r"list\s+files?\s+in\s+(.+?)(?=\n|$)",
+            r"list\s+directory\s+(.+?)(?=\n|$)",
+            r"show\s+files?\s+in\s+(.+?)(?=\n|$)",
             r"read\s+file\s+(.+?)(?=\n|$)",
             r"write\s+file\s+(.+?)\s+with\s+(.+?)(?=\n|$)",
             r"delete\s+file\s+(.+?)(?=\n|$)",
+            
+            # Common terminal commands
+            r"ps\s+aux",
+            r"ls\s+(-la?)?",
+            r"pwd",
+            r"whoami",
+            r"uname\s+-a",
+            r"df\s+-h",
+            r"top",
+            r"htop",
         ]
         
         for pattern in patterns:
             matches = re.finditer(pattern, message, re.IGNORECASE | re.DOTALL)
             for match in matches:
-                if "python" in match.group(0) or "javascript" in match.group(0) or "bash" in match.group(0):
-                    language = match.group(1).lower()
-                    code = match.group(2).strip()
-                    tool_calls.append({
-                        "tool": "code-execution.execute_code",
-                        "arguments": {
-                            "language": language,
-                            "code": code
-                        }
-                    })
-                elif "list" in match.group(0):
+                full_match = match.group(0)
+                
+                # Handle terminal commands
+                if any(cmd in full_match.lower() for cmd in ["run", "execute", "command"]):
+                    # Extract the actual command
+                    if "`" in full_match:
+                        # Handle backtick commands like "run `ps aux`"
+                        command = re.search(r"`(.+?)`", full_match)
+                        if command:
+                            tool_calls.append({
+                                "tool": "code-execution.execute_code",
+                                "arguments": {
+                                    "language": "bash",
+                                    "code": command.group(1).strip()
+                                }
+                            })
+                    else:
+                        # Handle plain commands like "run ps aux"
+                        command_parts = full_match.split()
+                        if len(command_parts) > 1:
+                            # Skip the "run" or "execute" part
+                            actual_command = " ".join(command_parts[1:])
+                            tool_calls.append({
+                                "tool": "code-execution.execute_code",
+                                "arguments": {
+                                    "language": "bash",
+                                    "code": actual_command.strip()
+                                }
+                            })
+                
+                # Handle code execution
+                elif any(lang in full_match.lower() for lang in ["python", "javascript", "bash"]):
+                    if "python" in full_match.lower() or "javascript" in full_match.lower() or "bash" in full_match.lower():
+                        language = match.group(1).lower()
+                        code = match.group(2).strip()
+                        tool_calls.append({
+                            "tool": "code-execution.execute_code",
+                            "arguments": {
+                                "language": language,
+                                "code": code
+                            }
+                        })
+                
+                # Handle file operations
+                elif "list" in full_match.lower() or "show" in full_match.lower():
                     path = match.group(1).strip()
                     tool_calls.append({
                         "tool": "filesystem.list_directory",
                         "arguments": {"path": path}
                     })
-                elif "read" in match.group(0):
+                elif "read" in full_match.lower():
                     path = match.group(1).strip()
                     tool_calls.append({
                         "tool": "filesystem.read_file",
                         "arguments": {"path": path}
                     })
-                elif "write" in match.group(0):
+                elif "write" in full_match.lower():
                     path = match.group(1).strip()
                     content = match.group(2).strip()
                     tool_calls.append({
                         "tool": "filesystem.write_file",
                         "arguments": {"path": path, "content": content}
                     })
-                elif "delete" in match.group(0):
+                elif "delete" in full_match.lower():
                     path = match.group(1).strip()
                     tool_calls.append({
                         "tool": "filesystem.delete_file",
                         "arguments": {"path": path}
+                    })
+                
+                # Handle direct terminal commands
+                elif any(cmd in full_match.lower() for cmd in ["ps aux", "ls", "pwd", "whoami", "uname", "df", "top", "htop"]):
+                    tool_calls.append({
+                        "tool": "code-execution.execute_code",
+                        "arguments": {
+                            "language": "bash",
+                            "code": full_match.strip()
+                        }
                     })
         
         return tool_calls
