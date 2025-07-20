@@ -254,7 +254,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                         # Process Server-Sent Events
                         for line in response.iter_lines():
                             if line:
-                                line = line.decode('utf-8')
+                                # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
                                     data_str = line[6:]  # Remove 'data: ' prefix
                                     try:
