@@ -9,6 +9,8 @@ import os
 import asyncio
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
+import tempfile
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
@@ -56,6 +58,14 @@ st.markdown("""
         background-color: #e8f5e8;
         border-left-color: #4caf50;
     }
+    .rag-context {
+        background-color: #fff3e0;
+        border-left: 4px solid #ff9800;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+        border-radius: 0.25rem;
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,6 +83,10 @@ def init_session_state():
         st.session_state.conversations = []
     if "auto_loaded" not in st.session_state:
         st.session_state.auto_loaded = False
+    if "rag_stats" not in st.session_state:
+        st.session_state.rag_stats = {}
+    if "use_rag" not in st.session_state:
+        st.session_state.use_rag = False
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -104,6 +118,102 @@ def get_conversations() -> List[Dict]:
     except:
         pass
     return []
+
+def get_rag_stats() -> Dict:
+    """Get RAG system statistics."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/rag/stats", timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                # Extract stats from the nested structure
+                if "stats" in data and "vector_store" in data["stats"]:
+                    vector_stats = data["stats"]["vector_store"]["stats"]
+                    stats = {
+                        "total_documents": vector_stats.get("total_documents", 0),
+                        "total_chunks": vector_stats.get("total_documents", 0),  # Same as total_documents
+                        "vector_db_size_mb": vector_stats.get("storage_size_mb", 0.0),  # Use actual size from backend
+                        "collection_name": vector_stats.get("collection_name", ""),
+                        "persist_directory": vector_stats.get("persist_directory", "")
+                    }
+                    # Debug output
+                    print(f"🔍 RAG Stats from API: {stats}")
+                    return stats
+                return {}
+    except Exception as e:
+        print(f"Error getting RAG stats: {e}")
+        pass
+    return {}
+
+def upload_document_for_rag(uploaded_file) -> Dict:
+    """Upload a document for RAG processing."""
+    try:
+        with httpx.Client() as client:
+            files = {'file': (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+            response = client.post(f"{BACKEND_URL}/api/v1/rag/upload", files=files, timeout=30.0)
+            
+            if response.status_code == 200:
+                return {"success": True, "data": response.json()}
+            else:
+                return {"success": False, "error": f"Upload failed: {response.status_code} - {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Upload error: {str(e)}"}
+
+def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
+    """Send message to backend with RAG enhancement."""
+    try:
+        with httpx.Client() as client:
+            # First get RAG context
+            rag_response = client.post(
+                f"{BACKEND_URL}/api/v1/rag/chat-with-rag",
+                data={"message": message, "k": 4},
+                timeout=10.0
+            )
+            
+            if rag_response.status_code != 200:
+                return {"response": f"RAG error: {rag_response.status_code}"}
+            
+            rag_data = rag_response.json()
+            
+            # Use the enhanced prompt for chat
+            enhanced_message = rag_data.get("enhanced_prompt", message)
+            
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": enhanced_message,
+                "model": model,
+                "temperature": 0.7,
+                "stream": False
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/chat/",
+                json=payload,
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "response": data.get("response", "No response from backend"),
+                    "conversation_id": data.get("conversation_id"),
+                    "rag_context": rag_data.get("context", ""),
+                    "has_context": rag_data.get("has_context", False)
+                }
+            elif response.status_code == 503:
+                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
+            else:
+                return {"response": f"Backend error: {response.status_code}"}
+                
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
 
 def load_conversation_messages(conversation_id: str) -> List[Dict]:
     """Load messages for a specific conversation."""
@@ -161,7 +271,7 @@ def display_welcome_message():
     st.markdown('<h1 class="main-header">🤖 LocalAI Community</h1>', unsafe_allow_html=True)
     
     # Status indicators
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if st.session_state.backend_health:
@@ -181,6 +291,12 @@ def display_welcome_message():
         else:
             st.info("💬 New Conversation")
     
+    with col4:
+        if st.session_state.rag_stats.get("total_documents", 0) > 0:
+            st.success(f"📚 {st.session_state.rag_stats.get('total_documents', 0)} Documents Loaded")
+        else:
+            st.info("📚 No Documents Loaded")
+    
     # Welcome message
     if not st.session_state.messages:
         welcome_msg = """
@@ -190,14 +306,15 @@ def display_welcome_message():
         
         **Features:**
         • Direct Ollama integration
-        • Document processing (PDF, DOCX, TXT)
+        • Document processing (PDF, DOCX, TXT, MD)
         • RAG (Retrieval-Augmented Generation)
         • MCP (Model Context Protocol) tools
         
         **Getting Started:**
-        1. Ask questions and get AI responses
-        2. Use MCP tools for file operations
-        3. Upload documents via the backend API
+        1. Upload documents using the sidebar
+        2. Enable RAG mode for document-based responses
+        3. Ask questions about your documents
+        4. Use MCP tools for file operations
         
         How can I help you today?
         """
@@ -214,6 +331,15 @@ def display_chat_messages():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+            
+            # Show RAG context if available
+            if message.get("rag_context") and message.get("has_context"):
+                st.markdown(f"""
+                <div class="rag-context">
+                    <strong>📚 RAG Context Found:</strong><br>
+                    {message["rag_context"][:300]}{"..." if len(message["rag_context"]) > 300 else ""}
+                </div>
+                """, unsafe_allow_html=True)
 
 def main():
     """Main application function."""
@@ -223,27 +349,22 @@ def main():
     st.session_state.backend_health = check_backend_health()
     if st.session_state.backend_health:
         st.session_state.available_models = get_available_models()
-        
-        # Always load conversations to ensure they're fresh
         st.session_state.conversations = get_conversations()
+        st.session_state.rag_stats = get_rag_stats()
         
-
-        
-        # Auto-load the most recent conversation if not already auto-loaded
-        # Commented out to start with empty chat on page refresh
-        # if (not st.session_state.auto_loaded and 
-        #     st.session_state.conversations and 
-        #     len(st.session_state.conversations) > 0 and 
-        #     not st.session_state.messages):
-        #     # Get the most recent conversation (last in the list)
-        #     latest_conversation = st.session_state.conversations[-1]
-        #     st.session_state.conversation_id = latest_conversation["id"]
-        #     st.session_state.messages = latest_conversation["messages"]
-        #     st.session_state.auto_loaded = True
-        #     st.sidebar.info(f"🔄 Auto-loaded conversation: {latest_conversation['id'][:8]}...")
+        # Debug output
+        print(f"🔍 Main function - RAG Stats loaded: {st.session_state.rag_stats}")
     
     # Sidebar for conversations and settings
     with st.sidebar:
+        # Force refresh button for debugging
+        if st.button("🔄 Force Refresh All Data"):
+            st.session_state.rag_stats = get_rag_stats()
+            st.session_state.conversations = get_conversations()
+            st.session_state.available_models = get_available_models()
+            st.success("✅ All data refreshed!")
+            st.rerun()
+        
         # Logo at the top
         st.markdown("""
         <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
@@ -254,6 +375,81 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # RAG Document Upload Section
+        st.header("📚 RAG Document Upload")
+        
+        if st.session_state.backend_health:
+            uploaded_file = st.file_uploader(
+                "Upload a document for RAG",
+                type=['pdf', 'docx', 'txt', 'md'],
+                help="Upload PDF, DOCX, TXT, or MD files to enable RAG functionality"
+            )
+            
+            if uploaded_file is not None:
+                if st.button("📤 Process Document"):
+                    with st.spinner("Processing document..."):
+                        result = upload_document_for_rag(uploaded_file)
+                        
+                        if result["success"]:
+                            data = result["data"]
+                            st.success(f"✅ {data.get('message', 'Document processed successfully')}")
+                            st.info(f"📊 Created {data.get('chunks_created', 0)} chunks")
+                            
+                            # Wait a moment for the backend to update, then refresh stats
+                            import time
+                            time.sleep(1)
+                            
+                            # Refresh RAG stats
+                            new_stats = get_rag_stats()
+                            st.session_state.rag_stats = new_stats
+                            
+                            # Show updated stats immediately
+                            if new_stats.get("total_documents", 0) > 0:
+                                st.success(f"📚 Updated: {new_stats['total_documents']} documents in RAG system")
+                            
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result['error']}")
+            
+            # RAG Statistics
+            if st.session_state.rag_stats:
+                st.subheader("📊 RAG Statistics")
+                stats = st.session_state.rag_stats
+                st.metric("Total Documents", stats.get("total_documents", 0))
+                st.metric("Total Chunks", stats.get("total_chunks", 0))
+                st.metric("Vector DB Size", f"{stats.get('vector_db_size_mb', 0):.1f} MB")
+                
+                # Debug info (can be removed later)
+                if st.checkbox("🔍 Show Debug Info"):
+                    st.json(stats)
+                
+                if st.button("🔄 Refresh RAG Stats"):
+                    new_stats = get_rag_stats()
+                    st.session_state.rag_stats = new_stats
+                    st.success(f"Stats refreshed: {new_stats.get('total_documents', 0)} documents")
+                    st.rerun()
+        else:
+            st.warning("Backend not available for document upload")
+        
+        st.markdown("---")
+        
+        # RAG Mode Toggle
+        st.header("🔍 RAG Mode")
+        use_rag = st.checkbox(
+            "Enable RAG for responses",
+            value=st.session_state.use_rag,
+            help="When enabled, responses will use document context from uploaded files"
+        )
+        st.session_state.use_rag = use_rag
+        
+        if use_rag:
+            if st.session_state.rag_stats.get("total_documents", 0) == 0:
+                st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
+            else:
+                st.success("✅ RAG mode enabled - responses will use document context")
+        
+        st.markdown("---")
         
         # Conversation selection
         st.markdown("**Conversations**")
@@ -366,8 +562,11 @@ def main():
         else:
             # Show spinner while processing
             with st.spinner("Thinking..."):
-                # Send message to backend
-                response_data = send_to_backend(prompt, st.session_state.conversation_id)
+                # Send message to backend (with or without RAG)
+                if st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+                    response_data = send_rag_chat(prompt, st.session_state.conversation_id)
+                else:
+                    response_data = send_to_backend(prompt, st.session_state.conversation_id)
                 
                 if response_data and not response_data["response"].startswith("❌"):
                     # Update conversation ID if provided
@@ -375,7 +574,14 @@ def main():
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
                     # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "assistant", "content": response_data["response"]})
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add RAG context if available
+                    if response_data.get("rag_context") and response_data.get("has_context"):
+                        message_data["rag_context"] = response_data["rag_context"]
+                        message_data["has_context"] = response_data["has_context"]
+                    
+                    st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()

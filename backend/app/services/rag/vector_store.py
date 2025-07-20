@@ -116,16 +116,40 @@ class VectorStore:
             collection = self.client.get_collection(self.collection_name)
             count = collection.count()
             
+            # Calculate actual storage size
+            storage_size_mb = self._calculate_storage_size()
+            
             return {
                 "total_documents": count,
                 "collection_name": self.collection_name,
-                "persist_directory": str(self.persist_directory)
+                "persist_directory": str(self.persist_directory),
+                "storage_size_mb": storage_size_mb
             }
             
         except Exception as e:
             logger.error(f"Error getting collection stats: {str(e)}")
             return {"error": str(e)}
     
+
+    def _calculate_storage_size(self) -> float:
+        """Calculate the actual storage size of the vector database"""
+        try:
+            import os
+            total_size = 0
+            
+            # Walk through the persist directory
+            for dirpath, dirnames, filenames in os.walk(self.persist_directory):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    if os.path.exists(filepath):
+                        total_size += os.path.getsize(filepath)
+            
+            # Convert to MB
+            return round(total_size / (1024 * 1024), 2)
+            
+        except Exception as e:
+            logger.error(f"Error calculating storage size: {str(e)}")
+            return 0.0
     def delete_documents_by_metadata(self, metadata_filter: Dict[str, Any]) -> bool:
         """Delete documents based on metadata filter"""
         try:
