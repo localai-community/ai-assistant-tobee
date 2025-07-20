@@ -35,6 +35,9 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, description="Model temperature (0.0-1.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     conversation_id: Optional[str] = Field(default=None, description="Conversation ID for context")
+    # RAG parameters
+    k: Optional[int] = Field(default=None, description="Number of documents to retrieve for RAG")
+    filter_dict: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filter for RAG")
 
 class ChatResponse(BaseModel):
     """Response model for chat API."""
@@ -43,6 +46,9 @@ class ChatResponse(BaseModel):
     conversation_id: str = Field(..., description="Conversation ID")
     timestamp: datetime = Field(default_factory=datetime.now, description="Response timestamp")
     tokens_used: Optional[int] = Field(default=None, description="Tokens used in response")
+    # RAG context
+    rag_context: Optional[str] = Field(default=None, description="RAG context used")
+    has_context: Optional[bool] = Field(default=None, description="Whether RAG context was used")
 
 class Conversation(BaseModel):
     """Represents a conversation session."""
@@ -298,7 +304,9 @@ class ChatService:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         conversation_id: Optional[str] = None,
-        enable_mcp: bool = True
+        enable_mcp: bool = True,
+        k: Optional[int] = None,
+        filter_dict: Optional[Dict[str, Any]] = None
     ) -> ChatResponse:
         """Generate a response from Ollama."""
         
@@ -380,6 +388,34 @@ class ChatService:
                         "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
                     })
         
+        # Process RAG if parameters are provided
+        rag_context = None
+        has_context = False
+        if k is not None:
+            try:
+                from ..services.rag.retriever import RAGRetriever
+                rag_retriever = RAGRetriever()
+                enhanced_prompt = rag_retriever.create_intelligent_rag_prompt(message, k, filter_dict)
+                
+                # Get RAG context for response
+                relevant_docs = rag_retriever.retrieve_relevant_documents(message, k, filter_dict)
+                if relevant_docs:
+                    context_parts = []
+                    for doc, score in relevant_docs:
+                        context_parts.append(f"Document: {doc.metadata.get('filename', 'Unknown')}")
+                        context_parts.append(f"Relevance: {score:.3f}")
+                        context_parts.append(f"Content: {doc.page_content[:200]}...")
+                        context_parts.append("---")
+                    rag_context = "\n".join(context_parts)
+                    has_context = True
+                
+                # Use enhanced prompt instead of original message
+                message = enhanced_prompt
+                
+            except Exception as e:
+                logger.error(f"RAG processing error: {e}")
+                # Continue with original message if RAG fails
+        
         try:
             # Send request to Ollama
             response = await self.http_client.post(
@@ -425,7 +461,9 @@ class ChatService:
                     response=ai_response,
                     model=model,
                     conversation_id=conversation_id,
-                    tokens_used=data.get("eval_count")
+                    tokens_used=data.get("eval_count"),
+                    rag_context=rag_context,
+                    has_context=has_context
                 )
             else:
                 error_msg = f"Ollama API error: {response.status_code}"

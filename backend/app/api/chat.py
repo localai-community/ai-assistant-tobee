@@ -51,7 +51,9 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             model=request.model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            conversation_id=request.conversation_id
+            conversation_id=request.conversation_id,
+            k=request.k,
+            filter_dict=request.filter_dict
         )
         
         return response

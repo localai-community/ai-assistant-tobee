@@ -183,29 +183,14 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
     """Send message to backend with RAG enhancement."""
     try:
         with httpx.Client() as client:
-            # First get RAG context
-            rag_response = client.post(
-                f"{BACKEND_URL}/api/v1/rag/chat-with-rag",
-                data={"message": message, "k": 4},
-                timeout=10.0
-            )
-            
-            if rag_response.status_code != 200:
-                return {"response": f"RAG error: {rag_response.status_code}"}
-            
-            rag_data = rag_response.json()
-            
-            # Use the enhanced prompt for chat
-            enhanced_message = rag_data.get("enhanced_prompt", message)
-            
             # Use the first available model or fallback to llama3:latest
             model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
             
             payload = {
-                "message": enhanced_message,
+                "message": message,
                 "model": model,
                 "temperature": 0.7,
-                "stream": False
+                "k": 4
             }
             
             if conversation_id:
@@ -214,7 +199,7 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
             response = client.post(
                 f"{BACKEND_URL}/api/v1/chat/",
                 json=payload,
-                timeout=30.0
+                timeout=60.0  # Increased timeout for RAG processing
             )
             
             if response.status_code == 200:
@@ -222,14 +207,87 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
                 return {
                     "response": data.get("response", "No response from backend"),
                     "conversation_id": data.get("conversation_id"),
-                    "rag_context": rag_data.get("context", ""),
-                    "has_context": rag_data.get("has_context", False)
+                    "rag_context": data.get("rag_context", ""),
+                    "has_context": data.get("has_context", False)
                 }
             elif response.status_code == 503:
                 return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
             else:
                 return {"response": f"Backend error: {response.status_code}"}
                 
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
+
+def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
+    """Send message to backend with RAG enhancement and streaming response."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "k": 4
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Create assistant message container for streaming
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                # Stream the response
+                with client.stream(
+                    "POST",
+                    f"{BACKEND_URL}/api/v1/rag/stream",
+                    json=payload,
+                    timeout=120.0,  # Increased timeout for RAG processing
+                    headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
+                ) as response:
+                    if response.status_code == 200:
+                        # Process Server-Sent Events
+                        for line in response.iter_lines():
+                            if line:
+                                line = line.decode('utf-8')
+                                if line.startswith('data: '):
+                                    data_str = line[6:]  # Remove 'data: ' prefix
+                                    try:
+                                        data = json.loads(data_str)
+                                        
+                                        if data.get("type") == "error":
+                                            return {"response": f"Error: {data.get('error', 'Unknown error')}"}
+                                        
+                                        # Handle different response types
+                                        if "response" in data:
+                                            chunk = data["response"]
+                                            full_response += chunk
+                                            message_placeholder.markdown(full_response + "▌")
+                                        
+                                        elif "conversation_id" in data:
+                                            # Update conversation ID
+                                            st.session_state.conversation_id = data["conversation_id"]
+                                        
+                                        elif "done" in data and data["done"]:
+                                            # Final response
+                                            message_placeholder.markdown(full_response)
+                                            return {
+                                                "response": full_response,
+                                                "conversation_id": st.session_state.conversation_id,
+                                                "rag_context": data.get("rag_context", ""),
+                                                "has_context": data.get("has_context", False)
+                                            }
+                                            
+                                    except json.JSONDecodeError:
+                                        continue
+                    else:
+                        return {"response": f"Backend error: {response.status_code}"}
+                        
     except httpx.TimeoutException:
         return {"response": "Request timed out. Please try again."}
     except Exception as e:
@@ -719,9 +777,14 @@ def main():
         else:
             # Send message to backend (with or without RAG)
             if st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
-                # RAG chat doesn't support streaming yet, use regular response
-                with st.spinner("Thinking with RAG..."):
-                    response_data = send_rag_chat(prompt, st.session_state.conversation_id)
+                # Use streaming or regular RAG response based on setting
+                if st.session_state.use_streaming:
+                    # Use streaming RAG response
+                    response_data = send_streaming_rag_chat(prompt, st.session_state.conversation_id)
+                else:
+                    # Use regular non-streaming RAG response
+                    with st.spinner("Thinking with RAG..."):
+                        response_data = send_rag_chat(prompt, st.session_state.conversation_id)
             else:
                 # Use streaming or regular response based on setting
                 if st.session_state.use_streaming:

@@ -4,15 +4,19 @@ API routes for document upload, processing, and RAG functionality.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 import os
 import logging
 from pathlib import Path
 import shutil
+import json
+import asyncio
+from pydantic import BaseModel
 
 from ..services.rag.retriever import RAGRetriever
+from ..services.chat import ChatService
 from ..core.database import get_db
 from ..core.models import ErrorResponse
 
@@ -22,12 +26,84 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
 
-# Initialize RAG retriever
+# Initialize services
 rag_retriever = RAGRetriever()
+chat_service = ChatService()
 
 # Ensure upload directory exists
 UPLOAD_DIR = Path("storage/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+class RAGStreamRequest(BaseModel):
+    message: str
+    model: str = "llama3:latest"
+    temperature: float = 0.7
+    conversation_id: Optional[str] = None
+    k: int = 4
+    filter_dict: Optional[Dict[str, Any]] = None
+
+@router.post("/stream")
+async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_db)):
+    """
+    Stream RAG-enhanced chat response.
+    
+    Args:
+        request: RAG stream request with message and parameters
+        db: Database session
+        
+    Returns:
+        StreamingResponse: Server-sent events with RAG-enhanced response
+    """
+    try:
+        # Get RAG context first
+        enhanced_prompt = rag_retriever.create_intelligent_rag_prompt(
+            request.message, 
+            request.k, 
+            request.filter_dict
+        )
+        
+        # Create chat request with enhanced prompt
+        chat_request = {
+            "message": enhanced_prompt,
+            "model": request.model,
+            "temperature": request.temperature,
+            "stream": True
+        }
+        
+        if request.conversation_id:
+            chat_request["conversation_id"] = request.conversation_id
+        
+        # Stream the response using the chat service
+        async def generate_stream():
+            try:
+                async for chunk in chat_service.generate_streaming_response(
+                    message=enhanced_prompt,
+                    model=request.model,
+                    temperature=request.temperature,
+                    conversation_id=request.conversation_id
+                ):
+                    yield f"data: {json.dumps({'response': chunk})}\n\n"
+                
+                # Send completion signal
+                yield f"data: {json.dumps({'done': True})}\n\n"
+            except Exception as e:
+                error_chunk = {"error": str(e), "type": "error"}
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"RAG stream error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload")
 async def upload_document(
