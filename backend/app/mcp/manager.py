@@ -34,30 +34,34 @@ class MCPManager:
     
     async def initialize(self) -> bool:
         """Initialize the MCP manager and start all configured servers."""
-        if self._initialized:
-            return True
-        
-        try:
-            # Load configuration
-            config = self._load_config()
-            if not config:
-                logger.warning("No MCP configuration found, MCP features will be disabled")
+        async with self._lock:
+            if self._initialized:
+                return True
+            
+            try:
+                # Load configuration
+                config = self._load_config()
+                if not config:
+                    logger.warning("No MCP configuration found, MCP features will be disabled")
+                    return False
+                
+                # Start all configured servers
+                for server_name, server_config in config.get("mcpServers", {}).items():
+                    await self._start_server(server_name, server_config)
+                
+                # Wait a moment for servers to fully start
+                await asyncio.sleep(1)
+                
+                # Discover tools from all servers
+                await self._discover_tools()
+                
+                self._initialized = True
+                logger.info(f"MCP Manager initialized with {len(self.clients)} servers and {len(self.tools)} tools")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize MCP Manager: {e}")
                 return False
-            
-            # Start all configured servers
-            for server_name, server_config in config.get("mcpServers", {}).items():
-                await self._start_server(server_name, server_config)
-            
-            # Discover tools from all servers
-            await self._discover_tools()
-            
-            self._initialized = True
-            logger.info(f"MCP Manager initialized with {len(self.clients)} servers and {len(self.tools)} tools")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize MCP Manager: {e}")
-            return False
     
     def _load_config(self) -> Optional[Dict[str, Any]]:
         """Load MCP configuration from file."""
@@ -144,11 +148,22 @@ class MCPManager:
                 )
             
             client = self.clients[server_name]
-            if not client.is_running():
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Error: MCP server '{server_name}' is not running")],
-                    isError=True
-                )
+            
+            # Retry logic for server readiness
+            max_retries = 3
+            for attempt in range(max_retries):
+                if not client.is_running():
+                    if attempt < max_retries - 1:
+                        logger.warning(f"MCP server '{server_name}' not running, retrying in 1 second (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(1)
+                        continue
+                    else:
+                        return CallToolResult(
+                            content=[TextContent(type="text", text=f"Error: MCP server '{server_name}' is not running after {max_retries} attempts")],
+                            isError=True
+                        )
+                else:
+                    break
             
             # Call the tool
             result = await client.call_tool(actual_tool_name, arguments)

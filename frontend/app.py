@@ -7,6 +7,7 @@ import streamlit as st
 import httpx
 import os
 import asyncio
+import json
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 import tempfile
@@ -27,59 +28,142 @@ st.set_page_config(
 )
 
 # Custom CSS for better styling
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        border-left: 4px solid #1f77b4;
-    }
-    .user-message {
-        background-color: #e3f2fd;
-        border-left-color: #2196f3;
-    }
-    .assistant-message {
-        background-color: #f3e5f5;
-        border-left-color: #9c27b0;
-    }
-    .error-message {
-        background-color: #ffebee;
-        border-left-color: #f44336;
-    }
-    .success-message {
-        background-color: #e8f5e8;
-        border-left-color: #4caf50;
-    }
-    .rag-context {
-        background-color: #fff3e0;
-        border-left: 4px solid #ff9800;
-        padding: 0.5rem;
-        margin: 0.5rem 0;
-        border-radius: 0.25rem;
-        font-size: 0.9rem;
-    }
-    .collapsible-section {
-        border: 1px solid #e0e0e0;
-        border-radius: 0.5rem;
-        padding: 0.5rem;
-        margin: 0.5rem 0;
-        background-color: #fafafa;
-    }
-    .section-header {
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 0.5rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+def get_css(dark_mode: bool = False):
+    if dark_mode:
+        return """
+        <style>
+            /* Dark mode styles */
+            .stApp {
+                background-color: #1a1a1a;
+                color: #ffffff;
+            }
+            .main-header {
+                font-size: 2.5rem;
+                font-weight: bold;
+                color: #64b5f6;
+                text-align: center;
+                margin-bottom: 2rem;
+            }
+            .chat-message {
+                padding: 1rem;
+                border-radius: 0.5rem;
+                margin-bottom: 1rem;
+                border-left: 4px solid #64b5f6;
+                background-color: #2d2d2d;
+            }
+            .user-message {
+                background-color: #1e3a5f;
+                border-left-color: #2196f3;
+            }
+            .assistant-message {
+                background-color: #2d1b69;
+                border-left-color: #9c27b0;
+            }
+            .error-message {
+                background-color: #4a1c1c;
+                border-left-color: #f44336;
+            }
+            .success-message {
+                background-color: #1b4a1b;
+                border-left-color: #4caf50;
+            }
+            .rag-context {
+                background-color: #3d2c1a;
+                border-left: 4px solid #ff9800;
+                padding: 0.5rem;
+                margin: 0.5rem 0;
+                border-radius: 0.25rem;
+                font-size: 0.9rem;
+            }
+            .collapsible-section {
+                border: 1px solid #404040;
+                border-radius: 0.5rem;
+                padding: 0.5rem;
+                margin: 0.5rem 0;
+                background-color: #2d2d2d;
+            }
+            .section-header {
+                font-weight: bold;
+                color: #64b5f6;
+                margin-bottom: 0.5rem;
+            }
+            /* Override Streamlit default styles for dark mode */
+            .stTextInput > div > div > input {
+                background-color: #2d2d2d;
+                color: #ffffff;
+                border-color: #404040;
+            }
+            .stSelectbox > div > div > div {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+            .stButton > button {
+                background-color: #404040;
+                color: #ffffff;
+                border-color: #606060;
+            }
+            .stButton > button:hover {
+                background-color: #505050;
+            }
+        </style>
+        """
+    else:
+        return """
+        <style>
+            /* Light mode styles */
+            .main-header {
+                font-size: 2.5rem;
+                font-weight: bold;
+                color: #1f77b4;
+                text-align: center;
+                margin-bottom: 2rem;
+            }
+            .chat-message {
+                padding: 1rem;
+                border-radius: 0.5rem;
+                margin-bottom: 1rem;
+                border-left: 4px solid #1f77b4;
+            }
+            .user-message {
+                background-color: #e3f2fd;
+                border-left-color: #2196f3;
+            }
+            .assistant-message {
+                background-color: #f3e5f5;
+                border-left-color: #9c27b0;
+            }
+            .error-message {
+                background-color: #ffebee;
+                border-left-color: #f44336;
+            }
+            .success-message {
+                background-color: #e8f5e8;
+                border-left-color: #4caf50;
+            }
+            .rag-context {
+                background-color: #fff3e0;
+                border-left: 4px solid #ff9800;
+                padding: 0.5rem;
+                margin: 0.5rem 0;
+                border-radius: 0.25rem;
+                font-size: 0.9rem;
+            }
+            .collapsible-section {
+                border: 1px solid #e0e0e0;
+                border-radius: 0.5rem;
+                padding: 0.5rem;
+                margin: 0.5rem 0;
+                background-color: #fafafa;
+            }
+            .section-header {
+                font-weight: bold;
+                color: #1f77b4;
+                margin-bottom: 0.5rem;
+            }
+        </style>
+        """
+
+# CSS will be applied in main function based on dark mode setting
 
 def init_session_state():
     """Initialize session state variables."""
@@ -103,6 +187,10 @@ def init_session_state():
         st.session_state.mcp_tools = []
     if "mcp_health" not in st.session_state:
         st.session_state.mcp_health = {}
+    if "use_streaming" not in st.session_state:
+        st.session_state.use_streaming = True
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -281,8 +369,91 @@ def load_conversation_messages(conversation_id: str) -> List[Dict]:
         pass
     return []
 
-def send_to_backend(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
+def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
+    """Send message to backend and get streaming response with real-time display."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "stream": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Create assistant message container for streaming
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                # Stream the response
+                with client.stream(
+                    "POST",
+                    f"{BACKEND_URL}/api/v1/chat/stream",
+                    json=payload,
+                    timeout=120.0,  # Increased timeout
+                    headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
+                ) as response:
+                    if response.status_code == 200:
+                        # Process Server-Sent Events
+                        for line in response.iter_lines():
+                            if line:
+                                # httpx.iter_lines() returns strings, not bytes
+                                if line.startswith('data: '):
+                                    try:
+                                        data = json.loads(line[6:])  # Remove 'data: ' prefix
+                                        chunk = data.get('content', '')
+                                        full_response += chunk
+                                        
+                                        # Update the message placeholder with accumulated response
+                                        message_placeholder.markdown(full_response + "▌")
+                                    except json.JSONDecodeError:
+                                        continue
+                                elif line.strip() == '':  # Empty line indicates end of SSE
+                                    continue
+                        
+                        # Final update without cursor
+                        message_placeholder.markdown(full_response)
+                        
+                        return {
+                            "response": full_response,
+                            "conversation_id": conversation_id
+                        }
+                    elif response.status_code == 503:
+                        error_msg = "❌ Ollama service is not available. Please make sure Ollama is running."
+                        message_placeholder.error(error_msg)
+                        return {"response": error_msg}
+                    else:
+                        error_msg = f"Backend error: {response.status_code}"
+                        message_placeholder.error(error_msg)
+                        return {"response": error_msg}
+                    
+    except httpx.TimeoutException:
+        error_msg = "Request timed out. Please try again."
+        with st.chat_message("assistant"):
+            st.error(error_msg)
+        return {"response": error_msg}
+    except httpx.ConnectError:
+        error_msg = "❌ Cannot connect to backend server. Please make sure the backend is running."
+        with st.chat_message("assistant"):
+            st.error(error_msg)
+        return {"response": error_msg}
+    except Exception as e:
+        error_msg = f"Communication error: {str(e)}"
+        with st.chat_message("assistant"):
+            st.error(error_msg)
+        return {"response": error_msg}
+
+def send_to_backend(message: str, conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
     """Send message to backend and get response."""
+    if use_streaming:
+        return send_streaming_chat(message, conversation_id)
+    
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
@@ -398,6 +569,9 @@ def display_chat_messages():
 def main():
     """Main application function."""
     init_session_state()
+    
+    # Apply CSS based on dark mode setting
+    st.markdown(get_css(st.session_state.dark_mode), unsafe_allow_html=True)
     
     # Check backend health and get models
     st.session_state.backend_health = check_backend_health()
@@ -613,6 +787,35 @@ def main():
             else:
                 st.warning("No models available")
             
+            # Chat settings
+            st.markdown('<div class="section-header">Chat Settings</div>', unsafe_allow_html=True)
+            use_streaming = st.checkbox(
+                "Enable Streaming Responses",
+                value=st.session_state.use_streaming,
+                help="When enabled, responses will stream in real-time as they're generated"
+            )
+            st.session_state.use_streaming = use_streaming
+            
+            if use_streaming:
+                st.success("✅ Streaming enabled - responses will appear in real-time")
+            else:
+                st.info("⏳ Streaming disabled - responses will appear all at once")
+            
+            # Dark mode toggle
+            dark_mode = st.checkbox(
+                "🌙 Dark Mode",
+                value=st.session_state.dark_mode,
+                help="Toggle between light and dark theme"
+            )
+            if dark_mode != st.session_state.dark_mode:
+                st.session_state.dark_mode = dark_mode
+                st.rerun()
+            
+            if dark_mode:
+                st.success("🌙 Dark mode enabled")
+            else:
+                st.info("☀️ Light mode enabled")
+            
             # Backend status
             st.markdown('<div class="section-header">Backend Status</div>', unsafe_allow_html=True)
             if st.session_state.backend_health:
@@ -651,43 +854,51 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
-            # Show spinner while processing
-            with st.spinner("Thinking..."):
-                # Send message to backend (with or without RAG)
-                if st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            # Send message to backend (with or without RAG)
+            if st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+                # RAG chat doesn't support streaming yet, use regular response
+                with st.spinner("Thinking with RAG..."):
                     response_data = send_rag_chat(prompt, st.session_state.conversation_id)
+            else:
+                # Use streaming or regular response based on setting
+                if st.session_state.use_streaming:
+                    # Use streaming response
+                    response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
                 else:
-                    response_data = send_to_backend(prompt, st.session_state.conversation_id)
+                    # Use regular non-streaming response
+                    with st.spinner("Thinking..."):
+                        response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
+            
+            if response_data and not response_data["response"].startswith("❌"):
+                # Update conversation ID if provided
+                if response_data.get("conversation_id"):
+                    st.session_state.conversation_id = response_data["conversation_id"]
                 
-                if response_data and not response_data["response"].startswith("❌"):
-                    # Update conversation ID if provided
-                    if response_data.get("conversation_id"):
-                        st.session_state.conversation_id = response_data["conversation_id"]
-                    
-                    # Add assistant response to chat history
-                    message_data = {"role": "assistant", "content": response_data["response"]}
-                    
-                    # Add RAG context if available
-                    if response_data.get("rag_context") and response_data.get("has_context"):
-                        message_data["rag_context"] = response_data["rag_context"]
-                        message_data["has_context"] = response_data["has_context"]
-                    
-                    st.session_state.messages.append(message_data)
-                    
-                    # Refresh conversation list to include the new conversation
-                    st.session_state.conversations = get_conversations()
-                    
-                    # Display assistant response
+                # Add assistant response to chat history
+                message_data = {"role": "assistant", "content": response_data["response"]}
+                
+                # Add RAG context if available
+                if response_data.get("rag_context") and response_data.get("has_context"):
+                    message_data["rag_context"] = response_data["rag_context"]
+                    message_data["has_context"] = response_data["has_context"]
+                
+                st.session_state.messages.append(message_data)
+                
+                # Refresh conversation list to include the new conversation
+                st.session_state.conversations = get_conversations()
+                
+                # Display assistant response (if not already displayed via streaming)
+                if not st.session_state.use_streaming:
                     with st.chat_message("assistant"):
                         st.markdown(response_data["response"])
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
-                else:
-                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                    with st.chat_message("assistant"):
-                        st.error(error_msg)
+                
+                # Force rerun to update sidebar
+                st.rerun()
+            else:
+                error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                with st.chat_message("assistant"):
+                    st.error(error_msg)
 
 if __name__ == "__main__":
     main() 

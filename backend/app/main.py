@@ -39,6 +39,17 @@ async def startup_event():
     except Exception as e:
         print(f"❌ Failed to initialize database: {e}")
 
+# Shutdown MCP manager on shutdown
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown MCP manager on shutdown."""
+    try:
+        from app.services.chat import shutdown_mcp_manager
+        await shutdown_mcp_manager()
+        print("✅ MCP manager shutdown successfully")
+    except Exception as e:
+        print(f"❌ Failed to shutdown MCP manager: {e}")
+
 # Include API routers
 app.include_router(chat_router)
 app.include_router(rag_router)

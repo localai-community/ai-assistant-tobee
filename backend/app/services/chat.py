@@ -68,8 +68,9 @@ class ChatService:
             self.conversation_repo = None
             self.message_repo = None
         
-        # Initialize MCP manager
-        self.mcp_manager = MCPManager(mcp_config_path)
+        # Store MCP config path for later initialization
+        self.mcp_config_path = mcp_config_path
+        self.mcp_manager = None
         self.mcp_initialized = False
         
     async def __aenter__(self):
@@ -77,12 +78,13 @@ class ChatService:
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.http_client.aclose()
-        await self.mcp_manager.shutdown()
+        # Don't shutdown the global MCP manager here
     
     async def _ensure_mcp_initialized(self):
         """Ensure MCP manager is initialized."""
         if not self.mcp_initialized:
-            self.mcp_initialized = await self.mcp_manager.initialize()
+            self.mcp_manager = await get_mcp_manager(self.mcp_config_path)
+            self.mcp_initialized = True
     
     async def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available MCP tools."""
@@ -118,6 +120,7 @@ class ChatService:
     def _detect_tool_calls(self, message: str) -> List[Dict[str, Any]]:
         """Detect potential tool calls in user message."""
         tool_calls = []
+        seen_commands = set()  # Track seen commands to prevent duplicates
         
         # Enhanced pattern matching for tool calls
         patterns = [
@@ -166,76 +169,96 @@ class ChatService:
                         # Handle backtick commands like "run `ps aux`"
                         command = re.search(r"`(.+?)`", full_match)
                         if command:
-                            tool_calls.append({
-                                "tool": "code-execution.execute_code",
-                                "arguments": {
-                                    "language": "bash",
-                                    "code": command.group(1).strip()
-                                }
-                            })
+                            actual_command = command.group(1).strip()
+                            if actual_command not in seen_commands:
+                                seen_commands.add(actual_command)
+                                tool_calls.append({
+                                    "tool": "code-execution.execute_code",
+                                    "arguments": {
+                                        "language": "bash",
+                                        "code": actual_command
+                                    }
+                                })
                     else:
                         # Handle plain commands like "run ps aux"
                         command_parts = full_match.split()
                         if len(command_parts) > 1:
                             # Skip the "run" or "execute" part
-                            actual_command = " ".join(command_parts[1:])
-                            tool_calls.append({
-                                "tool": "code-execution.execute_code",
-                                "arguments": {
-                                    "language": "bash",
-                                    "code": actual_command.strip()
-                                }
-                            })
+                            actual_command = " ".join(command_parts[1:]).strip()
+                            if actual_command not in seen_commands:
+                                seen_commands.add(actual_command)
+                                tool_calls.append({
+                                    "tool": "code-execution.execute_code",
+                                    "arguments": {
+                                        "language": "bash",
+                                        "code": actual_command
+                                    }
+                                })
                 
                 # Handle code execution
                 elif any(lang in full_match.lower() for lang in ["python", "javascript", "bash"]):
                     if "python" in full_match.lower() or "javascript" in full_match.lower() or "bash" in full_match.lower():
                         language = match.group(1).lower()
                         code = match.group(2).strip()
-                        tool_calls.append({
-                            "tool": "code-execution.execute_code",
-                            "arguments": {
-                                "language": language,
-                                "code": code
-                            }
-                        })
+                        code_key = f"{language}:{code}"
+                        if code_key not in seen_commands:
+                            seen_commands.add(code_key)
+                            tool_calls.append({
+                                "tool": "code-execution.execute_code",
+                                "arguments": {
+                                    "language": language,
+                                    "code": code
+                                }
+                            })
                 
                 # Handle file operations
                 elif "list" in full_match.lower() or "show" in full_match.lower():
                     path = match.group(1).strip()
-                    tool_calls.append({
-                        "tool": "filesystem.list_directory",
-                        "arguments": {"path": path}
-                    })
+                    if path not in seen_commands:
+                        seen_commands.add(path)
+                        tool_calls.append({
+                            "tool": "filesystem.list_directory",
+                            "arguments": {"path": path}
+                        })
                 elif "read" in full_match.lower():
                     path = match.group(1).strip()
-                    tool_calls.append({
-                        "tool": "filesystem.read_file",
-                        "arguments": {"path": path}
-                    })
+                    if path not in seen_commands:
+                        seen_commands.add(path)
+                        tool_calls.append({
+                            "tool": "filesystem.read_file",
+                            "arguments": {"path": path}
+                        })
                 elif "write" in full_match.lower():
                     path = match.group(1).strip()
                     content = match.group(2).strip()
-                    tool_calls.append({
-                        "tool": "filesystem.write_file",
-                        "arguments": {"path": path, "content": content}
-                    })
+                    write_key = f"write:{path}"
+                    if write_key not in seen_commands:
+                        seen_commands.add(write_key)
+                        tool_calls.append({
+                            "tool": "filesystem.write_file",
+                            "arguments": {"path": path, "content": content}
+                        })
                 elif "delete" in full_match.lower():
                     path = match.group(1).strip()
-                    tool_calls.append({
-                        "tool": "filesystem.delete_file",
-                        "arguments": {"path": path}
-                    })
+                    if path not in seen_commands:
+                        seen_commands.add(path)
+                        tool_calls.append({
+                            "tool": "filesystem.delete_file",
+                            "arguments": {"path": path}
+                        })
                 
                 # Handle direct terminal commands
                 elif any(cmd in full_match.lower() for cmd in ["ps aux", "ls", "pwd", "whoami", "uname", "df", "top", "htop"]):
-                    tool_calls.append({
-                        "tool": "code-execution.execute_code",
-                        "arguments": {
-                            "language": "bash",
-                            "code": full_match.strip()
-                        }
-                    })
+                    command = full_match.strip()
+                    if command not in seen_commands:
+                        seen_commands.add(command)
+                        tool_calls.append({
+                            "tool": "code-execution.execute_code",
+                            "arguments": {
+                                "language": "bash",
+                                "code": command
+                            }
+                        })
         
         return tool_calls
     
@@ -411,7 +434,8 @@ class ChatService:
         model: str = "llama3:latest",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        enable_mcp: bool = True
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from Ollama."""
         
@@ -438,20 +462,25 @@ class ChatService:
         # Check for MCP tool calls in the message
         tool_results = []
         if enable_mcp:
-            tool_calls = self._detect_tool_calls(message)
-            for tool_call in tool_calls:
-                try:
-                    result = await self.call_mcp_tool(tool_call["tool"], tool_call["arguments"])
-                    tool_results.append({
-                        "tool": tool_call["tool"],
-                        "result": result
-                    })
-                except Exception as e:
-                    logger.error(f"Error calling MCP tool {tool_call['tool']}: {e}")
-                    tool_results.append({
-                        "tool": tool_call["tool"],
-                        "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
-                    })
+            try:
+                await self._ensure_mcp_initialized()
+                tool_calls = self._detect_tool_calls(message)
+                for tool_call in tool_calls:
+                    try:
+                        result = await self.call_mcp_tool(tool_call["tool"], tool_call["arguments"])
+                        tool_results.append({
+                            "tool": tool_call["tool"],
+                            "result": result
+                        })
+                    except Exception as e:
+                        logger.error(f"Error calling MCP tool {tool_call['tool']}: {e}")
+                        tool_results.append({
+                            "tool": tool_call["tool"],
+                            "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
+                        })
+            except Exception as e:
+                logger.warning(f"MCP not available for streaming: {e}")
+                # Don't add tool results if MCP is not available
         
         # Add user message to database
         if self.message_repo:
@@ -508,6 +537,24 @@ class ChatService:
                     return
                 
                 full_response = ""
+                
+                # If we have tool results, include them in the response
+                if tool_results:
+                    tool_summary = "\n\n**Tool Execution Results:**\n"
+                    for tool_result in tool_results:
+                        tool_name = tool_result["tool"]
+                        result = tool_result["result"]
+                        if result["success"]:
+                            tool_summary += f"✅ **{tool_name}**: Success\n"
+                            tool_summary += f"```\n{result['content']}\n```\n"
+                        else:
+                            tool_summary += f"❌ **{tool_name}**: Failed\n"
+                            tool_summary += f"```\n{result['content']}\n```\n"
+                    
+                    # Yield tool results first
+                    yield tool_summary
+                    full_response += tool_summary
+                
                 async for line in response.aiter_lines():
                     if line.strip():
                         try:
@@ -561,8 +608,31 @@ class ChatService:
             return self.conversation_repo.clear_conversations()
         return 0
 
+# Global MCP manager instance to prevent duplicate initialization
+_mcp_manager_instance = None
+_mcp_manager_lock = asyncio.Lock()
+
+async def get_mcp_manager(mcp_config_path: Optional[str] = None):
+    """Get or create a singleton MCP manager instance."""
+    global _mcp_manager_instance
+    
+    if _mcp_manager_instance is None:
+        async with _mcp_manager_lock:
+            if _mcp_manager_instance is None:
+                _mcp_manager_instance = MCPManager(mcp_config_path)
+                await _mcp_manager_instance.initialize()
+    
+    return _mcp_manager_instance
+
 # Global chat service instance
 # Create global chat service instance
 import os
 ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-chat_service = ChatService(ollama_url=ollama_url) 
+chat_service = ChatService(ollama_url=ollama_url)
+
+async def shutdown_mcp_manager():
+    """Shutdown the global MCP manager."""
+    global _mcp_manager_instance
+    if _mcp_manager_instance:
+        await _mcp_manager_instance.shutdown()
+        _mcp_manager_instance = None 
