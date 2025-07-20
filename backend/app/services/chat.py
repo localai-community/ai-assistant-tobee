@@ -122,40 +122,48 @@ class ChatService:
         tool_calls = []
         seen_commands = set()  # Track seen commands to prevent duplicates
         
-        # Enhanced pattern matching for tool calls
+        # More specific pattern matching for tool calls - only trigger on explicit commands
         patterns = [
-            # Terminal commands
-            r"run\s+(.+?)(?=\n|$)",
-            r"execute\s+(.+?)(?=\n|$)",
-            r"run\s+command\s+(.+?)(?=\n|$)",
-            r"execute\s+command\s+(.+?)(?=\n|$)",
-            r"run\s+`(.+?)`",
-            r"execute\s+`(.+?)`",
-            r"run\s+terminal\s+command\s+(.+?)(?=\n|$)",
-            r"run\s+bash\s+command\s+(.+?)(?=\n|$)",
+            # Explicit terminal commands with "run" or "execute" prefix
+            r"^run\s+(.+?)(?=\n|$)",
+            r"^execute\s+(.+?)(?=\n|$)",
+            r"^run\s+command\s+(.+?)(?=\n|$)",
+            r"^execute\s+command\s+(.+?)(?=\n|$)",
+            r"^run\s+`(.+?)`",
+            r"^execute\s+`(.+?)`",
+            r"^run\s+terminal\s+command\s+(.+?)(?=\n|$)",
+            r"^run\s+bash\s+command\s+(.+?)(?=\n|$)",
             
-            # Code execution
-            r"execute\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
-            r"run\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
+            # Explicit code execution commands
+            r"^execute\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
+            r"^run\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
             
-            # File operations
-            r"list\s+files?\s+in\s+(.+?)(?=\n|$)",
-            r"list\s+directory\s+(.+?)(?=\n|$)",
-            r"show\s+files?\s+in\s+(.+?)(?=\n|$)",
-            r"read\s+file\s+(.+?)(?=\n|$)",
-            r"write\s+file\s+(.+?)\s+with\s+(.+?)(?=\n|$)",
-            r"delete\s+file\s+(.+?)(?=\n|$)",
+            # Explicit file operation commands
+            r"^list\s+files?\s+in\s+(.+?)(?=\n|$)",
+            r"^list\s+directory\s+(.+?)(?=\n|$)",
+            r"^show\s+files?\s+in\s+(.+?)(?=\n|$)",
+            r"^read\s+file\s+(.+?)(?=\n|$)",
+            r"^write\s+file\s+(.+?)\s+with\s+(.+?)(?=\n|$)",
+            r"^delete\s+file\s+(.+?)(?=\n|$)",
             
-            # Common terminal commands
-            r"ps\s+aux",
-            r"ls\s+(-la?)?",
-            r"pwd",
-            r"whoami",
-            r"uname\s+-a",
-            r"df\s+-h",
-            r"top",
-            r"htop",
+            # Standalone terminal commands (must be at start of line or preceded by whitespace)
+            r"(?:^|\s)ps\s+aux(?=\s|$)",
+            r"(?:^|\s)ls\s+(-la?)?(?=\s|$)",
+            r"(?:^|\s)pwd(?=\s|$)",
+            r"(?:^|\s)whoami(?=\s|$)",
+            r"(?:^|\s)uname\s+-a(?=\s|$)",
+            r"(?:^|\s)df\s+-h(?=\s|$)",
+            r"(?:^|\s)top(?=\s|$)",
+            r"(?:^|\s)htop(?=\s|$)",
         ]
+        
+        # Only process if the message looks like it contains explicit commands
+        command_indicators = ["run", "execute", "command", "ls", "ps", "pwd", "whoami", "uname", "df", "top", "htop"]
+        has_command_indicator = any(indicator in message.lower() for indicator in command_indicators)
+        
+        # If no command indicators, don't process patterns
+        if not has_command_indicator:
+            return tool_calls
         
         for pattern in patterns:
             matches = re.finditer(pattern, message, re.IGNORECASE | re.DOTALL)

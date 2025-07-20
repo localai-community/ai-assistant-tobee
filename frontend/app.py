@@ -20,6 +20,7 @@ load_dotenv()
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # Page configuration
+# Note: Streamlit has built-in dark mode support - users can toggle it in the hamburger menu
 st.set_page_config(
     page_title="LocalAI Community",
     page_icon="🤖",
@@ -27,143 +28,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
-def get_css(dark_mode: bool = False):
-    if dark_mode:
-        return """
-        <style>
-            /* Dark mode styles */
-            .stApp {
-                background-color: #1a1a1a;
-                color: #ffffff;
-            }
-            .main-header {
-                font-size: 2.5rem;
-                font-weight: bold;
-                color: #64b5f6;
-                text-align: center;
-                margin-bottom: 2rem;
-            }
-            .chat-message {
-                padding: 1rem;
-                border-radius: 0.5rem;
-                margin-bottom: 1rem;
-                border-left: 4px solid #64b5f6;
-                background-color: #2d2d2d;
-            }
-            .user-message {
-                background-color: #1e3a5f;
-                border-left-color: #2196f3;
-            }
-            .assistant-message {
-                background-color: #2d1b69;
-                border-left-color: #9c27b0;
-            }
-            .error-message {
-                background-color: #4a1c1c;
-                border-left-color: #f44336;
-            }
-            .success-message {
-                background-color: #1b4a1b;
-                border-left-color: #4caf50;
-            }
-            .rag-context {
-                background-color: #3d2c1a;
-                border-left: 4px solid #ff9800;
-                padding: 0.5rem;
-                margin: 0.5rem 0;
-                border-radius: 0.25rem;
-                font-size: 0.9rem;
-            }
-            .collapsible-section {
-                border: 1px solid #404040;
-                border-radius: 0.5rem;
-                padding: 0.5rem;
-                margin: 0.5rem 0;
-                background-color: #2d2d2d;
-            }
-            .section-header {
-                font-weight: bold;
-                color: #64b5f6;
-                margin-bottom: 0.5rem;
-            }
-            /* Override Streamlit default styles for dark mode */
-            .stTextInput > div > div > input {
-                background-color: #2d2d2d;
-                color: #ffffff;
-                border-color: #404040;
-            }
-            .stSelectbox > div > div > div {
-                background-color: #2d2d2d;
-                color: #ffffff;
-            }
-            .stButton > button {
-                background-color: #404040;
-                color: #ffffff;
-                border-color: #606060;
-            }
-            .stButton > button:hover {
-                background-color: #505050;
-            }
-        </style>
-        """
-    else:
-        return """
-        <style>
-            /* Light mode styles */
-            .main-header {
-                font-size: 2.5rem;
-                font-weight: bold;
-                color: #1f77b4;
-                text-align: center;
-                margin-bottom: 2rem;
-            }
-            .chat-message {
-                padding: 1rem;
-                border-radius: 0.5rem;
-                margin-bottom: 1rem;
-                border-left: 4px solid #1f77b4;
-            }
-            .user-message {
-                background-color: #e3f2fd;
-                border-left-color: #2196f3;
-            }
-            .assistant-message {
-                background-color: #f3e5f5;
-                border-left-color: #9c27b0;
-            }
-            .error-message {
-                background-color: #ffebee;
-                border-left-color: #f44336;
-            }
-            .success-message {
-                background-color: #e8f5e8;
-                border-left-color: #4caf50;
-            }
-            .rag-context {
-                background-color: #fff3e0;
-                border-left: 4px solid #ff9800;
-                padding: 0.5rem;
-                margin: 0.5rem 0;
-                border-radius: 0.25rem;
-                font-size: 0.9rem;
-            }
-            .collapsible-section {
-                border: 1px solid #e0e0e0;
-                border-radius: 0.5rem;
-                padding: 0.5rem;
-                margin: 0.5rem 0;
-                background-color: #fafafa;
-            }
-            .section-header {
-                font-weight: bold;
-                color: #1f77b4;
-                margin-bottom: 0.5rem;
-            }
-        </style>
-        """
-
-# CSS will be applied in main function based on dark mode setting
+# Simple CSS for better styling
+def get_css():
+    return """
+    <style>
+        .main-header {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .section-header {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+    """
 
 def init_session_state():
     """Initialize session state variables."""
@@ -189,8 +69,6 @@ def init_session_state():
         st.session_state.mcp_health = {}
     if "use_streaming" not in st.session_state:
         st.session_state.use_streaming = True
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -570,8 +448,8 @@ def main():
     """Main application function."""
     init_session_state()
     
-    # Apply CSS based on dark mode setting
-    st.markdown(get_css(st.session_state.dark_mode), unsafe_allow_html=True)
+    # Apply simple CSS
+    st.markdown(get_css(), unsafe_allow_html=True)
     
     # Check backend health and get models
     st.session_state.backend_health = check_backend_health()
@@ -800,21 +678,6 @@ def main():
                 st.success("✅ Streaming enabled - responses will appear in real-time")
             else:
                 st.info("⏳ Streaming disabled - responses will appear all at once")
-            
-            # Dark mode toggle
-            dark_mode = st.checkbox(
-                "🌙 Dark Mode",
-                value=st.session_state.dark_mode,
-                help="Toggle between light and dark theme"
-            )
-            if dark_mode != st.session_state.dark_mode:
-                st.session_state.dark_mode = dark_mode
-                st.rerun()
-            
-            if dark_mode:
-                st.success("🌙 Dark mode enabled")
-            else:
-                st.info("☀️ Light mode enabled")
             
             # Backend status
             st.markdown('<div class="section-header">Backend Status</div>', unsafe_allow_html=True)
