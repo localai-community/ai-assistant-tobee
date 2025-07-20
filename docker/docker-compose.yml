@@ -4,7 +4,7 @@ services:
   # AI assistant backend
   backend:
     build: 
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -30,8 +30,8 @@ services:
       - HUGGINGFACE_OFFLINE=true
       - DOWNLOAD_MODELS_ON_STARTUP=false
     volumes:
-      - ./backend:/app
-      - ./mcp-config-local.json:/app/mcp-config-local.json
+      - ../backend:/app
+      - ../mcp-config-local.json:/app/mcp-config-local.json
       - backend_storage:/app/storage
     depends_on:
       - ollama
@@ -41,7 +41,7 @@ services:
   # Streamlit frontend
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
     ports:
       - "8501:8501"
@@ -52,7 +52,7 @@ services:
       - BACKEND_URL=http://backend:8000
       - LOCAL_ONLY=true
     volumes:
-      - ./frontend:/app
+      - ../frontend:/app
     depends_on:
       - backend
 

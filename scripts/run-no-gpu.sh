@@ -35,14 +35,14 @@ fi
 
 # Wait for backend to be ready
 echo "⏳ Waiting for backend to be ready..."
-while ! curl -s http://localhost:8001/health > /dev/null; do
+while ! curl -s http://localhost:8000/health > /dev/null; do
     echo "   Waiting for backend service..."
     sleep 5
 done
 
 # Wait for frontend to be ready
 echo "⏳ Waiting for frontend to be ready..."
-while ! curl -s http://localhost:8000/health > /dev/null; do
+while ! curl -s http://localhost:8501/_stcore/health > /dev/null; do
     echo "   Waiting for frontend service..."
     sleep 5
 done
@@ -50,8 +50,8 @@ done
 echo ""
 echo "🎉 LocalAI Community is ready!"
 echo ""
-echo "📱 Frontend: http://localhost:8000"
-echo "🔧 Backend API: http://localhost:8001"
+echo "📱 Frontend: http://localhost:8501"
+echo "🔧 Backend API: http://localhost:8000"
 echo "🤖 Ollama: http://localhost:11434"
 echo ""
-echo "💡 You can now open http://localhost:8000 in your browser to start chatting!" 
+echo "💡 You can now open http://localhost:8501 in your browser to start chatting!" 

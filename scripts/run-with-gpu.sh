@@ -179,7 +179,16 @@ docker stop localaicommunity-frontend-1 2>/dev/null || true
 print_header "Step 5: Starting LocalAI Community services"
 
 print_info "Starting backend and frontend with host Ollama..."
-docker-compose -f docker/docker-compose.host-ollama.yml up -d
+if ! docker-compose -f docker/docker-compose.host-ollama.yml up -d; then
+    print_error "Failed to start Docker services"
+    print_info "Checking Docker status..."
+    docker ps -a
+    print_info "Checking Docker logs..."
+    docker-compose -f docker/docker-compose.host-ollama.yml logs --tail=20
+    return 1
+fi
+
+print_status "Docker services started successfully"
 
 # Step 6: Wait for services
 print_header "Step 6: Waiting for services to be ready"
@@ -187,31 +196,53 @@ print_header "Step 6: Waiting for services to be ready"
 # Wait for backend
 print_info "Waiting for backend..."
 for i in {1..30}; do
-    if curl -s http://localhost:8001/health > /dev/null 2>&1; then
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
         print_status "Backend is ready!"
         break
     fi
     echo "   Waiting... ($i/30)"
+    if [ $i -eq 15 ]; then
+        print_warning "Backend taking longer than expected. Checking logs..."
+        docker-compose -f docker/docker-compose.host-ollama.yml logs backend --tail=10
+    fi
     sleep 2
 done
+
+if [ $i -eq 30 ]; then
+    print_error "Backend failed to start within 60 seconds"
+    print_info "Checking backend logs..."
+    docker-compose -f docker/docker-compose.host-ollama.yml logs backend --tail=20
+    return 1
+fi
 
 # Wait for frontend
 print_info "Waiting for frontend..."
 for i in {1..30}; do
-    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -s http://localhost:8501/_stcore/health > /dev/null 2>&1; then
         print_status "Frontend is ready!"
         break
     fi
     echo "   Waiting... ($i/30)"
+    if [ $i -eq 15 ]; then
+        print_warning "Frontend taking longer than expected. Checking logs..."
+        docker-compose -f docker/docker-compose.host-ollama.yml logs frontend --tail=10
+    fi
     sleep 2
 done
+
+if [ $i -eq 30 ]; then
+    print_error "Frontend failed to start within 60 seconds"
+    print_info "Checking frontend logs..."
+    docker-compose -f docker/docker-compose.host-ollama.yml logs frontend --tail=20
+    return 1
+fi
 
 # Step 7: Performance monitoring
 print_header "Step 7: Performance and Health Check"
 
 # Check Ollama health
 print_info "Checking Ollama health..."
-OLLAMA_HEALTH=$(curl -s http://localhost:8001/api/v1/chat/health 2>/dev/null | jq -r '.ollama_available' 2>/dev/null || echo "false")
+OLLAMA_HEALTH=$(curl -s http://localhost:8000/api/v1/chat/health 2>/dev/null | jq -r '.ollama_available' 2>/dev/null || echo "false")
 
 if [ "$OLLAMA_HEALTH" = "true" ]; then
     print_success "Ollama is healthy and connected!"
@@ -226,12 +257,12 @@ monitor_ollama
 print_header "Step 8: Testing GPU-accelerated chat"
 
 # Get available models from backend
-BACKEND_MODELS=$(curl -s http://localhost:8001/api/v1/chat/health 2>/dev/null | jq -r '.available_models[]' 2>/dev/null | head -1 || echo "llama3:latest")
+BACKEND_MODELS=$(curl -s http://localhost:8000/api/v1/chat/health 2>/dev/null | jq -r '.available_models[]' 2>/dev/null | head -1 || echo "llama3:latest")
 
 print_info "Testing chat with model: $BACKEND_MODELS"
 
 # Test chat request
-TEST_RESPONSE=$(curl -s -X POST http://localhost:8001/api/v1/chat/ \
+TEST_RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/chat/ \
     -H "Content-Type: application/json" \
     -d "{\"message\": \"Hello! Are you using GPU acceleration?\", \"model\": \"$BACKEND_MODELS\"}" \
     2>/dev/null | jq -r '.response' 2>/dev/null || echo "Test failed")
@@ -248,8 +279,8 @@ print_header "🎉 LocalAI Community is running with GPU acceleration!"
 
 echo ""
 echo "📱 Access Points:"
-echo "   • Frontend: http://localhost:8000"
-echo "   • Backend API: http://localhost:8001"
+echo "   • Frontend: http://localhost:8501"
+echo "   • Backend API: http://localhost:8000"
 echo "   • Ollama API: http://localhost:11434"
 echo ""
 

@@ -91,7 +91,12 @@ show_menu() {
     echo "   • Check GPU availability"
     echo ""
     
-    print_option "5. ❌ Exit"
+    print_option "5. 🔍 Debug GPU Setup"
+    echo "   • Run comprehensive diagnostics"
+    echo "   • Identify setup issues"
+    echo ""
+    
+    print_option "6. ❌ Exit"
     echo "   • Exit without starting anything"
     echo ""
 }
@@ -231,7 +236,7 @@ main() {
     while true; do
         show_menu
         
-        read -p "Enter your choice (1-5): " -n 1 -r
+        read -p "Enter your choice (1-6): " -n 1 -r
         echo ""
         echo ""
         
@@ -256,11 +261,15 @@ main() {
                 show_system_info
                 ;;
             5)
+                print_info "Running GPU setup diagnostics..."
+                ./scripts/debug-gpu-setup.sh
+                ;;
+            6)
                 print_info "Exiting..."
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please choose 1-5."
+                print_error "Invalid option. Please choose 1-6."
                 echo ""
                 ;;
         esac
