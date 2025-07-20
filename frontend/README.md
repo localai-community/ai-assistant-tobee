@@ -14,7 +14,7 @@ A Streamlit-based chat interface for the LocalAI Community backend with MCP and 
 ## Prerequisites
 
 - Python 3.11+
-- LocalAI Community Backend running on `http://localhost:8001`
+- LocalAI Community Backend running on `http://localhost:8000`
 - Ollama running locally (for AI model access)
 - At least one Ollama model installed (e.g., `ollama pull llama3.2`)
 
@@ -57,8 +57,8 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 
 Open your browser and go to:
 - **Frontend**: `http://localhost:8501`
-- **Backend API**: `http://localhost:8001`
-- **Backend Docs**: `http://localhost:8001/docs`
+- **Backend API**: `http://localhost:8000`
+- **Backend Docs**: `http://localhost:8000/docs`
 
 ## Usage
 
@@ -88,7 +88,7 @@ Create a `.env` file in the frontend directory:
 
 ```env
 # Backend URL
-BACKEND_URL=http://localhost:8001
+BACKEND_URL=http://localhost:8000
 
 # Streamlit settings
 STREAMLIT_SERVER_PORT=8501
@@ -133,7 +133,7 @@ frontend/
 python -c "import streamlit, httpx; print('✅ Dependencies OK')"
 
 # Test backend connectivity
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Test frontend chat API integration
 python test_frontend_chat.py
@@ -149,7 +149,7 @@ python test_frontend_chat.py
 - Ensure port 8001 is available
 
 **Backend connection failed:**
-- Verify backend is running: `curl http://localhost:8001/health`
+- Verify backend is running: `curl http://localhost:8000/health`
 - Check BACKEND_URL in environment variables
 - Ensure no firewall blocking localhost
 
@@ -179,7 +179,7 @@ docker build -t localai-community-frontend .
 
 # Run container
 docker run -p 8501:8501 \
-  -e BACKEND_URL=http://host.docker.internal:8001 \
+  -e BACKEND_URL=http://host.docker.internal:8000 \
   localai-community-frontend
 ```
 

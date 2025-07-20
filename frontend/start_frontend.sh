@@ -38,10 +38,10 @@ fi
 
 # Check if backend is running
 echo "Checking backend availability..."
-if curl -s http://localhost:8001/health > /dev/null; then
-    echo "✅ Backend is running on http://localhost:8001"
+if curl -s http://localhost:8000/health > /dev/null; then
+    echo "✅ Backend is running on http://localhost:8000"
 else
-    echo "⚠️  Backend not detected on http://localhost:8001"
+    echo "⚠️  Backend not detected on http://localhost:8000"
     echo "   Make sure to start the backend first: cd ../backend && ./start_server.sh"
 fi
 

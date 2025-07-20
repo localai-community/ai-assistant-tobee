@@ -104,9 +104,9 @@ def test_backend_connectivity():
         async def check_backend():
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.get("http://localhost:8001/health", timeout=5.0)
+                    response = await client.get("http://localhost:8000/health", timeout=5.0)
                     if response.status_code == 200:
-                        print("  ✅ Backend is reachable on http://localhost:8001")
+                        print("  ✅ Backend is reachable on http://localhost:8000")
                         return True
                     else:
                         print(f"  ❌ Backend responded with status: {response.status_code}")

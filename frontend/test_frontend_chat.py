@@ -10,7 +10,7 @@ import sys
 import os
 
 # Configuration
-BACKEND_URL = "http://localhost:8001"
+BACKEND_URL = "http://localhost:8000"
 
 async def test_backend_health():
     """Test backend health endpoint."""
