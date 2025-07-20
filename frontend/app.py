@@ -87,6 +87,10 @@ def init_session_state():
         st.session_state.rag_stats = {}
     if "use_rag" not in st.session_state:
         st.session_state.use_rag = False
+    if "mcp_tools" not in st.session_state:
+        st.session_state.mcp_tools = []
+    if "mcp_health" not in st.session_state:
+        st.session_state.mcp_health = {}
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -144,6 +148,44 @@ def get_rag_stats() -> Dict:
         print(f"Error getting RAG stats: {e}")
         pass
     return {}
+
+def get_mcp_tools() -> List[Dict]:
+    """Get available MCP tools from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/chat/tools", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+    except:
+        pass
+    return []
+
+def get_mcp_health() -> Dict:
+    """Get MCP health status from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/chat/tools/health", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+    except:
+        pass
+    return {}
+
+def call_mcp_tool(tool_name: str, arguments: Dict) -> Dict:
+    """Call an MCP tool."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/chat/tools/{tool_name}/call",
+                json=arguments,
+                timeout=30.0
+            )
+            if response.status_code == 200:
+                return {"success": True, "data": response.json()}
+            else:
+                return {"success": False, "error": f"Tool call failed: {response.status_code} - {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Tool call error: {str(e)}"}
 
 def upload_document_for_rag(uploaded_file) -> Dict:
     """Upload a document for RAG processing."""
@@ -448,6 +490,52 @@ def main():
                 st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
             else:
                 st.success("✅ RAG mode enabled - responses will use document context")
+        
+        st.markdown("---")
+        
+        # MCP Tools Section
+        st.header("🛠️ MCP Tools")
+        
+        # Get MCP tools and health
+        if st.session_state.backend_health:
+            mcp_tools = get_mcp_tools()
+            mcp_health = get_mcp_health()
+            
+            if mcp_health.get("mcp_enabled", False):
+                st.success("✅ MCP Tools Available")
+                
+                # Show available tools
+                if mcp_tools:
+                    st.subheader("Available Tools:")
+                    for tool in mcp_tools:
+                        st.text(f"• {tool.get('name', 'Unknown')}")
+                        st.caption(f"  {tool.get('description', 'No description')}")
+                
+                # Show server status
+                servers = mcp_health.get("servers", {})
+                if servers:
+                    st.subheader("Server Status:")
+                    for server_name, status in servers.items():
+                        if status.get("running", False):
+                            st.success(f"✅ {server_name}")
+                        else:
+                            st.error(f"❌ {server_name}")
+                
+                # Tool count
+                st.metric("Total Tools", mcp_health.get("tools_count", 0))
+                
+                # Refresh button
+                if st.button("🔄 Refresh MCP Status"):
+                    st.session_state.mcp_tools = get_mcp_tools()
+                    st.session_state.mcp_health = get_mcp_health()
+                    st.rerun()
+            else:
+                st.warning("⚠️ MCP Tools not available")
+                if st.button("🔄 Check MCP Status"):
+                    st.session_state.mcp_health = get_mcp_health()
+                    st.rerun()
+        else:
+            st.warning("Backend not available for MCP tools")
         
         st.markdown("---")
         

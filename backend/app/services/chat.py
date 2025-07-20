@@ -1,11 +1,12 @@
 """
 LocalAI Community - Chat Service
-Direct Ollama integration with streaming responses and conversation management.
+Direct Ollama integration with streaming responses, conversation management, and MCP tool calling.
 """
 
 import httpx
 import json
 import asyncio
+import re
 from typing import AsyncGenerator, Dict, List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ import logging
 from sqlalchemy.orm import Session
 from .repository import ConversationRepository, MessageRepository
 from ..models.schemas import ConversationCreate, MessageCreate
+from ..mcp import MCPManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,9 +53,9 @@ class Conversation(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now, description="Last update time")
 
 class ChatService:
-    """Service for handling chat interactions with Ollama."""
+    """Service for handling chat interactions with Ollama and MCP tools."""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434", db: Optional[Session] = None):
+    def __init__(self, ollama_url: str = "http://localhost:11434", db: Optional[Session] = None, mcp_config_path: Optional[str] = None):
         self.ollama_url = ollama_url
         self.db = db
         self.http_client = httpx.AsyncClient(timeout=60.0)
@@ -66,11 +68,108 @@ class ChatService:
             self.conversation_repo = None
             self.message_repo = None
         
+        # Initialize MCP manager
+        self.mcp_manager = MCPManager(mcp_config_path)
+        self.mcp_initialized = False
+        
     async def __aenter__(self):
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.http_client.aclose()
+        await self.mcp_manager.shutdown()
+    
+    async def _ensure_mcp_initialized(self):
+        """Ensure MCP manager is initialized."""
+        if not self.mcp_initialized:
+            self.mcp_initialized = await self.mcp_manager.initialize()
+    
+    async def get_available_tools(self) -> List[Dict[str, Any]]:
+        """Get list of available MCP tools."""
+        await self._ensure_mcp_initialized()
+        tools = await self.mcp_manager.list_tools()
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.inputSchema
+            }
+            for tool in tools
+        ]
+    
+    async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Call an MCP tool."""
+        await self._ensure_mcp_initialized()
+        result = await self.mcp_manager.call_tool(tool_name, arguments)
+        
+        # Extract text content from result
+        content = ""
+        if result.content:
+            for item in result.content:
+                if hasattr(item, 'text'):
+                    content += item.text
+        
+        return {
+            "success": not result.isError,
+            "content": content,
+            "error": result.isError
+        }
+    
+    def _detect_tool_calls(self, message: str) -> List[Dict[str, Any]]:
+        """Detect potential tool calls in user message."""
+        tool_calls = []
+        
+        # Simple pattern matching for tool calls
+        # This could be enhanced with more sophisticated parsing
+        patterns = [
+            r"execute\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
+            r"run\s+(python|javascript|bash)\s+code[:\s]+(.+?)(?=\n|$)",
+            r"list\s+files?\s+in\s+(.+?)(?=\n|$)",
+            r"read\s+file\s+(.+?)(?=\n|$)",
+            r"write\s+file\s+(.+?)\s+with\s+(.+?)(?=\n|$)",
+            r"delete\s+file\s+(.+?)(?=\n|$)",
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, message, re.IGNORECASE | re.DOTALL)
+            for match in matches:
+                if "python" in match.group(0) or "javascript" in match.group(0) or "bash" in match.group(0):
+                    language = match.group(1).lower()
+                    code = match.group(2).strip()
+                    tool_calls.append({
+                        "tool": "code-execution.execute_code",
+                        "arguments": {
+                            "language": language,
+                            "code": code
+                        }
+                    })
+                elif "list" in match.group(0):
+                    path = match.group(1).strip()
+                    tool_calls.append({
+                        "tool": "filesystem.list_directory",
+                        "arguments": {"path": path}
+                    })
+                elif "read" in match.group(0):
+                    path = match.group(1).strip()
+                    tool_calls.append({
+                        "tool": "filesystem.read_file",
+                        "arguments": {"path": path}
+                    })
+                elif "write" in match.group(0):
+                    path = match.group(1).strip()
+                    content = match.group(2).strip()
+                    tool_calls.append({
+                        "tool": "filesystem.write_file",
+                        "arguments": {"path": path, "content": content}
+                    })
+                elif "delete" in match.group(0):
+                    path = match.group(1).strip()
+                    tool_calls.append({
+                        "tool": "filesystem.delete_file",
+                        "arguments": {"path": path}
+                    })
+        
+        return tool_calls
     
     async def check_ollama_health(self) -> bool:
         """Check if Ollama is running and healthy."""
@@ -99,7 +198,8 @@ class ChatService:
         model: str = "llama3.2",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        enable_mcp: bool = True
     ) -> ChatResponse:
         """Generate a response from Ollama."""
         
@@ -174,6 +274,21 @@ class ChatService:
                 data = response.json()
                 ai_response = data.get("message", {}).get("content", "")
                 
+                # Include tool results in the response if any
+                if tool_results:
+                    tool_summary = "\n\n**Tool Execution Results:**\n"
+                    for tool_result in tool_results:
+                        tool_name = tool_result["tool"]
+                        result = tool_result["result"]
+                        if result["success"]:
+                            tool_summary += f"✅ **{tool_name}**: Success\n"
+                            tool_summary += f"```\n{result['content']}\n```\n"
+                        else:
+                            tool_summary += f"❌ **{tool_name}**: Failed\n"
+                            tool_summary += f"```\n{result['content']}\n```\n"
+                    
+                    ai_response += tool_summary
+                
                 # Add AI response to database
                 if self.message_repo:
                     ai_message_data = MessageCreate(
@@ -233,6 +348,24 @@ class ChatService:
             # Fallback to in-memory if no database
             conversation_id = f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             conversation = Conversation(id=conversation_id, model=model)
+        
+        # Check for MCP tool calls in the message
+        tool_results = []
+        if enable_mcp:
+            tool_calls = self._detect_tool_calls(message)
+            for tool_call in tool_calls:
+                try:
+                    result = await self.call_mcp_tool(tool_call["tool"], tool_call["arguments"])
+                    tool_results.append({
+                        "tool": tool_call["tool"],
+                        "result": result
+                    })
+                except Exception as e:
+                    logger.error(f"Error calling MCP tool {tool_call['tool']}: {e}")
+                    tool_results.append({
+                        "tool": tool_call["tool"],
+                        "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
+                    })
         
         # Add user message to database
         if self.message_repo:

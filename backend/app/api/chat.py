@@ -252,4 +252,84 @@ async def clear_conversations(db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Failed to clear conversations: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+# MCP Tool Endpoints
+@router.get("/tools")
+async def list_mcp_tools(db: Session = Depends(get_db)):
+    """
+    List all available MCP tools.
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        List[dict]: Available MCP tools
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        mcp_config_path = os.getenv("MCP_CONFIG_PATH", "mcp-config-local.json")
+        chat_service = ChatService(ollama_url=ollama_url, db=db, mcp_config_path=mcp_config_path)
+        tools = await chat_service.get_available_tools()
+        return tools
+    except Exception as e:
+        logger.error(f"Failed to list MCP tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/tools/{tool_name}/call")
+async def call_mcp_tool(tool_name: str, arguments: dict, db: Session = Depends(get_db)):
+    """
+    Call a specific MCP tool.
+    
+    Args:
+        tool_name: Name of the tool to call (format: server.tool)
+        arguments: Tool arguments
+        db: Database session
+        
+    Returns:
+        dict: Tool execution result
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        mcp_config_path = os.getenv("MCP_CONFIG_PATH", "mcp-config-local.json")
+        chat_service = ChatService(ollama_url=ollama_url, db=db, mcp_config_path=mcp_config_path)
+        result = await chat_service.call_mcp_tool(tool_name, arguments)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to call MCP tool {tool_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tools/health")
+async def mcp_health_check(db: Session = Depends(get_db)):
+    """
+    Check MCP tools health status.
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        dict: MCP health status
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        mcp_config_path = os.getenv("MCP_CONFIG_PATH", "mcp-config-local.json")
+        chat_service = ChatService(ollama_url=ollama_url, db=db, mcp_config_path=mcp_config_path)
+        
+        # Get MCP manager health
+        health_status = await chat_service.mcp_manager.health_check()
+        
+        return {
+            "mcp_enabled": chat_service.mcp_initialized,
+            "servers": health_status["servers"],
+            "tools_count": health_status["tools_count"],
+            "overall_healthy": health_status["overall_healthy"]
+        }
+    except Exception as e:
+        logger.error(f"MCP health check error: {e}")
+        return {
+            "mcp_enabled": False,
+            "servers": {},
+            "tools_count": 0,
+            "overall_healthy": False,
+            "error": str(e)
+        } 
