@@ -39,22 +39,22 @@ def test_dependencies() -> Dict[str, List[Tuple[str, bool, str]]]:
     """
     results = {}
     
-    # Chainlit framework
-    print("🤖 Testing Chainlit Framework...")
-    chainlit_deps = [
-        ("chainlit", "chainlit"),
+    # Streamlit framework
+    print("🤖 Testing Streamlit Framework...")
+    streamlit_deps = [
+        ("streamlit", "streamlit"),
     ]
     
-    chainlit_results = []
-    for module, package in chainlit_deps:
+    streamlit_results = []
+    for module, package in streamlit_deps:
         success, error = test_import(module, package)
-        chainlit_results.append((module, success, error))
+        streamlit_results.append((module, success, error))
         status = "✅" if success else "❌"
         print(f"  {status} {module}")
         if not success:
             print(f"    Error: {error}")
     
-    results["chainlit_framework"] = chainlit_results
+    results["streamlit_framework"] = streamlit_results
     
     # HTTP client
     print("\n🌐 Testing HTTP Client...")
@@ -104,9 +104,9 @@ def test_backend_connectivity():
         async def check_backend():
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await client.get("http://localhost:8000/health", timeout=5.0)
+                    response = await client.get("http://localhost:8001/health", timeout=5.0)
                     if response.status_code == 200:
-                        print("  ✅ Backend is reachable on http://localhost:8000")
+                        print("  ✅ Backend is reachable on http://localhost:8001")
                         return True
                     else:
                         print(f"  ❌ Backend responded with status: {response.status_code}")

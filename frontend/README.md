@@ -1,10 +1,10 @@
 # LocalAI Community Frontend
 
-A Chainlit-based chat interface for the LocalAI Community backend with MCP and RAG capabilities.
+A Streamlit-based chat interface for the LocalAI Community backend with MCP and RAG capabilities.
 
 ## Features
 
-- 🤖 **Interactive Chat Interface** - Beautiful Chainlit-based UI
+- 🤖 **Interactive Chat Interface** - Beautiful Streamlit-based UI
 - 📄 **File Upload Support** - Upload PDF, DOCX, TXT, MD files for RAG
 - 🔗 **Backend Integration** - Seamless communication with FastAPI backend
 - 🛠️ **MCP Tools** - Model Context Protocol integration
@@ -14,7 +14,7 @@ A Chainlit-based chat interface for the LocalAI Community backend with MCP and R
 ## Prerequisites
 
 - Python 3.11+
-- LocalAI Community Backend running on `http://localhost:8000`
+- LocalAI Community Backend running on `http://localhost:8001`
 - Ollama running locally (for AI model access)
 - At least one Ollama model installed (e.g., `ollama pull llama3.2`)
 
@@ -50,15 +50,15 @@ cd backend
 ./start_frontend.sh
 
 # Or manually:
-chainlit run app.py --host 0.0.0.0 --port 8001
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
 ### 4. Access the Interface
 
 Open your browser and go to:
-- **Frontend**: `http://localhost:8001`
-- **Backend API**: `http://localhost:8000`
-- **Backend Docs**: `http://localhost:8000/docs`
+- **Frontend**: `http://localhost:8501`
+- **Backend API**: `http://localhost:8001`
+- **Backend Docs**: `http://localhost:8001/docs`
 
 ## Usage
 
@@ -88,16 +88,16 @@ Create a `.env` file in the frontend directory:
 
 ```env
 # Backend URL
-BACKEND_URL=http://localhost:8000
+BACKEND_URL=http://localhost:8001
 
-# Chainlit settings
-CHAINLIT_HOST=0.0.0.0
-CHAINLIT_PORT=8001
+# Streamlit settings
+STREAMLIT_SERVER_PORT=8501
+STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ```
 
-### Chainlit Configuration
+### Streamlit Configuration
 
-Edit `.chainlit/config.toml` to customize:
+Edit `.streamlit/config.toml` to customize:
 - UI theme and appearance
 - File upload settings
 - Security options
@@ -108,11 +108,11 @@ Edit `.chainlit/config.toml` to customize:
 ### Project Structure
 ```
 frontend/
-├── app.py                 # Main Chainlit application
+├── app.py                 # Main Streamlit application
 ├── requirements.txt       # Python dependencies
 ├── Dockerfile            # Container configuration
-├── .chainlit/
-│   └── config.toml       # Chainlit configuration
+├── .streamlit/
+│   └── config.toml       # Streamlit configuration
 ├── start_frontend.sh     # Startup script
 ├── stop_frontend.sh      # Shutdown script
 ├── activate_venv.sh      # Environment activation
@@ -121,19 +121,19 @@ frontend/
 
 ### Adding Features
 
-1. **New Chat Handlers**: Add functions with `@cl.on_message`
-2. **File Processing**: Extend `@cl.on_file_upload`
-3. **UI Customization**: Modify `.chainlit/config.toml`
+1. **New Chat Handlers**: Add functions with Streamlit chat components
+2. **File Processing**: Extend file upload functionality
+3. **UI Customization**: Modify `.streamlit/config.toml`
 4. **Backend Integration**: Update API calls in `app.py`
 
 ### Testing
 
 ```bash
 # Test frontend dependencies
-python -c "import chainlit, httpx; print('✅ Dependencies OK')"
+python -c "import streamlit, httpx; print('✅ Dependencies OK')"
 
 # Test backend connectivity
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 
 # Test frontend chat API integration
 python test_frontend_chat.py
@@ -149,12 +149,12 @@ python test_frontend_chat.py
 - Ensure port 8001 is available
 
 **Backend connection failed:**
-- Verify backend is running: `curl http://localhost:8000/health`
+- Verify backend is running: `curl http://localhost:8001/health`
 - Check BACKEND_URL in environment variables
 - Ensure no firewall blocking localhost
 
 **File upload issues:**
-- Check file size limits in `.chainlit/config.toml`
+- Check file size limits in `.streamlit/config.toml`
 - Verify supported file types
 - Ensure backend storage directory exists
 
@@ -163,7 +163,7 @@ python test_frontend_chat.py
 Check logs for detailed error information:
 ```bash
 # Frontend logs
-chainlit run app.py --host 0.0.0.0 --port 8001 --debug
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --logger.level debug
 
 # Backend logs
 cd backend && uvicorn app.main:app --reload --log-level debug
@@ -178,8 +178,8 @@ cd backend && uvicorn app.main:app --reload --log-level debug
 docker build -t localai-community-frontend .
 
 # Run container
-docker run -p 8001:8001 \
-  -e BACKEND_URL=http://host.docker.internal:8000 \
+docker run -p 8501:8501 \
+  -e BACKEND_URL=http://host.docker.internal:8001 \
   localai-community-frontend
 ```
 

@@ -26,7 +26,7 @@ echo "Activating virtual environment..."
 source venv/bin/activate
 
 # Check if dependencies are installed
-if ! python -c "import chainlit" 2>/dev/null; then
+if ! python -c "import streamlit" 2>/dev/null; then
     echo "Installing dependencies..."
     pip install -r requirements.txt
     if [ $? -ne 0 ]; then
@@ -38,16 +38,16 @@ fi
 
 # Check if backend is running
 echo "Checking backend availability..."
-if curl -s http://localhost:8000/health > /dev/null; then
-    echo "✅ Backend is running on http://localhost:8000"
+if curl -s http://localhost:8001/health > /dev/null; then
+    echo "✅ Backend is running on http://localhost:8001"
 else
-    echo "⚠️  Backend not detected on http://localhost:8000"
+    echo "⚠️  Backend not detected on http://localhost:8001"
     echo "   Make sure to start the backend first: cd ../backend && ./start_server.sh"
 fi
 
 # Start the frontend
-echo "Starting Chainlit frontend on http://localhost:8001"
+echo "Starting Streamlit frontend on http://localhost:8501"
 echo "Press Ctrl+C to stop the server"
 echo ""
 
-chainlit run app.py --host 0.0.0.0 --port 8001 
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0 

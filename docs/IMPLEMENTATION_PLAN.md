@@ -26,10 +26,10 @@ mkdir -p mcp-servers/{filesystem,code-execution}
 - [ ] Create `backend/app/core/config.py` (settings management)
 
 ### Step 1.3: Frontend Foundation
-- [ ] Create `frontend/requirements.txt` with Chainlit
+- [ ] Create `frontend/requirements.txt` with Streamlit
 - [ ] Create `frontend/Dockerfile`
-- [ ] Create `frontend/app.py` (basic Chainlit app)
-- [ ] Create `frontend/.chainlit/config.toml`
+- [ ] Create `frontend/app.py` (basic Streamlit app)
+- [ ] Create `frontend/.streamlit/config.toml`
 
 ### Step 1.4: Docker Setup
 - [ ] Update `docker-compose.yml` to use new structure
@@ -44,7 +44,7 @@ mkdir -p mcp-servers/{filesystem,code-execution}
   - Add basic conversation management
 
 ### Step 2.2: Basic Frontend Chat
-- [ ] Update `frontend/app.py` with basic chat functionality
+- [ ] Update `frontend/app.py` with Streamlit chat interface
 - [ ] Connect to backend chat service
 - [ ] Test basic conversation flow
 
@@ -91,7 +91,7 @@ mkdir -p mcp-servers/{filesystem,code-execution}
 - [ ] Add tool calling capabilities
 
 ### Step 4.3: Frontend MCP Support
-- [ ] Update frontend to display tool results
+- [ ] Update Streamlit frontend to display tool results
 - [ ] Add action buttons for MCP tools
 - [ ] Handle tool execution status
 

@@ -38,17 +38,16 @@ services:
 
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
-  # Chainlit frontend
+  # Streamlit frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8501:8501"
     environment:
-      - CHAINLIT_AUTH_SECRET=local-secret-key
-      - CHAINLIT_HOST=0.0.0.0
-      - CHAINLIT_PORT=8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - BACKEND_API_URL=http://backend:8001
       - BACKEND_URL=http://backend:8001
       - LOCAL_ONLY=true
@@ -57,7 +56,7 @@ services:
     depends_on:
       - backend
 
-    command: chainlit run app.py --host 0.0.0.0 --port 8000
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 
         # LLM provider (Ollama)
   ollama:
