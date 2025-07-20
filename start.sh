@@ -275,8 +275,8 @@ run_gpu_setup() {
     print_success "Running GPU setup..."
     echo ""
     
-    # Run the GPU setup script
-    if ./scripts/run-with-gpu.sh; then
+    # Run the simplified GPU setup script (avoids Docker dependency issues)
+    if ./scripts/run-with-gpu-simple.sh; then
         print_success "GPU setup completed successfully!"
         echo ""
         print_info "Access your GPU-accelerated AI assistant at: http://localhost:8501"
@@ -312,10 +312,14 @@ stop_services() {
     print_info "Stopping all services..."
     echo ""
     
+    # Stop simplified GPU services
+    print_info "Stopping simplified GPU services..."
+    ./scripts/stop-gpu-simple.sh 2>/dev/null || true
+    
     # Stop Docker services
     print_info "Stopping Docker services..."
     docker-compose -f docker/docker-compose.yml down 2>/dev/null || true
-docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
+    docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
     
     # Stop Ollama if running
     if pgrep -x "ollama" > /dev/null; then

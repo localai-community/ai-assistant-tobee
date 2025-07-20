@@ -206,6 +206,17 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Storage and runtime data
+storage/
+!storage/.gitkeep
+!storage/*/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+localai_community.db
+logs/
+*.log
+
 # Generated documentation assets (allow architecture diagrams)
 docs/*.pdf
 # docs/*.png  # Allow PNG diagrams for documentation

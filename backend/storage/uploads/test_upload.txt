@@ -1,5 +1,0 @@
-
-    This is a test document for upload functionality.
-    It contains information about testing and validation.
-    The document should be processed and stored in the vector database.
-    
