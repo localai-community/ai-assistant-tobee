@@ -276,7 +276,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Update conversation ID
                                             st.session_state.conversation_id = data["conversation_id"]
                                         
-                                        elif "rag_context" in data:
+                                        elif "rag_context" in data and "has_context" in data:
                                             # Final response with RAG context
                                             message_placeholder.markdown(full_response)
                                             st.success(f"🎯 RAG CONTEXT FOUND: {data.get('rag_context', '')[:100]}...")
@@ -832,8 +832,8 @@ def main():
                     # Add assistant response to chat history
                     message_data = {"role": "assistant", "content": response_data["response"]}
                     
-                    # Add RAG context if available
-                    if response_data.get("rag_context") and response_data.get("has_context"):
+                    # Add RAG context if available (check for non-empty rag_context and has_context=True)
+                    if response_data.get("rag_context") and response_data.get("has_context") == True:
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
                         # Add debug info to the message content
