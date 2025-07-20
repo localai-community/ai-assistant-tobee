@@ -517,26 +517,26 @@ def extract_rag_context_from_content(content: str) -> str:
     if matches:
         return " ".join(matches)
     
-    # Look for specific document titles or names
-    doc_title_pattern = r'(?:from|in|according to|based on)\s+(?:the\s+)?(?:document|article|paper|text)\s+(?:titled\s+)?["\']([^"\']+)["\']'
+    # Look for document references with quotes (like "Sequence to Sequence Learning")
+    quoted_doc_pattern = r'Document \d+:\s*["\']([^"\']+)["\']'
+    quoted_matches = re.findall(quoted_doc_pattern, content)
+    
+    if quoted_matches:
+        return f"Document references: {', '.join(quoted_matches)}"
+    
+    # Look for any mention of "Document" followed by content
+    any_doc_pattern = r'Document \d+[^.!?]*[.!?]'
+    any_matches = re.findall(any_doc_pattern, content)
+    
+    if any_matches:
+        return " ".join(any_matches)
+    
+    # Look for specific document titles or names in quotes
+    doc_title_pattern = r'["\']([^"\']+(?:attention|transformer|neural|machine|learning)[^"\']*)["\']'
     title_matches = re.findall(doc_title_pattern, content, re.IGNORECASE)
     
     if title_matches:
         return f"Referenced documents: {', '.join(title_matches)}"
-    
-    # Look for specific section references
-    section_pattern = r'(?:in|from)\s+(?:the\s+)?(?:section|chapter|part)\s+["\']([^"\']+)["\']'
-    section_matches = re.findall(section_pattern, content, re.IGNORECASE)
-    
-    if section_matches:
-        return f"Referenced sections: {', '.join(section_matches)}"
-    
-    # Look for specific page or line references
-    page_pattern = r'(?:on|at)\s+(?:page|line)\s+(\d+)'
-    page_matches = re.findall(page_pattern, content, re.IGNORECASE)
-    
-    if page_matches:
-        return f"Referenced pages/lines: {', '.join(page_matches)}"
     
     # If no specific references found, don't extract general content
     return ""
