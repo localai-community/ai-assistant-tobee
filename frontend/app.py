@@ -272,6 +272,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                         # Debug: Log any data containing rag_context
                                         if "rag_context" in data:
                                             st.info(f"🔍 FOUND DATA WITH RAG_CONTEXT: {data}")
+                                            # Also log the raw line that contained this data
+                                            st.info(f"🔍 RAW LINE WITH RAG_CONTEXT: {line}")
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
@@ -301,8 +303,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             }
 
                                             
-                                    except json.JSONDecodeError:
-                                        st.error(f"❌ JSON decode error for line: {line}")
+                                    except json.JSONDecodeError as e:
+                                        st.error(f"❌ JSON decode error for line: {line[:100]}... Error: {e}")
                                         continue
                         
                         # If we get here without returning, the streaming ended without content
@@ -316,7 +318,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                             debug_response = full_response + f"\n\n🔍 DEBUG: Function completed without finding rag_context line. Processed {line_count} lines."
                             debug_response += f"\n🔍 DEBUG: Last 5 lines received:"
                             for i, line in enumerate(last_few_lines):
-                                debug_response += f"\n  {i+1}: {line[:100]}..."
+                                debug_response += f"\n  {i+1}: {line[:100]}... (length: {len(line)})"
                             return {
                                 "response": debug_response,
                                 "conversation_id": st.session_state.conversation_id,
