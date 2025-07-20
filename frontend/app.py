@@ -830,13 +830,11 @@ def main():
                     if response_data.get("rag_context") and response_data.get("has_context") == True:
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
-                        # Add debug info to the message content
-                        message_data["content"] += f"\n\n🔍 DEBUG: RAG context found: {response_data.get('rag_context', '')[:100]}..."
+                        # Add RAG reference to the message content
+                        message_data["content"] += f"\n\n📚 **RAG Reference:** {response_data.get('rag_context', '')}"
                     else:
-                        # Add debug info if no RAG context
-                        message_data["content"] += f"\n\n🔍 DEBUG: No RAG context found. response_data keys: {list(response_data.keys()) if response_data else 'None'}"
-                        message_data["content"] += f"\n🔍 DEBUG: rag_context value: '{response_data.get('rag_context', 'None')}'"
-                        message_data["content"] += f"\n🔍 DEBUG: has_context value: {response_data.get('has_context', 'None')}"
+                        # Add note if no RAG context was found
+                        message_data["content"] += f"\n\nℹ️ *No relevant documents found in RAG database.*"
                     
                     st.session_state.messages.append(message_data)
                     
@@ -847,8 +845,6 @@ def main():
                     st.rerun()
                 else:
                     error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
-                    # Add debug info to error message
-                    error_msg += f"\n\n🔍 DEBUG: Error branch taken. response_data: {response_data}"
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
