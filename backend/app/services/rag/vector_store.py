@@ -5,8 +5,8 @@ from pathlib import Path
 import chromadb
 from chromadb.config import Settings
 from langchain.schema import Document as LangChainDocument
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
 import numpy as np
 
 logger = logging.getLogger(__name__)
