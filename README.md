@@ -18,6 +18,7 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 - **[📋 Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Step-by-step development guide
 - **[🍎 GPU Setup Guide](docs/GPU_SETUP.md)** - GPU acceleration for M1/M2 Macs
 - **[🛠️ Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[⚡ Command Line Usage](docs/COMMAND_LINE_USAGE.md)** - Interactive and automated setup options
 - **[📊 System Diagram](docs/img/architecture-diagram.svg)** - Visual architecture representation
 
 ## 🚀 Quick Start
@@ -29,8 +30,15 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 git clone https://github.com/localai-community/ai-assistant.git
 cd ai-assistant
 
-# 2. Run the startup script and choose your option
+# 2. Run the startup script (interactive menu)
 ./start.sh
+
+# Or use direct commands for automation
+./start.sh gpu              # GPU setup (macOS M1/M2)
+./start.sh nogpu            # No-GPU setup (cross-platform)
+./start.sh status           # Check system status
+./start.sh debug            # Run diagnostics
+./start.sh stop             # Stop all services
 ```
 
 **The script will detect your system and recommend the best option:**
@@ -39,10 +47,29 @@ cd ai-assistant
 - **🔒 Other platforms**: Cross-platform Docker setup
 - **📋 System info**: Check your setup requirements
 
+### 🎯 **Command-Line Options**
+
+```bash
+# Auto-confirm all prompts (useful for scripts)
+./start.sh gpu -y
+
+# Verbose output for debugging
+./start.sh nogpu --verbose
+
+# Skip system compatibility checks
+./start.sh gpu --skip-checks
+
+# Show help
+./start.sh --help
+```
+
 ### 🛑 Stopping Services
 
 ```bash
-# Run the startup script and choose "Stop Services"
+# Quick stop
+./start.sh stop
+
+# Or use interactive menu
 ./start.sh
 ```
 
@@ -74,6 +101,35 @@ cd ai-assistant
 
 **🎯 Perfect for: Privacy-conscious users, enterprises, air-gapped environments, and anyone wanting full control over their AI assistant.**
 
+## 🤖 Automation & CI/CD
+
+The command-line interface makes it easy to integrate into automated workflows:
+
+```bash
+#!/bin/bash
+# Example: Automated setup script
+
+# Check system status
+./start.sh status
+
+# Start appropriate setup based on platform
+if [[ "$OSTYPE" == "darwin"* ]] && [[ $(uname -m) == "arm64" ]]; then
+    ./start.sh gpu -y --skip-checks
+else
+    ./start.sh nogpu -y
+fi
+
+# Wait for services and run tests
+sleep 10
+./start.sh debug
+```
+
+**Perfect for:**
+- **CI/CD Pipelines**: Automated testing and deployment
+- **Development Environments**: Quick setup and teardown
+- **Production Deployments**: Reliable, repeatable installations
+- **Scripts & Automation**: Non-interactive execution
+
 ## 📊 Current Implementation Status
 
 ### ✅ **Implemented Features**
@@ -83,6 +139,7 @@ cd ai-assistant
 - **System Architecture**: Complete MCP and RAG system design
 - **Docker Support**: Multi-platform containerization
 - **GPU Acceleration**: Native M1/M2 Mac support
+- **Command-Line Interface**: Interactive and automated setup options
 
 ### 🚧 **In Development**
 - **MCP Tools**: File operations, code execution, web search
