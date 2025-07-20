@@ -222,6 +222,7 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
 
 def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
     """Send message to backend with RAG enhancement and streaming response."""
+    st.info("🚀 Starting RAG streaming function...")
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
@@ -308,9 +309,14 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                         return {"response": f"Backend error: {response.status_code}"}
                         
     except httpx.TimeoutException:
+        st.error("⏰ RAG streaming timed out")
         return {"response": "Request timed out. Please try again."}
     except Exception as e:
+        st.error(f"💥 RAG streaming error: {str(e)}")
         return {"response": f"Communication error: {str(e)}"}
+    
+    st.error("🔚 RAG streaming function completed without returning anything")
+    return None
 
 def load_conversation_messages(conversation_id: str) -> List[Dict]:
     """Load messages for a specific conversation."""
