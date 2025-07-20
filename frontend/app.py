@@ -823,6 +823,9 @@ def main():
             
             # Handle streaming RAG responses differently since they're already displayed
             if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+                # Debug: Show what we got back from the streaming function
+                st.error(f"🔍 RESPONSE_DATA RECEIVED: {response_data}")
+                
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -845,6 +848,7 @@ def main():
                     # Force rerun to update sidebar
                     st.rerun()
                 else:
+                    st.error(f"🚨 RAG STREAMING ERROR BRANCH - response_data: {response_data}")
                     error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
