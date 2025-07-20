@@ -286,6 +286,15 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                                 st.error(f"🔍 PARSED DATA: {data}")
                                                 st.error(f"🔍 LINE LENGTH: {len(line)}")
                                                 st.error(f"🔍 JSON PARSE SUCCESS: {data is not None}")
+                                            
+                                            # Debug every line that contains "rag_context" in the raw line
+                                            if "rag_context" in line:
+                                                debug_info = f"🔍 RAG_CONTEXT IN RAW LINE: {line[:100]}...\n"
+                                                debug_info += f"🔍 PARSED DATA KEYS: {list(data.keys()) if data else 'None'}\n"
+                                                debug_info += f"🔍 RAG_CONTEXT IN PARSED DATA: {'rag_context' in data if data else False}\n"
+                                                debug_info += f"🔍 LINE COUNT: {line_count}"
+                                                # Store debug info to be added to the final message
+                                                rag_debug_info = debug_info
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
@@ -331,6 +340,10 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                             debug_response += f"\n🔍 DEBUG: Last 5 lines received:"
                             for i, line in enumerate(last_few_lines):
                                 debug_response += f"\n  {i+1}: {line[:100]}... (length: {len(line)})"
+                            
+                            # Add the rag_debug_info if it was captured
+                            if rag_debug_info:
+                                debug_response += f"\n\n🔍 RAG DEBUG INFO:\n{rag_debug_info}"
                             return {
                                 "response": debug_response,
                                 "conversation_id": st.session_state.conversation_id,
