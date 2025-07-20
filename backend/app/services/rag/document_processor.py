@@ -2,11 +2,43 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-import fitz  # PyMuPDF
-from docx import Document
-from unstructured.partition.auto import partition
+
+# Try to import PyMuPDF, fallback to alternatives if not available
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("PyMuPDF not available, will use alternative PDF processing")
+
+# Try to import pdfplumber as alternative
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    PDFPLUMBER_AVAILABLE = False
+
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("python-docx not available, DOCX processing disabled")
+
+try:
+    from unstructured.partition.auto import partition
+    UNSTRUCTURED_AVAILABLE = True
+except ImportError:
+    UNSTRUCTURED_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("unstructured not available, some file types may not be supported")
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document as LangChainDocument
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -82,31 +114,55 @@ class DocumentProcessor:
             return self._extract_with_unstructured(file_path)
     
     def _extract_pdf_text(self, file_path: Path) -> str:
-        """Extract text from PDF using PyMuPDF"""
-        try:
-            doc = fitz.open(file_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            return text
-        except Exception as e:
-            logger.error(f"PyMuPDF failed for {file_path}: {e}")
-            # Fallback to unstructured
+        """Extract text from PDF using available libraries"""
+        # Try PyMuPDF first
+        if PYMUPDF_AVAILABLE:
+            try:
+                doc = fitz.open(file_path)
+                text = ""
+                for page in doc:
+                    text += page.get_text()
+                doc.close()
+                return text
+            except Exception as e:
+                logger.error(f"PyMuPDF failed for {file_path}: {e}")
+        
+        # Try pdfplumber as alternative
+        if PDFPLUMBER_AVAILABLE:
+            try:
+                with pdfplumber.open(file_path) as pdf:
+                    text = ""
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
+                    return text
+            except Exception as e:
+                logger.error(f"pdfplumber failed for {file_path}: {e}")
+        
+        # Fallback to unstructured
+        if UNSTRUCTURED_AVAILABLE:
             return self._extract_with_unstructured(file_path)
+        
+        raise ValueError(f"No PDF processing library available for {file_path}")
     
     def _extract_docx_text(self, file_path: Path) -> str:
         """Extract text from DOCX file"""
-        try:
-            doc = Document(file_path)
-            text = ""
-            for paragraph in doc.paragraphs:
-                text += paragraph.text + "\n"
-            return text
-        except Exception as e:
-            logger.error(f"python-docx failed for {file_path}: {e}")
-            # Fallback to unstructured
+        if DOCX_AVAILABLE:
+            try:
+                doc = Document(file_path)
+                text = ""
+                for paragraph in doc.paragraphs:
+                    text += paragraph.text + "\n"
+                return text
+            except Exception as e:
+                logger.error(f"python-docx failed for {file_path}: {e}")
+        
+        # Fallback to unstructured
+        if UNSTRUCTURED_AVAILABLE:
             return self._extract_with_unstructured(file_path)
+        
+        raise ValueError(f"No DOCX processing library available for {file_path}")
     
     def _extract_text_file(self, file_path: Path) -> str:
         """Extract text from plain text files"""
