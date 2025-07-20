@@ -277,7 +277,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Final response with RAG context
                                             message_placeholder.markdown(full_response)
                                             return {
-                                                "response": full_response,
+                                                "response": full_response if full_response else "No response generated. Please try again.",
                                                 "conversation_id": st.session_state.conversation_id,
                                                 "rag_context": data.get("rag_context", ""),
                                                 "has_context": data.get("has_context", False)
@@ -285,6 +285,10 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             
                                     except json.JSONDecodeError:
                                         continue
+                        
+                        # If we get here without returning, the streaming ended without content
+                        if not full_response:
+                            return {"response": "No response generated. Please try again."}
                     else:
                         return {"response": f"Backend error: {response.status_code}"}
                         
