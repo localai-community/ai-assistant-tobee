@@ -546,15 +546,6 @@ def display_chat_messages():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-            
-            # Show RAG context if available
-            if message.get("rag_context") and message.get("has_context"):
-                st.markdown(f"""
-                <div class="rag-context">
-                    <strong>📚 RAG Context Found:</strong><br>
-                    {message["rag_context"][:300]}{"..." if len(message["rag_context"]) > 300 else ""}
-                </div>
-                """, unsafe_allow_html=True)
 
 def main():
     """Main application function."""
