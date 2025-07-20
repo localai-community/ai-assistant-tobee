@@ -241,10 +241,10 @@ Answer:"""
             for i, (doc, score) in enumerate(results[:2]):  # Limit to top 2 documents
                 # Truncate content to keep it very manageable
                 content = doc.page_content
-                if len(content) > 150:  # Limit to 150 characters per document
-                    content = content[:147] + "..."
+                if len(content) > 100:  # Limit to 100 characters per document
+                    content = content[:97] + "..."
                 
-                context_parts.append(f"Doc {i+1}: {content}")
+                context_parts.append(f"Document {i+1}: {content}")
             
             return "\n".join(context_parts)
             
@@ -317,11 +317,13 @@ Answer:"""
             # Relevant documents found - create context-enhanced prompt
             context = self.get_context_for_query(query, k, filter_dict)
             
-            return f"""Use this context to help answer: {context}
+            return f"""You are a helpful AI assistant. Answer the following question using both the provided context and your general knowledge.
+
+Context: {context}
 
 Question: {query}
 
-Answer:"""
+Please provide a comprehensive answer:"""
             
         except Exception as e:
             logger.error(f"Error creating intelligent RAG prompt: {str(e)}")

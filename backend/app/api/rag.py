@@ -62,6 +62,8 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
             request.filter_dict
         )
         
+
+        
         # Get RAG context information
         rag_context = ""
         has_context = False
@@ -85,8 +87,18 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
         async def generate_stream():
             try:
                 full_response = ""
-                async for chunk in chat_service.generate_streaming_response(
-                    message=enhanced_prompt,
+                
+                # Create a proper chat service instance with database
+                ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+                rag_chat_service = ChatService(ollama_url=ollama_url, db=db)
+                
+                # Use a simpler prompt format for streaming
+                simple_prompt = f"Answer this question: {request.message}"
+                if has_context:
+                    simple_prompt += f"\n\nUse this context: {rag_context}"
+                
+                async for chunk in rag_chat_service.generate_streaming_response(
+                    message=simple_prompt,
                     model=request.model,
                     temperature=request.temperature,
                     conversation_id=request.conversation_id
