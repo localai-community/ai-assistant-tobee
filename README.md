@@ -2,6 +2,10 @@
 
 ![Tobee](docs/img/logo.svg)
 
+> 🚧 **UNDER CONSTRUCTION** 🚧
+> 
+> This project is currently in active development. While the core functionality is working, some features are still being implemented. Please check the [Implementation Status](#-current-implementation-status) section below for details.
+
 A **fully open source**, **local-first** AI assistant with MCP (Model Context Protocol) and RAG (Retrieval-Augmented Generation) support. Runs completely offline with no external dependencies required.
 
 ## 🎯 Our Vision
@@ -22,6 +26,8 @@ We believe AI should be **transparent, private, and truly yours**. This AI assis
 - **[📊 System Diagram](docs/img/architecture-diagram.svg)** - Visual architecture representation
 
 ## 🚀 Quick Start
+
+> ⚠️ **Note**: This project is under active development. The basic setup works, but advanced features like RAG and MCP tools are still being implemented.
 
 **Choose your setup based on your system:**
 
@@ -132,11 +138,10 @@ sleep 10
 
 ## 📊 Current Implementation Status
 
-### ✅ **Implemented Features**
+### ✅ **Fully Working**
 - **Backend API**: FastAPI server with health checks and status endpoints
 - **Chat Service**: Direct Ollama integration with conversation management
 - **Frontend**: Streamlit-based chat interface with real-time messaging
-- **System Architecture**: Complete MCP and RAG system design
 - **Docker Support**: Multi-platform containerization
 - **GPU Acceleration**: Native M1/M2 Mac support
 - **Command-Line Interface**: Interactive and automated setup options
@@ -152,6 +157,13 @@ sleep 10
 - **Model Management**: Easy model installation and switching
 - **Advanced RAG**: Multi-modal document support
 - **Enterprise Features**: Multi-user, role-based access
+
+### 🎯 **What You Can Do Right Now**
+- ✅ Set up the AI assistant locally
+- ✅ Chat with local LLMs via Ollama
+- ✅ Use the web interface
+- ✅ Run with GPU acceleration on M1/M2 Macs
+- ✅ Use command-line automation
 
 ![Architecture Preview](docs/img/architecture-diagram.svg)
 
