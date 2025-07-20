@@ -228,8 +228,9 @@ localai-community/
 │   ├── filesystem/            # File system operations
 │   ├── web-search/            # Web search capabilities
 │   └── code-execution/        # Safe code execution
-├── docker-compose.yml         # Local development setup
-├── docker-compose.prod.yml    # Production setup
+├── docker/
+│   ├── docker-compose.yml         # Local development setup
+│   └── docker-compose.host-ollama.yml    # Host Ollama setup
 ├── mcp-config.json           # MCP server configuration
 └── docs/                      # Documentation
 ```
@@ -501,7 +502,7 @@ ollama pull codellama         # For code tasks
 ### Local Development
 ```bash
 # Quick start with Docker Compose
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml up -d
 
 # Or run individually
 cd backend && uvicorn app.main:app --reload
@@ -511,7 +512,7 @@ cd frontend && chainlit run app.py
 ### Local Production
 ```bash
 # Full stack with Nginx
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose -f docker/docker-compose.yml up -d
 ```
 
 ### Cloud Deployment

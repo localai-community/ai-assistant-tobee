@@ -27,7 +27,7 @@
 **Solution**:
 1. Verify Ollama is running: `docker ps | grep ollama`
 2. Check if models are downloaded: `curl http://localhost:11434/api/tags`
-3. Restart the backend: `docker-compose restart backend`
+3. Restart the backend: `docker-compose -f docker/docker-compose.yml restart backend`
 
 ### 4. Frontend Can't Connect to Backend
 
@@ -48,7 +48,7 @@
 ### Manual Start
 ```bash
 # Start services
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml up -d
 
 # Download model (if needed)
 docker exec localaicommunity-ollama-1 ollama pull llama3.2:latest
@@ -60,7 +60,7 @@ curl http://localhost:8001/api/v1/chat/health
 
 ### Stop Everything
 ```bash
-docker-compose down
+docker-compose -f docker/docker-compose.yml down
 ```
 
 ## Service URLs
@@ -87,7 +87,7 @@ curl http://localhost:8000/health
 
 ```bash
 # View all logs
-docker-compose logs
+docker-compose -f docker/docker-compose.yml logs
 
 # View specific service logs
 docker logs localaicommunity-backend-1

@@ -9,7 +9,7 @@ echo "🚀 Starting LocalAI Community..."
 
 # Start the services
 echo "📦 Starting Docker services..."
-docker-compose up -d
+docker-compose -f docker/docker-compose.yml up -d
 
 # Wait for Ollama to be ready
 echo "⏳ Waiting for Ollama to be ready..."

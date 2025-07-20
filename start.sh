@@ -213,8 +213,8 @@ stop_services() {
     
     # Stop Docker services
     print_info "Stopping Docker services..."
-    docker-compose down 2>/dev/null || true
-    docker-compose -f docker-compose.host-ollama.yml down 2>/dev/null || true
+    docker-compose -f docker/docker-compose.yml down 2>/dev/null || true
+docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
     
     # Stop Ollama if running
     if pgrep -x "ollama" > /dev/null; then

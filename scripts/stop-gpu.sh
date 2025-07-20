@@ -9,7 +9,7 @@ echo "🛑 Stopping LocalAI Community GPU services..."
 
 # Stop Docker services
 echo "📦 Stopping Docker containers..."
-docker-compose -f docker-compose.host-ollama.yml down 2>/dev/null || true
+docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
 
 # Stop any other related containers
 echo "🧹 Cleaning up any remaining containers..."

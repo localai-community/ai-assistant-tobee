@@ -65,7 +65,7 @@ echo ""
 # Check if we're on macOS
 if [[ "$OSTYPE" != "darwin"* ]]; then
     print_error "This script is designed for macOS only"
-    echo "   Use the regular docker-compose setup for other platforms"
+    echo "   Use the regular docker/docker-compose.yml setup for other platforms"
     exit 1
 fi
 
@@ -179,7 +179,7 @@ docker stop localaicommunity-frontend-1 2>/dev/null || true
 print_header "Step 5: Starting LocalAI Community services"
 
 print_info "Starting backend and frontend with host Ollama..."
-docker-compose -f docker-compose.host-ollama.yml up -d
+docker-compose -f docker/docker-compose.host-ollama.yml up -d
 
 # Step 6: Wait for services
 print_header "Step 6: Waiting for services to be ready"
@@ -254,9 +254,9 @@ echo "   • Ollama API: http://localhost:11434"
 echo ""
 
 echo "🔧 Management Commands:"
-echo "   • Stop services: docker-compose -f docker-compose.host-ollama.yml down"
+echo "   • Stop services: docker-compose -f docker/docker-compose.host-ollama.yml down"
 echo "   • Stop Ollama: pkill ollama"
-echo "   • View logs: docker-compose -f docker-compose.host-ollama.yml logs -f"
+echo "   • View logs: docker-compose -f docker/docker-compose.host-ollama.yml logs -f"
 echo "   • Monitor GPU: Activity Monitor > GPU"
 echo ""
 
@@ -279,7 +279,7 @@ echo ""
 cleanup() {
     echo ""
     print_warning "Stopping services..."
-    docker-compose -f docker-compose.host-ollama.yml down
+    docker-compose -f docker/docker-compose.host-ollama.yml down
     pkill ollama 2>/dev/null || true
     print_status "All services stopped"
     exit 0

@@ -185,7 +185,7 @@ docker run -p 8001:8001 \
 
 ### Docker Compose
 
-Use the main `docker-compose.yml` in the project root to run both frontend and backend together.
+Use the main `docker/docker-compose.yml` in the project root to run both frontend and backend together.
 
 ## Contributing
 

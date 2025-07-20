@@ -69,7 +69,7 @@ ollama serve
 
 ### Step 4: Start Services
 ```bash
-docker-compose -f docker-compose.host-ollama.yml up -d
+docker-compose -f docker/docker-compose.host-ollama.yml up -d
 ```
 
 ## 📱 Access Points
@@ -209,7 +209,7 @@ export OLLAMA_KEEP_ALIVE=24h
 
 ### Docker Configuration
 ```yaml
-# In docker-compose.host-ollama.yml
+# In docker/docker-compose.host-ollama.yml
 environment:
   - OLLAMA_URL=http://host.docker.internal:11434
 extra_hosts:
@@ -219,7 +219,7 @@ extra_hosts:
 ## 📞 Support
 
 ### Common Issues
-- **Port conflicts**: Change ports in docker-compose
+- **Port conflicts**: Change ports in docker/docker-compose.yml
 - **Memory issues**: Use smaller models
 - **Performance**: Check GPU usage in Activity Monitor
 - **Network**: Ensure Docker can reach host
@@ -227,7 +227,7 @@ extra_hosts:
 ### Getting Help
 1. Check this documentation
 2. Review `docs/TROUBLESHOOTING.md`
-3. Check logs: `docker-compose logs -f`
+3. Check logs: `docker-compose -f docker/docker-compose.yml logs -f`
 4. Monitor system resources
 
 ---
