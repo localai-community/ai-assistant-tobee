@@ -841,6 +841,8 @@ def main():
                     else:
                         # Add debug info if no RAG context
                         message_data["content"] += f"\n\n🔍 DEBUG: No RAG context found. response_data keys: {list(response_data.keys()) if response_data else 'None'}"
+                        message_data["content"] += f"\n🔍 DEBUG: rag_context value: '{response_data.get('rag_context', 'None')}'"
+                        message_data["content"] += f"\n🔍 DEBUG: has_context value: {response_data.get('has_context', 'None')}"
                     
                     st.session_state.messages.append(message_data)
                     
