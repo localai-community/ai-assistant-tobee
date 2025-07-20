@@ -278,6 +278,14 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Debug: Log the parsed data to see what keys it actually has
                                             if line_count > 30:  # Only log for later lines to avoid spam
                                                 st.info(f"🔍 PARSED DATA KEYS: {list(data.keys()) if data else 'None'}")
+                                            
+                                            # Special debugging for the final line (the one with rag_context)
+                                            if "rag_context" in line and "rag_context" not in data:
+                                                st.error(f"🔍 FINAL LINE ISSUE: Raw line contains 'rag_context' but parsed data doesn't!")
+                                                st.error(f"🔍 RAW LINE: {line}")
+                                                st.error(f"🔍 PARSED DATA: {data}")
+                                                st.error(f"🔍 LINE LENGTH: {len(line)}")
+                                                st.error(f"🔍 JSON PARSE SUCCESS: {data is not None}")
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
