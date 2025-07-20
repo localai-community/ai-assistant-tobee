@@ -274,6 +274,10 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             st.info(f"🔍 FOUND DATA WITH RAG_CONTEXT: {data}")
                                             # Also log the raw line that contained this data
                                             st.info(f"🔍 RAW LINE WITH RAG_CONTEXT: {line}")
+                                        else:
+                                            # Debug: Log the parsed data to see what keys it actually has
+                                            if line_count > 30:  # Only log for later lines to avoid spam
+                                                st.info(f"🔍 PARSED DATA KEYS: {list(data.keys()) if data else 'None'}")
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
