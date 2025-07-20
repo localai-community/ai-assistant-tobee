@@ -253,48 +253,13 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                 ) as response:
                     if response.status_code == 200:
                         # Process Server-Sent Events
-                        line_count = 0
-                        rag_context_found = False
-                        last_few_lines = []
                         for line in response.iter_lines():
                             if line:
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
-                                    line_count += 1
-                                    # Keep track of last few lines for debugging
-                                    last_few_lines.append(line)
-                                    if len(last_few_lines) > 5:
-                                        last_few_lines.pop(0)
                                     data_str = line[6:]  # Remove 'data: ' prefix
                                     try:
                                         data = json.loads(data_str)
-                                        
-                                        # Debug: Log any data containing rag_context
-                                        if "rag_context" in data:
-                                            st.info(f"🔍 FOUND DATA WITH RAG_CONTEXT: {data}")
-                                            # Also log the raw line that contained this data
-                                            st.info(f"🔍 RAW LINE WITH RAG_CONTEXT: {line}")
-                                        else:
-                                            # Debug: Log the parsed data to see what keys it actually has
-                                            if line_count > 30:  # Only log for later lines to avoid spam
-                                                st.info(f"🔍 PARSED DATA KEYS: {list(data.keys()) if data else 'None'}")
-                                            
-                                            # Special debugging for the final line (the one with rag_context)
-                                            if "rag_context" in line and "rag_context" not in data:
-                                                st.error(f"🔍 FINAL LINE ISSUE: Raw line contains 'rag_context' but parsed data doesn't!")
-                                                st.error(f"🔍 RAW LINE: {line}")
-                                                st.error(f"🔍 PARSED DATA: {data}")
-                                                st.error(f"🔍 LINE LENGTH: {len(line)}")
-                                                st.error(f"🔍 JSON PARSE SUCCESS: {data is not None}")
-                                            
-                                            # Debug every line that contains "rag_context" in the raw line
-                                            if "rag_context" in line:
-                                                debug_info = f"🔍 RAG_CONTEXT IN RAW LINE: {line[:100]}...\n"
-                                                debug_info += f"🔍 PARSED DATA KEYS: {list(data.keys()) if data else 'None'}\n"
-                                                debug_info += f"🔍 RAG_CONTEXT IN PARSED DATA: {'rag_context' in data if data else False}\n"
-                                                debug_info += f"🔍 LINE COUNT: {line_count}"
-                                                # Store debug info to be added to the final message
-                                                rag_debug_info = debug_info
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
@@ -310,14 +275,10 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             st.session_state.conversation_id = data["conversation_id"]
                                         
                                         elif "rag_context" in data:
-                                            # Found rag_context - check if it's the final line
+                                            # Found rag_context - this is the final line
                                             message_placeholder.markdown(full_response)
-                                            st.success(f"🎯 RAG CONTEXT FOUND: {data.get('rag_context', '')[:100]}...")
-                                            st.info(f"Has context: {data.get('has_context', False)}")
-                                            # Add debug info to the response
-                                            debug_response = full_response + f"\n\n🔍 DEBUG: RAG context found after processing {line_count} lines."
                                             return {
-                                                "response": debug_response,
+                                                "response": full_response,
                                                 "conversation_id": st.session_state.conversation_id,
                                                 "rag_context": data.get("rag_context", ""),
                                                 "has_context": data.get("has_context", True)  # Assume True if rag_context is present
@@ -325,27 +286,15 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
 
                                             
                                     except json.JSONDecodeError as e:
-                                        st.error(f"❌ JSON decode error for line: {line[:100]}... Error: {e}")
                                         continue
                         
                         # If we get here without returning, the streaming ended without content
-                        st.warning(f"⚠️ STREAMING ENDED - Response length: {len(full_response)}")
                         if not full_response:
                             return {"response": "No response generated. Please try again."}
                         else:
                             # If we have content but no rag_context line, return what we have
-                            st.error("❌ NO RAG CONTEXT FOUND - Function completed without rag_context line")
-                            # Add debug info to the response
-                            debug_response = full_response + f"\n\n🔍 DEBUG: Function completed without finding rag_context line. Processed {line_count} lines."
-                            debug_response += f"\n🔍 DEBUG: Last 5 lines received:"
-                            for i, line in enumerate(last_few_lines):
-                                debug_response += f"\n  {i+1}: {line[:100]}... (length: {len(line)})"
-                            
-                            # Add the rag_debug_info if it was captured
-                            if rag_debug_info:
-                                debug_response += f"\n\n🔍 RAG DEBUG INFO:\n{rag_debug_info}"
                             return {
-                                "response": debug_response,
+                                "response": full_response,
                                 "conversation_id": st.session_state.conversation_id,
                                 "rag_context": "",
                                 "has_context": False
