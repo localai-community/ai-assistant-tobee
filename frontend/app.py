@@ -257,6 +257,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                             if line:
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
+                                    # Debug: Log the raw line being processed
+                                    st.info(f"🔍 RAW LINE: {line}")
                                     data_str = line[6:]  # Remove 'data: ' prefix
                                     try:
                                         data = json.loads(data_str)
