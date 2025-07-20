@@ -239,12 +239,14 @@ Answer:"""
             # Format context from retrieved documents (very concise version)
             context_parts = []
             for i, (doc, score) in enumerate(results[:2]):  # Limit to top 2 documents
+                # Get document filename from metadata
+                filename = doc.metadata.get("filename", "Unknown Document")
                 # Truncate content to keep it very manageable
                 content = doc.page_content
                 if len(content) > 100:  # Limit to 100 characters per document
                     content = content[:97] + "..."
                 
-                context_parts.append(f"Document {i+1}: {content}")
+                context_parts.append(f"Document {i+1}: {filename} - {content}")
             
             return "\n".join(context_parts)
             
