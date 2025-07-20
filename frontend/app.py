@@ -800,36 +800,66 @@ def main():
                     with st.spinner("Thinking..."):
                         response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
             
-            if response_data and not response_data["response"].startswith("❌"):
-                # Update conversation ID if provided
-                if response_data.get("conversation_id"):
-                    st.session_state.conversation_id = response_data["conversation_id"]
-                
-                # Add assistant response to chat history
-                message_data = {"role": "assistant", "content": response_data["response"]}
-                
-                # Add RAG context if available
-                if response_data.get("rag_context") and response_data.get("has_context"):
-                    message_data["rag_context"] = response_data["rag_context"]
-                    message_data["has_context"] = response_data["has_context"]
-                
-                st.session_state.messages.append(message_data)
-                
-                # Refresh conversation list to include the new conversation
-                st.session_state.conversations = get_conversations()
-                
-                # Display assistant response (if not already displayed via streaming)
-                if not st.session_state.use_streaming:
+            # Handle streaming RAG responses differently since they're already displayed
+            if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+                # For streaming RAG, the response is already displayed in real-time
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add RAG context if available
+                    if response_data.get("rag_context") and response_data.get("has_context"):
+                        message_data["rag_context"] = response_data["rag_context"]
+                        message_data["has_context"] = response_data["has_context"]
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
-                        st.markdown(response_data["response"])
-                
-                # Force rerun to update sidebar
-                st.rerun()
+                        st.error(error_msg)
             else:
-                error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                with st.chat_message("assistant"):
-                    st.error(error_msg)
+                # Handle regular responses (non-streaming or non-RAG)
+                if response_data and not response_data["response"].startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add RAG context if available
+                    if response_data.get("rag_context") and response_data.get("has_context"):
+                        message_data["rag_context"] = response_data["rag_context"]
+                        message_data["has_context"] = response_data["has_context"]
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Display assistant response (if not already displayed via streaming)
+                    if not st.session_state.use_streaming:
+                        with st.chat_message("assistant"):
+                            st.markdown(response_data["response"])
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
 
 if __name__ == "__main__":
     main() 
