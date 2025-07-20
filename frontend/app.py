@@ -508,30 +508,37 @@ def display_welcome_message():
 
 def extract_rag_context_from_content(content: str) -> str:
     """Extract RAG context from response content by looking for document references."""
-    # Look for patterns like "Document 1:", "Document 2:", etc.
     import re
     
-    # Pattern to match document references
+    # Look for specific document references like "Document 1:", "Document 2:", etc.
     doc_pattern = r'Document \d+:[^.!?]*[.!?]'
     matches = re.findall(doc_pattern, content)
     
     if matches:
         return " ".join(matches)
     
-    # Also look for other common RAG reference patterns
-    rag_patterns = [
-        r'According to [^.!?]*[.!?]',
-        r'Based on [^.!?]*[.!?]',
-        r'From the document[^.!?]*[.!?]',
-        r'In the document[^.!?]*[.!?]',
-        r'The document states[^.!?]*[.!?]'
-    ]
+    # Look for specific document titles or names
+    doc_title_pattern = r'(?:from|in|according to|based on)\s+(?:the\s+)?(?:document|article|paper|text)\s+(?:titled\s+)?["\']([^"\']+)["\']'
+    title_matches = re.findall(doc_title_pattern, content, re.IGNORECASE)
     
-    for pattern in rag_patterns:
-        matches = re.findall(pattern, content)
-        if matches:
-            return " ".join(matches)
+    if title_matches:
+        return f"Referenced documents: {', '.join(title_matches)}"
     
+    # Look for specific section references
+    section_pattern = r'(?:in|from)\s+(?:the\s+)?(?:section|chapter|part)\s+["\']([^"\']+)["\']'
+    section_matches = re.findall(section_pattern, content, re.IGNORECASE)
+    
+    if section_matches:
+        return f"Referenced sections: {', '.join(section_matches)}"
+    
+    # Look for specific page or line references
+    page_pattern = r'(?:on|at)\s+(?:page|line)\s+(\d+)'
+    page_matches = re.findall(page_pattern, content, re.IGNORECASE)
+    
+    if page_matches:
+        return f"Referenced pages/lines: {', '.join(page_matches)}"
+    
+    # If no specific references found, don't extract general content
     return ""
 
 def display_chat_messages():
