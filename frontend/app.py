@@ -255,11 +255,16 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                         # Process Server-Sent Events
                         line_count = 0
                         rag_context_found = False
+                        last_few_lines = []
                         for line in response.iter_lines():
                             if line:
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
                                     line_count += 1
+                                    # Keep track of last few lines for debugging
+                                    last_few_lines.append(line)
+                                    if len(last_few_lines) > 5:
+                                        last_few_lines.pop(0)
                                     data_str = line[6:]  # Remove 'data: ' prefix
                                     try:
                                         data = json.loads(data_str)
@@ -318,6 +323,9 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                             st.error("❌ NO RAG CONTEXT FOUND - Function completed without rag_context line")
                             # Add debug info to the response
                             debug_response = full_response + f"\n\n🔍 DEBUG: Function completed without finding rag_context line. Processed {line_count} lines."
+                            debug_response += f"\n🔍 DEBUG: Last 5 lines received:"
+                            for i, line in enumerate(last_few_lines):
+                                debug_response += f"\n  {i+1}: {line[:100]}..."
                             return {
                                 "response": debug_response,
                                 "conversation_id": st.session_state.conversation_id,
