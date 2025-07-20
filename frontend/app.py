@@ -852,23 +852,24 @@ def main():
                     # Add assistant response to chat history
                     message_data = {"role": "assistant", "content": response_data["response"]}
                     
-                    # Try to extract RAG context from the content itself
-                    extracted_rag_context = extract_rag_context_from_content(response_data["response"])
-                    
-                    if extracted_rag_context:
-                        message_data["rag_context"] = extracted_rag_context
-                        message_data["has_context"] = True
-                        # Add RAG reference to the message content
-                        message_data["content"] += f"\n\n📚 **RAG Reference:** {extracted_rag_context}"
-                    elif response_data.get("rag_context") and response_data.get("has_context") == True:
-                        # Fallback to backend-provided RAG context
+                    # First check if backend provided RAG context directly
+                    if response_data.get("rag_context") and response_data.get("has_context") == True:
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
                         # Add RAG reference to the message content
                         message_data["content"] += f"\n\n📚 **RAG Reference:** {response_data.get('rag_context', '')}"
                     else:
-                        # Add note if no RAG context was found
-                        message_data["content"] += f"\n\nℹ️ *No relevant documents found in RAG database.*"
+                        # Try to extract RAG context from the content itself
+                        extracted_rag_context = extract_rag_context_from_content(response_data["response"])
+                        
+                        if extracted_rag_context:
+                            message_data["rag_context"] = extracted_rag_context
+                            message_data["has_context"] = True
+                            # Add RAG reference to the message content
+                            message_data["content"] += f"\n\n📚 **RAG Reference:** {extracted_rag_context}"
+                        else:
+                            # Add note if no RAG context was found
+                            message_data["content"] += f"\n\nℹ️ *No relevant documents found in RAG database.*"
                     
                     st.session_state.messages.append(message_data)
                     
