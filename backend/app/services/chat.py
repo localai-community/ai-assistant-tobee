@@ -30,7 +30,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat API."""
     message: str = Field(..., description="User message")
-    model: str = Field(default="llama3.2", description="Ollama model to use")
+    model: str = Field(default="llama3:latest", description="Ollama model to use")
     stream: bool = Field(default=True, description="Enable streaming response")
     temperature: float = Field(default=0.7, description="Model temperature (0.0-1.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
@@ -48,7 +48,7 @@ class Conversation(BaseModel):
     """Represents a conversation session."""
     id: str = Field(..., description="Unique conversation ID")
     messages: List[ChatMessage] = Field(default_factory=list, description="Conversation messages")
-    model: str = Field(default="llama3.2", description="Model used for this conversation")
+    model: str = Field(default="llama3:latest", description="Model used for this conversation")
     created_at: datetime = Field(default_factory=datetime.now, description="Conversation creation time")
     updated_at: datetime = Field(default_factory=datetime.now, description="Last update time")
 
@@ -195,7 +195,7 @@ class ChatService:
     async def generate_response(
         self, 
         message: str, 
-        model: str = "llama3.2",
+        model: str = "llama3:latest",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         conversation_id: Optional[str] = None,
@@ -263,6 +263,24 @@ class ChatService:
         if max_tokens:
             payload["options"]["num_predict"] = max_tokens
         
+        # Check for MCP tool calls in the message
+        tool_results = []
+        if enable_mcp:
+            tool_calls = self._detect_tool_calls(message)
+            for tool_call in tool_calls:
+                try:
+                    result = await self.call_mcp_tool(tool_call["tool"], tool_call["arguments"])
+                    tool_results.append({
+                        "tool": tool_call["tool"],
+                        "result": result
+                    })
+                except Exception as e:
+                    logger.error(f"Error calling MCP tool {tool_call['tool']}: {e}")
+                    tool_results.append({
+                        "tool": tool_call["tool"],
+                        "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
+                    })
+        
         try:
             # Send request to Ollama
             response = await self.http_client.post(
@@ -322,7 +340,7 @@ class ChatService:
     async def generate_streaming_response(
         self, 
         message: str, 
-        model: str = "llama3.2",
+        model: str = "llama3:latest",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         conversation_id: Optional[str] = None

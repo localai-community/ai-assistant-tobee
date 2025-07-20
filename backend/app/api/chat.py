@@ -315,6 +315,9 @@ async def mcp_health_check(db: Session = Depends(get_db)):
         mcp_config_path = os.getenv("MCP_CONFIG_PATH", "mcp-config-local.json")
         chat_service = ChatService(ollama_url=ollama_url, db=db, mcp_config_path=mcp_config_path)
         
+        # Ensure MCP manager is initialized
+        await chat_service._ensure_mcp_initialized()
+        
         # Get MCP manager health
         health_status = await chat_service.mcp_manager.health_check()
         

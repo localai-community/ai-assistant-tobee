@@ -24,7 +24,7 @@ from mcp.types import (
     Tool,
     TextContent,
     LoggingLevel,
-    LogMessage,
+    LoggingMessageNotification,
 )
 
 # Import the rest with alias
@@ -373,4 +373,8 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
         )
 
 if __name__ == "__main__":
-    asyncio.run(stdio_server(server)) 
+    async def main():
+        async with stdio_server(server):
+            await asyncio.Event().wait()  # Wait forever
+    
+    asyncio.run(main()) 
