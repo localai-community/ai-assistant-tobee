@@ -260,8 +260,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                     try:
                                         data = json.loads(data_str)
                                         
-                                        # Debug: Log what we're receiving
-                                        st.write(f"DEBUG: Received data: {data}")
+
                                         
                                         if data.get("type") == "error":
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
@@ -279,7 +278,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                         elif "rag_context" in data:
                                             # Final response with RAG context
                                             message_placeholder.markdown(full_response)
-                                            st.write(f"DEBUG: Returning RAG response with context: {data.get('rag_context', '')}")
+                                            st.success(f"🎯 RAG CONTEXT FOUND: {data.get('rag_context', '')[:100]}...")
+                                            st.info(f"Has context: {data.get('has_context', False)}")
                                             return {
                                                 "response": full_response if full_response else "No response generated. Please try again.",
                                                 "conversation_id": st.session_state.conversation_id,
@@ -288,16 +288,16 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             }
                                             
                                     except json.JSONDecodeError:
-                                        st.write(f"DEBUG: JSON decode error for line: {line}")
+                                        st.error(f"❌ JSON decode error for line: {line}")
                                         continue
                         
                         # If we get here without returning, the streaming ended without content
-                        st.write(f"DEBUG: Streaming ended, full_response length: {len(full_response)}")
+                        st.warning(f"⚠️ STREAMING ENDED - Response length: {len(full_response)}")
                         if not full_response:
                             return {"response": "No response generated. Please try again."}
                         else:
                             # If we have content but no rag_context line, return what we have
-                            st.write("DEBUG: Returning response without RAG context")
+                            st.error("❌ NO RAG CONTEXT FOUND - Function completed without rag_context line")
                             return {
                                 "response": full_response,
                                 "conversation_id": st.session_state.conversation_id,
