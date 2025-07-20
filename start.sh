@@ -5,6 +5,12 @@
 
 set -e
 
+# Default values
+INTERACTIVE_MODE=true
+AUTO_CONFIRM=false
+VERBOSE=false
+SKIP_CHECKS=false
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -56,6 +62,92 @@ check_apple_silicon() {
     else
         return 1
     fi
+}
+
+# Function to show usage information
+show_usage() {
+    echo "Usage: $0 [OPTIONS] [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  gpu          Start GPU setup (macOS M1/M2 only)"
+    echo "  nogpu        Start no-GPU setup (cross-platform)"
+    echo "  stop         Stop all services"
+    echo "  status       Show system information"
+    echo "  debug        Run diagnostics"
+    echo "  menu         Show interactive menu (default)"
+    echo ""
+    echo "Options:"
+    echo "  -y, --yes    Auto-confirm all prompts"
+    echo "  -v, --verbose Enable verbose output"
+    echo "  -q, --quiet  Disable interactive mode"
+    echo "  --skip-checks Skip system compatibility checks"
+    echo "  -h, --help   Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                    # Interactive menu"
+    echo "  $0 gpu                # Start GPU setup"
+    echo "  $0 nogpu -y           # Start no-GPU setup with auto-confirm"
+    echo "  $0 stop               # Stop all services"
+    echo "  $0 status             # Show system info"
+    echo "  $0 debug              # Run diagnostics"
+    echo ""
+}
+
+# Function to parse command line arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            gpu)
+                COMMAND="gpu"
+                shift
+                ;;
+            nogpu)
+                COMMAND="nogpu"
+                shift
+                ;;
+            stop)
+                COMMAND="stop"
+                shift
+                ;;
+            status)
+                COMMAND="status"
+                shift
+                ;;
+            debug)
+                COMMAND="debug"
+                shift
+                ;;
+            menu)
+                COMMAND="menu"
+                shift
+                ;;
+            -y|--yes)
+                AUTO_CONFIRM=true
+                shift
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -q|--quiet)
+                INTERACTIVE_MODE=false
+                shift
+                ;;
+            --skip-checks)
+                SKIP_CHECKS=true
+                shift
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
 }
 
 # Main menu
@@ -169,10 +261,14 @@ run_gpu_setup() {
         print_warning "GPU setup is optimized for Apple Silicon (M1/M2)"
         print_info "You can still use it on Intel Mac, but performance may be limited"
         echo ""
-        read -p "Continue anyway? (y/n): " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            return 1
+        if [[ "$AUTO_CONFIRM" == "true" ]]; then
+            print_info "Auto-confirming continuation..."
+        else
+            read -p "Continue anyway? (y/n): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                return 1
+            fi
         fi
     fi
     
@@ -183,7 +279,7 @@ run_gpu_setup() {
     if ./scripts/run-with-gpu.sh; then
         print_success "GPU setup completed successfully!"
         echo ""
-        print_info "Access your GPU-accelerated AI assistant at: http://localhost:8000"
+        print_info "Access your GPU-accelerated AI assistant at: http://localhost:8501"
     else
         print_error "GPU setup failed"
         return 1
@@ -203,7 +299,7 @@ run_no_gpu_setup() {
     if ./scripts/run-no-gpu.sh; then
         print_success "No-GPU setup completed successfully!"
         echo ""
-        print_info "Access your AI assistant at: http://localhost:8000"
+        print_info "Access your AI assistant at: http://localhost:8501"
     else
         print_error "No-GPU setup failed"
         return 1
@@ -233,6 +329,46 @@ docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
 
 # Main script logic
 main() {
+    # Parse command line arguments
+    parse_arguments "$@"
+    
+    # If a specific command was provided, execute it directly
+    if [[ -n "$COMMAND" ]]; then
+        case $COMMAND in
+            gpu)
+                if [[ "$SKIP_CHECKS" == "true" ]] || (check_macos && check_apple_silicon); then
+                    run_gpu_setup
+                else
+                    print_error "GPU setup is only available on macOS M1/M2"
+                    print_info "Use --skip-checks to override this check"
+                    exit 1
+                fi
+                ;;
+            nogpu)
+                run_no_gpu_setup
+                ;;
+            stop)
+                stop_services
+                ;;
+            status)
+                show_system_info
+                ;;
+            debug)
+                print_info "Running GPU setup diagnostics..."
+                ./scripts/debug-gpu-setup.sh
+                ;;
+            menu)
+                # Fall through to interactive menu
+                ;;
+        esac
+        
+        # Exit after executing command (unless it's menu)
+        if [[ "$COMMAND" != "menu" ]]; then
+            exit 0
+        fi
+    fi
+    
+    # Interactive menu mode
     while true; do
         show_menu
         
@@ -278,7 +414,7 @@ main() {
             echo ""
             print_success "Setup completed! You can now use your AI assistant."
             echo ""
-            print_info "To stop services later, run: ./start.sh and choose option 3"
+            print_info "To stop services later, run: ./start.sh stop"
             echo ""
             break
         fi
@@ -291,5 +427,5 @@ main() {
     done
 }
 
-# Run main function
-main 
+# Run main function with all arguments
+main "$@" 
