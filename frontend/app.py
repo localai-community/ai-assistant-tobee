@@ -199,7 +199,7 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
             response = client.post(
                 f"{BACKEND_URL}/api/v1/chat/",
                 json=payload,
-                timeout=60.0  # Increased timeout for RAG processing
+                timeout=120.0  # Increased timeout for RAG processing (2 minutes)
             )
             
             if response.status_code == 200:
@@ -247,7 +247,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                     "POST",
                     f"{BACKEND_URL}/api/v1/rag/stream",
                     json=payload,
-                    timeout=120.0,  # Increased timeout for RAG processing
+                    timeout=300.0,  # Increased timeout for RAG processing (5 minutes)
                     headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
                 ) as response:
                     if response.status_code == 200:
@@ -332,7 +332,7 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                     "POST",
                     f"{BACKEND_URL}/api/v1/chat/stream",
                     json=payload,
-                    timeout=120.0,  # Increased timeout
+                    timeout=300.0,  # Increased timeout (5 minutes)
                     headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
                 ) as response:
                     if response.status_code == 200:
@@ -408,7 +408,7 @@ def send_to_backend(message: str, conversation_id: Optional[str] = None, use_str
             response = client.post(
                 f"{BACKEND_URL}/api/v1/chat/",
                 json=payload,
-                timeout=30.0
+                timeout=120.0  # Increased timeout (2 minutes)
             )
             
             if response.status_code == 200:

@@ -64,7 +64,7 @@ class ChatService:
     def __init__(self, ollama_url: str = "http://localhost:11434", db: Optional[Session] = None, mcp_config_path: Optional[str] = None):
         self.ollama_url = ollama_url
         self.db = db
-        self.http_client = httpx.AsyncClient(timeout=60.0)
+        self.http_client = httpx.AsyncClient(timeout=300.0)  # Increased timeout for RAG processing (5 minutes)
         
         # Initialize repositories if database is available
         if self.db:

@@ -236,12 +236,17 @@ Answer:"""
             if not results:
                 return "No relevant documents found."
             
-            # Format context from retrieved documents
+            # Format context from retrieved documents (concise version)
             context_parts = []
             for doc, score in results:
+                # Truncate content to keep it manageable
+                content = doc.page_content
+                if len(content) > 300:  # Limit to 300 characters per document
+                    content = content[:297] + "..."
+                
                 context_parts.append(f"Document: {doc.metadata.get('filename', 'Unknown')}")
-                context_parts.append(f"Relevance Score: {score:.3f}")
-                context_parts.append(f"Content: {doc.page_content}")
+                context_parts.append(f"Relevance: {score:.3f}")
+                context_parts.append(f"Content: {content}")
                 context_parts.append("---")
             
             return "\n".join(context_parts)

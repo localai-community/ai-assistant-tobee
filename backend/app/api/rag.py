@@ -62,30 +62,44 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
             request.filter_dict
         )
         
-        # Create chat request with enhanced prompt
-        chat_request = {
-            "message": enhanced_prompt,
-            "model": request.model,
-            "temperature": request.temperature,
-            "stream": True
-        }
-        
-        if request.conversation_id:
-            chat_request["conversation_id"] = request.conversation_id
+        # Get RAG context information
+        rag_context = ""
+        has_context = False
+        try:
+            relevant_docs = rag_retriever.retrieve_relevant_documents(
+                request.message, 
+                request.k, 
+                request.filter_dict
+            )
+            if relevant_docs:
+                has_context = True
+                rag_context = rag_retriever.get_context_for_query(
+                    request.message, 
+                    request.k, 
+                    request.filter_dict
+                )
+        except Exception as e:
+            logger.warning(f"Could not get RAG context: {e}")
         
         # Stream the response using the chat service
         async def generate_stream():
             try:
+                full_response = ""
                 async for chunk in chat_service.generate_streaming_response(
                     message=enhanced_prompt,
                     model=request.model,
                     temperature=request.temperature,
                     conversation_id=request.conversation_id
                 ):
+                    full_response += chunk
                     yield f"data: {json.dumps({'response': chunk})}\n\n"
                 
-                # Send completion signal
-                yield f"data: {json.dumps({'done': True})}\n\n"
+                # Send completion signal with RAG context
+                yield f"data: {json.dumps({
+                    'done': True,
+                    'rag_context': rag_context,
+                    'has_context': has_context
+                })}\n\n"
             except Exception as e:
                 error_chunk = {"error": str(e), "type": "error"}
                 yield f"data: {json.dumps(error_chunk)}\n\n"
