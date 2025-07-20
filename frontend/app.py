@@ -784,7 +784,8 @@ def main():
                 # Use streaming or regular RAG response based on setting
                 if st.session_state.use_streaming:
                     # Use streaming RAG response
-                    response_data = send_streaming_rag_chat(prompt, st.session_state.conversation_id)
+                    with st.spinner("Thinking with RAG..."):
+                        response_data = send_streaming_rag_chat(prompt, st.session_state.conversation_id)
                 else:
                     # Use regular non-streaming RAG response
                     with st.spinner("Thinking with RAG..."):
