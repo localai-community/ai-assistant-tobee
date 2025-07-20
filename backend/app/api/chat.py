@@ -9,6 +9,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 import json
 import logging
+import os
 
 from ..services.chat import ChatService, ChatRequest, ChatResponse, Conversation
 from ..core.database import get_db
@@ -34,7 +35,8 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     """
     try:
         # Create chat service with database
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         
         # Check if Ollama is available
         if not await chat_service.check_ollama_health():
@@ -72,7 +74,8 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
     """
     try:
         # Create chat service with database
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         
         # Check if Ollama is available
         if not await chat_service.check_ollama_health():
@@ -117,7 +120,8 @@ async def get_models(db: Session = Depends(get_db)):
         List[str]: Available model names
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         models = await chat_service.get_available_models()
         return models
     except Exception as e:
@@ -136,7 +140,8 @@ async def chat_health(db: Session = Depends(get_db)):
         dict: Health status information
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         ollama_healthy = await chat_service.check_ollama_health()
         models = await chat_service.get_available_models() if ollama_healthy else []
         conversations = chat_service.list_conversations()
@@ -169,7 +174,8 @@ async def list_conversations(db: Session = Depends(get_db)):
         List[Conversation]: All conversations
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         return chat_service.list_conversations()
     except Exception as e:
         logger.error(f"Failed to list conversations: {e}")
@@ -188,7 +194,8 @@ async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
         Conversation: Conversation details
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         conversation = chat_service.get_conversation(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -212,7 +219,8 @@ async def delete_conversation(conversation_id: str, db: Session = Depends(get_db
         dict: Deletion status
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         deleted = chat_service.delete_conversation(conversation_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -235,7 +243,8 @@ async def clear_conversations(db: Session = Depends(get_db)):
         dict: Clear status with count
     """
     try:
-        chat_service = ChatService(db=db)
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         count = chat_service.clear_conversations()
         return {
             "message": f"Cleared {count} conversations successfully",

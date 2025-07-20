@@ -103,6 +103,9 @@ class ChatService:
     ) -> ChatResponse:
         """Generate a response from Ollama."""
         
+        # Initialize conversation variable
+        conversation = None
+        
         # Get or create conversation
         if self.conversation_repo and conversation_id:
             conversation = self.conversation_repo.get_conversation(conversation_id)
@@ -210,6 +213,9 @@ class ChatService:
         conversation_id: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from Ollama."""
+        
+        # Initialize conversation variable
+        conversation = None
         
         # Get or create conversation
         if self.conversation_repo and conversation_id:
