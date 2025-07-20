@@ -286,8 +286,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Update conversation ID
                                             st.session_state.conversation_id = data["conversation_id"]
                                         
-                                        elif "rag_context" in data and "has_context" in data:
-                                            # Final response with RAG context
+                                        elif "rag_context" in data:
+                                            # Found rag_context - check if it's the final line
                                             message_placeholder.markdown(full_response)
                                             st.success(f"🎯 RAG CONTEXT FOUND: {data.get('rag_context', '')[:100]}...")
                                             st.info(f"Has context: {data.get('has_context', False)}")
@@ -297,18 +297,9 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                                 "response": debug_response,
                                                 "conversation_id": st.session_state.conversation_id,
                                                 "rag_context": data.get("rag_context", ""),
-                                                "has_context": data.get("has_context", False)
+                                                "has_context": data.get("has_context", True)  # Assume True if rag_context is present
                                             }
-                                        elif "rag_context" in data:
-                                            # Found rag_context but missing has_context
-                                            st.warning(f"⚠️ RAG CONTEXT FOUND BUT MISSING has_context: {data}")
-                                            message_placeholder.markdown(full_response)
-                                            return {
-                                                "response": full_response if full_response else "No response generated. Please try again.",
-                                                "conversation_id": st.session_state.conversation_id,
-                                                "rag_context": data.get("rag_context", ""),
-                                                "has_context": data.get("has_context", False)
-                                            }
+
                                             
                                     except json.JSONDecodeError:
                                         st.error(f"❌ JSON decode error for line: {line}")
