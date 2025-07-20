@@ -506,6 +506,34 @@ def display_welcome_message():
         else:
             st.warning("**⚠️ No models available** - Please make sure Ollama is running and models are installed.")
 
+def extract_rag_context_from_content(content: str) -> str:
+    """Extract RAG context from response content by looking for document references."""
+    # Look for patterns like "Document 1:", "Document 2:", etc.
+    import re
+    
+    # Pattern to match document references
+    doc_pattern = r'Document \d+:[^.!?]*[.!?]'
+    matches = re.findall(doc_pattern, content)
+    
+    if matches:
+        return " ".join(matches)
+    
+    # Also look for other common RAG reference patterns
+    rag_patterns = [
+        r'According to [^.!?]*[.!?]',
+        r'Based on [^.!?]*[.!?]',
+        r'From the document[^.!?]*[.!?]',
+        r'In the document[^.!?]*[.!?]',
+        r'The document states[^.!?]*[.!?]'
+    ]
+    
+    for pattern in rag_patterns:
+        matches = re.findall(pattern, content)
+        if matches:
+            return " ".join(matches)
+    
+    return ""
+
 def display_chat_messages():
     """Display chat messages."""
     for message in st.session_state.messages:
@@ -826,8 +854,16 @@ def main():
                     # Add assistant response to chat history
                     message_data = {"role": "assistant", "content": response_data["response"]}
                     
-                    # Add RAG context if available (check for non-empty rag_context and has_context=True)
-                    if response_data.get("rag_context") and response_data.get("has_context") == True:
+                    # Try to extract RAG context from the content itself
+                    extracted_rag_context = extract_rag_context_from_content(response_data["response"])
+                    
+                    if extracted_rag_context:
+                        message_data["rag_context"] = extracted_rag_context
+                        message_data["has_context"] = True
+                        # Add RAG reference to the message content
+                        message_data["content"] += f"\n\n📚 **RAG Reference:** {extracted_rag_context}"
+                    elif response_data.get("rag_context") and response_data.get("has_context") == True:
+                        # Fallback to backend-provided RAG context
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
                         # Add RAG reference to the message content
