@@ -86,7 +86,7 @@ cd ai-assistant
 - **GDPR Compliant**: Your data never leaves your infrastructure
 
 ### 🤖 **AI Capabilities**
-- **Frontend**: Chainlit - Purpose-built for conversational AI
+- **Frontend**: Streamlit - Modern, interactive web interface
 - **Backend**: FastAPI with full MCP (Model Context Protocol) integration
 - **RAG System**: Upload and analyze documents with vector search
 - **Document Support**: PDF, DOCX, TXT, MD, HTML with intelligent chunking
@@ -135,7 +135,7 @@ sleep 10
 ### ✅ **Implemented Features**
 - **Backend API**: FastAPI server with health checks and status endpoints
 - **Chat Service**: Direct Ollama integration with conversation management
-- **Frontend**: Chainlit-based chat interface with real-time messaging
+- **Frontend**: Streamlit-based chat interface with real-time messaging
 - **System Architecture**: Complete MCP and RAG system design
 - **Docker Support**: Multi-platform containerization
 - **GPU Acceleration**: Native M1/M2 Mac support
@@ -166,6 +166,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [Ollama](https://ollama.ai) for local LLM inference
-- [Chainlit](https://chainlit.io) for the chat interface
+- [Streamlit](https://streamlit.io) for the web interface
 - [FastAPI](https://fastapi.tiangolo.com) for the backend API
 - [MCP](https://modelcontextprotocol.io) for tool integration
