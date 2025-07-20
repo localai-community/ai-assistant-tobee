@@ -92,11 +92,12 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
                     conversation_id=request.conversation_id
                 ):
                     full_response += chunk
-                    yield f"data: {json.dumps({'response': chunk})}\n\n"
+                    # Use the same format as regular streaming
+                    yield f"data: {json.dumps({'content': chunk})}\n\n"
                 
                 # Send completion signal with RAG context
                 yield f"data: {json.dumps({
-                    'done': True,
+                    'content': '',
                     'rag_context': rag_context,
                     'has_context': has_context
                 })}\n\n"

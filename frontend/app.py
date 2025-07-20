@@ -264,8 +264,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
                                         
                                         # Handle different response types
-                                        if "response" in data:
-                                            chunk = data["response"]
+                                        if "content" in data:
+                                            chunk = data["content"]
                                             full_response += chunk
                                             message_placeholder.markdown(full_response + "▌")
                                         
@@ -273,8 +273,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Update conversation ID
                                             st.session_state.conversation_id = data["conversation_id"]
                                         
-                                        elif "done" in data and data["done"]:
-                                            # Final response
+                                        elif "rag_context" in data:
+                                            # Final response with RAG context
                                             message_placeholder.markdown(full_response)
                                             return {
                                                 "response": full_response,
