@@ -187,20 +187,11 @@ async def chat_with_rag(
         dict: RAG context and enhanced prompt
     """
     try:
-        # Get relevant documents
+        # Get relevant documents and create intelligent prompt
         relevant_docs = rag_retriever.retrieve_relevant_documents(message, k, filter_dict)
         
-        if not relevant_docs:
-            return {
-                "success": True,
-                "has_context": False,
-                "message": message,
-                "context": "No relevant documents found.",
-                "enhanced_prompt": f"Question: {message}\n\nContext: No relevant documents found."
-            }
-        
-        # Create enhanced prompt
-        enhanced_prompt = rag_retriever.create_rag_prompt(message, k, filter_dict)
+        # Create intelligent prompt that adapts based on available context
+        enhanced_prompt = rag_retriever.create_intelligent_rag_prompt(message, k, filter_dict)
         
         # Format context for display
         context_parts = []
