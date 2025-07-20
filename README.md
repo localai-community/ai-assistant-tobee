@@ -1,6 +1,6 @@
 # Meet Tobee - Your Private AI Assistant
 
-![Tobee](docs/img/logo.svg)
+![Tobee](docs/img/sloth-logo.png)
 
 > 🚧 **UNDER CONSTRUCTION** 🚧
 > 

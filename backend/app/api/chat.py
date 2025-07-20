@@ -6,15 +6,13 @@ API routes for chat functionality with Ollama integration.
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
+from sqlalchemy.orm import Session
 import json
 import logging
+import os
 
-from ..services.chat import (
-    chat_service, 
-    ChatRequest, 
-    ChatResponse, 
-    Conversation
-)
+from ..services.chat import ChatService, ChatRequest, ChatResponse, Conversation
+from ..core.database import get_db
 from ..core.models import ErrorResponse
 
 # Configure logging
@@ -24,17 +22,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Send a message and get a response from the AI model.
     
     Args:
         request: Chat request containing message and parameters
+        db: Database session
         
     Returns:
         ChatResponse: AI response with conversation details
     """
     try:
+        # Create chat service with database
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
         # Check if Ollama is available
         if not await chat_service.check_ollama_health():
             raise HTTPException(
@@ -58,17 +61,22 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Send a message and get a streaming response from the AI model.
     
     Args:
         request: Chat request containing message and parameters
+        db: Database session
         
     Returns:
         StreamingResponse: Stream of AI response chunks
     """
     try:
+        # Create chat service with database
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
         # Check if Ollama is available
         if not await chat_service.check_ollama_health():
             raise HTTPException(
@@ -101,14 +109,19 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/models", response_model=List[str])
-async def get_models():
+async def get_models(db: Session = Depends(get_db)):
     """
     Get list of available Ollama models.
     
+    Args:
+        db: Database session
+        
     Returns:
         List[str]: Available model names
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         models = await chat_service.get_available_models()
         return models
     except Exception as e:
@@ -116,22 +129,28 @@ async def get_models():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
-async def chat_health():
+async def chat_health(db: Session = Depends(get_db)):
     """
     Check chat service health and Ollama availability.
     
+    Args:
+        db: Database session
+        
     Returns:
         dict: Health status information
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         ollama_healthy = await chat_service.check_ollama_health()
         models = await chat_service.get_available_models() if ollama_healthy else []
+        conversations = chat_service.list_conversations()
         
         return {
             "status": "healthy" if ollama_healthy else "unhealthy",
             "ollama_available": ollama_healthy,
             "available_models": models,
-            "conversation_count": len(chat_service.conversations)
+            "conversation_count": len(conversations)
         }
     except Exception as e:
         logger.error(f"Health check error: {e}")
@@ -139,36 +158,44 @@ async def chat_health():
             "status": "error",
             "ollama_available": False,
             "available_models": [],
-            "conversation_count": len(chat_service.conversations),
+            "conversation_count": 0,
             "error": str(e)
         }
 
 @router.get("/conversations", response_model=List[Conversation])
-async def list_conversations():
+async def list_conversations(db: Session = Depends(get_db)):
     """
     List all conversations.
     
+    Args:
+        db: Database session
+        
     Returns:
         List[Conversation]: All conversations
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         return chat_service.list_conversations()
     except Exception as e:
         logger.error(f"Failed to list conversations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/conversations/{conversation_id}", response_model=Conversation)
-async def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
     """
     Get a specific conversation by ID.
     
     Args:
         conversation_id: Unique conversation identifier
+        db: Database session
         
     Returns:
         Conversation: Conversation details
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         conversation = chat_service.get_conversation(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -180,17 +207,20 @@ async def get_conversation(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str):
+async def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
     """
     Delete a specific conversation.
     
     Args:
         conversation_id: Unique conversation identifier
+        db: Database session
         
     Returns:
         dict: Deletion status
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         deleted = chat_service.delete_conversation(conversation_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -202,14 +232,19 @@ async def delete_conversation(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/conversations")
-async def clear_conversations():
+async def clear_conversations(db: Session = Depends(get_db)):
     """
     Clear all conversations.
     
+    Args:
+        db: Database session
+        
     Returns:
         dict: Clear status with count
     """
     try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
         count = chat_service.clear_conversations()
         return {
             "message": f"Cleared {count} conversations successfully",

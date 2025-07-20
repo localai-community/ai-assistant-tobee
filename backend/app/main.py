@@ -1,10 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
 from app.core.config import settings
 from app.core.models import HealthResponse, RootResponse, ApiStatusResponse
+from app.core.database import get_db, init_db
 from app.api.chat import router as chat_router
 
 # Create FastAPI app
@@ -26,6 +27,16 @@ app.add_middleware(
 # Mount static files for uploads
 if os.path.exists("storage/uploads"):
     app.mount("/uploads", StaticFiles(directory="storage/uploads"), name="uploads")
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup."""
+    try:
+        init_db()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize database: {e}")
 
 # Include API routers
 app.include_router(chat_router)

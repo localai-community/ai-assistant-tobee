@@ -42,8 +42,8 @@ docs/
 ├── img/
 │   ├── architecture-diagram.mmd     # Mermaid diagram source
 │   ├── architecture-diagram.svg     # Vector diagram
-│   ├── logo.svg                     # Project logo
-│   └── logo.jpg                     # Logo (JPEG version)
+│   ├── sloth-logo.png               # Project logo (sloth)
+│   └── bee-logo.svg                 # Previous logo (bee)
 
 ```
 
@@ -58,6 +58,8 @@ mmdc -i docs/img/architecture-diagram.mmd -o docs/img/architecture-diagram.svg
 # Generate high-res PNG
 mmdc -i docs/img/architecture-diagram.mmd -o docs/img/architecture-diagram.svg
 ```
+
+**Note**: The project logo is now a sloth (`sloth-logo.png`), replacing the previous bee logo.
 
 ## 📖 Documentation Philosophy
 
