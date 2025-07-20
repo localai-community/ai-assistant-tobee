@@ -236,18 +236,15 @@ Answer:"""
             if not results:
                 return "No relevant documents found."
             
-            # Format context from retrieved documents (concise version)
+            # Format context from retrieved documents (very concise version)
             context_parts = []
-            for doc, score in results:
-                # Truncate content to keep it manageable
+            for i, (doc, score) in enumerate(results[:2]):  # Limit to top 2 documents
+                # Truncate content to keep it very manageable
                 content = doc.page_content
-                if len(content) > 300:  # Limit to 300 characters per document
-                    content = content[:297] + "..."
+                if len(content) > 150:  # Limit to 150 characters per document
+                    content = content[:147] + "..."
                 
-                context_parts.append(f"Document: {doc.metadata.get('filename', 'Unknown')}")
-                context_parts.append(f"Relevance: {score:.3f}")
-                context_parts.append(f"Content: {content}")
-                context_parts.append("---")
+                context_parts.append(f"Doc {i+1}: {content}")
             
             return "\n".join(context_parts)
             
@@ -320,19 +317,9 @@ Answer:"""
             # Relevant documents found - create context-enhanced prompt
             context = self.get_context_for_query(query, k, filter_dict)
             
-            return f"""You are a helpful AI assistant. Use the following context from retrieved documents to enhance your answer, but also draw from your general knowledge to provide a comprehensive response.
-
-Context from documents:
-{context}
+            return f"""Use this context to help answer: {context}
 
 Question: {query}
-
-Instructions:
-- Use the provided context when it's relevant and helpful
-- Supplement with your general knowledge to provide a complete answer
-- If the context doesn't fully answer the question, use your knowledge to fill in gaps
-- Always provide accurate, helpful information
-- If you're unsure about something, acknowledge the uncertainty
 
 Answer:"""
             
