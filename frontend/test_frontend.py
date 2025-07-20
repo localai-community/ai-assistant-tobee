@@ -43,6 +43,7 @@ def test_dependencies() -> Dict[str, List[Tuple[str, bool, str]]]:
     print("🤖 Testing Streamlit Framework...")
     streamlit_deps = [
         ("streamlit", "streamlit"),
+        ("watchdog", "watchdog"),
     ]
     
     streamlit_results = []

@@ -130,7 +130,7 @@ frontend/
 
 ```bash
 # Test frontend dependencies
-python -c "import streamlit, httpx; print('✅ Dependencies OK')"
+python -c "import streamlit, httpx, watchdog; print('✅ Dependencies OK')"
 
 # Test backend connectivity
 curl http://localhost:8000/health
