@@ -11,6 +11,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 import logging
 
+from sqlalchemy.orm import Session
+from .repository import ConversationRepository, MessageRepository
+from ..models.schemas import ConversationCreate, MessageCreate
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,10 +53,18 @@ class Conversation(BaseModel):
 class ChatService:
     """Service for handling chat interactions with Ollama."""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434"):
+    def __init__(self, ollama_url: str = "http://localhost:11434", db: Optional[Session] = None):
         self.ollama_url = ollama_url
-        self.conversations: Dict[str, Conversation] = {}
+        self.db = db
         self.http_client = httpx.AsyncClient(timeout=60.0)
+        
+        # Initialize repositories if database is available
+        if self.db:
+            self.conversation_repo = ConversationRepository(self.db)
+            self.message_repo = MessageRepository(self.db)
+        else:
+            self.conversation_repo = None
+            self.message_repo = None
         
     async def __aenter__(self):
         return self
@@ -92,25 +104,48 @@ class ChatService:
         """Generate a response from Ollama."""
         
         # Get or create conversation
-        if conversation_id and conversation_id in self.conversations:
-            conversation = self.conversations[conversation_id]
-        else:
+        if self.conversation_repo and conversation_id:
+            conversation = self.conversation_repo.get_conversation(conversation_id)
+        
+        if not conversation and self.conversation_repo:
+            # Create new conversation in database
+            conversation_data = ConversationCreate(
+                title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                model=model
+            )
+            conversation = self.conversation_repo.create_conversation(conversation_data)
+            conversation_id = conversation.id
+        elif not conversation:
+            # Fallback to in-memory if no database
             conversation_id = f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             conversation = Conversation(id=conversation_id, model=model)
-            self.conversations[conversation_id] = conversation
         
-        # Add user message to conversation
-        user_message = ChatMessage(role="user", content=message)
-        conversation.messages.append(user_message)
-        conversation.updated_at = datetime.now()
+        # Add user message to database
+        if self.message_repo:
+            user_message_data = MessageCreate(
+                conversation_id=conversation_id,
+                role="user",
+                content=message
+            )
+            self.message_repo.create_message(user_message_data)
         
-        # Prepare messages for Ollama
+        # Get conversation messages for Ollama
         messages = []
-        for msg in conversation.messages:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
+        if self.message_repo:
+            db_messages = self.message_repo.get_messages(conversation_id)
+            for msg in db_messages:
+                messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+        else:
+            # Fallback to in-memory messages
+            if hasattr(conversation, 'messages'):
+                for msg in conversation.messages:
+                    messages.append({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
         
         # Prepare request payload
         payload = {
@@ -136,10 +171,20 @@ class ChatService:
                 data = response.json()
                 ai_response = data.get("message", {}).get("content", "")
                 
-                # Add AI response to conversation
-                ai_message = ChatMessage(role="assistant", content=ai_response)
-                conversation.messages.append(ai_message)
-                conversation.updated_at = datetime.now()
+                # Add AI response to database
+                if self.message_repo:
+                    ai_message_data = MessageCreate(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=ai_response,
+                        tokens_used=data.get("eval_count"),
+                        model_used=model
+                    )
+                    self.message_repo.create_message(ai_message_data)
+                
+                # Update conversation timestamp
+                if self.conversation_repo:
+                    self.conversation_repo.update_conversation(conversation_id)
                 
                 return ChatResponse(
                     response=ai_response,
@@ -167,25 +212,48 @@ class ChatService:
         """Generate a streaming response from Ollama."""
         
         # Get or create conversation
-        if conversation_id and conversation_id in self.conversations:
-            conversation = self.conversations[conversation_id]
-        else:
+        if self.conversation_repo and conversation_id:
+            conversation = self.conversation_repo.get_conversation(conversation_id)
+        
+        if not conversation and self.conversation_repo:
+            # Create new conversation in database
+            conversation_data = ConversationCreate(
+                title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                model=model
+            )
+            conversation = self.conversation_repo.create_conversation(conversation_data)
+            conversation_id = conversation.id
+        elif not conversation:
+            # Fallback to in-memory if no database
             conversation_id = f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             conversation = Conversation(id=conversation_id, model=model)
-            self.conversations[conversation_id] = conversation
         
-        # Add user message to conversation
-        user_message = ChatMessage(role="user", content=message)
-        conversation.messages.append(user_message)
-        conversation.updated_at = datetime.now()
+        # Add user message to database
+        if self.message_repo:
+            user_message_data = MessageCreate(
+                conversation_id=conversation_id,
+                role="user",
+                content=message
+            )
+            self.message_repo.create_message(user_message_data)
         
-        # Prepare messages for Ollama
+        # Get conversation messages for Ollama
         messages = []
-        for msg in conversation.messages:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
+        if self.message_repo:
+            db_messages = self.message_repo.get_messages(conversation_id)
+            for msg in db_messages:
+                messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+        else:
+            # Fallback to in-memory messages
+            if hasattr(conversation, 'messages'):
+                for msg in conversation.messages:
+                    messages.append({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
         
         # Prepare request payload
         payload = {
@@ -226,11 +294,19 @@ class ChatService:
                         except json.JSONDecodeError:
                             continue
                 
-                # Add complete AI response to conversation
-                if full_response:
-                    ai_message = ChatMessage(role="assistant", content=full_response)
-                    conversation.messages.append(ai_message)
-                    conversation.updated_at = datetime.now()
+                # Add complete AI response to database
+                if full_response and self.message_repo:
+                    ai_message_data = MessageCreate(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=full_response,
+                        model_used=model
+                    )
+                    self.message_repo.create_message(ai_message_data)
+                
+                # Update conversation timestamp
+                if self.conversation_repo:
+                    self.conversation_repo.update_conversation(conversation_id)
                 
         except Exception as e:
             logger.error(f"Failed to generate streaming response: {e}")
@@ -238,24 +314,27 @@ class ChatService:
     
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """Get a conversation by ID."""
-        return self.conversations.get(conversation_id)
+        if self.conversation_repo:
+            return self.conversation_repo.get_conversation(conversation_id)
+        return None
     
     def list_conversations(self) -> List[Conversation]:
         """List all conversations."""
-        return list(self.conversations.values())
+        if self.conversation_repo:
+            return self.conversation_repo.get_conversations()
+        return []
     
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation."""
-        if conversation_id in self.conversations:
-            del self.conversations[conversation_id]
-            return True
+        if self.conversation_repo:
+            return self.conversation_repo.delete_conversation(conversation_id)
         return False
     
     def clear_conversations(self) -> int:
         """Clear all conversations and return count of deleted conversations."""
-        count = len(self.conversations)
-        self.conversations.clear()
-        return count
+        if self.conversation_repo:
+            return self.conversation_repo.clear_conversations()
+        return 0
 
 # Global chat service instance
 # Create global chat service instance
