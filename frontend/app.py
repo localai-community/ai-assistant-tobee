@@ -277,6 +277,9 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                         elif "rag_context" in data:
                                             # Found rag_context - this is the final line
                                             message_placeholder.markdown(full_response)
+                                            # Debug: Log what we found
+                                            print(f"🔍 RAG CONTEXT FOUND: {data.get('rag_context', '')}")
+                                            print(f"🔍 HAS CONTEXT: {data.get('has_context', False)}")
                                             return {
                                                 "response": full_response,
                                                 "conversation_id": st.session_state.conversation_id,
