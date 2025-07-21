@@ -8,6 +8,7 @@ from app.core.models import HealthResponse, RootResponse, ApiStatusResponse
 from app.core.database import get_db, init_db
 from app.api.chat import router as chat_router
 from app.api.rag import router as rag_router
+from app.api.advanced_rag import router as advanced_rag_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,6 +54,7 @@ async def shutdown_event():
 # Include API routers
 app.include_router(chat_router)
 app.include_router(rag_router)
+app.include_router(advanced_rag_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():
@@ -80,6 +82,7 @@ async def api_status():
         features={
             "chat": "enabled",
             "rag": "enabled",
+            "advanced_rag": "enabled",
             "mcp": "enabled"
         }
     )
