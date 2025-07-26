@@ -233,10 +233,24 @@ def semantic_role_retrieval(self, query: str, k: int):
 
 ## Strategy Combination Techniques
 
+When using multiple retrieval strategies, the key challenge is effectively combining their results to produce the best possible final ranking. Here are four proven techniques for strategy combination:
+
 ### 1. Weighted Combination
 
-**Approach**: Assign different weights to each strategy based on query type.
+**What it is**: Assigns different importance weights to each strategy based on query characteristics and strategy strengths.
 
+**How it works**: 
+- Analyzes the query type (conceptual, technical, factual, procedural)
+- Applies predefined weights based on which strategies work best for each query type
+- Combines scores using weighted averaging
+- Ranks documents by their combined weighted scores
+
+**Mathematical Formula**:
+```
+Combined_Score(doc) = Σ(Strategy_Weight[i] × Strategy_Score[i](doc))
+```
+
+**Implementation**:
 ```python
 def weighted_combination(self, results_dict: Dict[str, List], query: str):
     # Determine query type
@@ -263,13 +277,51 @@ def weighted_combination(self, results_dict: Dict[str, List], query: str):
     return sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)
 ```
 
+**Pros**:
+- Intuitive and interpretable
+- Allows fine-grained control over strategy importance
+- Can be tuned based on domain knowledge
+- Handles different query types effectively
+
+**Cons**:
+- Requires manual weight tuning
+- Assumes fixed strategy effectiveness
+- May not adapt to individual query characteristics
+- Weight optimization can be time-consuming
+
+**Best for**:
+- Domains with well-understood query patterns
+- Systems where interpretability is important
+- Cases where you have domain expertise to set weights
+
+**Example**:
+```python
+# Query: "What is machine learning?"
+# Query type: conceptual
+# Weights: dense(0.6), sparse(0.2), entity(0.2)
+# Result: Semantic understanding prioritized over exact keyword matching
+```
+
 ### 2. Reciprocal Rank Fusion (RRF)
 
-**Approach**: Combines rankings from multiple strategies using reciprocal rank fusion.
+**What it is**: A rank-based fusion method that combines multiple ranked lists without requiring score normalization.
 
+**How it works**:
+- Converts each strategy's results to rank positions
+- Applies reciprocal rank scoring (1/rank)
+- Sums reciprocal ranks across all strategies
+- Ranks documents by their total RRF scores
+
+**Mathematical Formula**:
+```
+RRF_Score(doc) = Σ(1 / (c + rank_i(doc)))
+```
+Where `c` is a constant (typically 60) and `rank_i(doc)` is the rank of the document in strategy i.
+
+**Implementation**:
 ```python
 def reciprocal_rank_fusion(self, results_dict: Dict[str, List], k: int = 60):
-    # RRF parameter
+    # RRF parameter - controls the influence of lower-ranked documents
     c = 60
     
     # Collect all documents with their ranks
@@ -279,6 +331,7 @@ def reciprocal_rank_fusion(self, results_dict: Dict[str, List], k: int = 60):
         for rank, (doc, score) in enumerate(results, 1):
             if doc.id not in doc_ranks:
                 doc_ranks[doc.id] = 0
+            # Apply reciprocal rank formula
             doc_ranks[doc.id] += 1 / (c + rank)
     
     # Sort by RRF score
@@ -286,47 +339,208 @@ def reciprocal_rank_fusion(self, results_dict: Dict[str, List], k: int = 60):
     return sorted_docs[:k]
 ```
 
+**Pros**:
+- No score normalization required
+- Robust to different scoring scales
+- Simple and computationally efficient
+- Proven effectiveness in information retrieval
+- Handles missing documents gracefully
+
+**Cons**:
+- Ignores absolute score differences
+- May not capture strategy confidence levels
+- Requires tuning of the constant parameter
+- Less interpretable than weighted combination
+
+**Best for**:
+- Systems with diverse scoring mechanisms
+- Cases where score normalization is difficult
+- Situations requiring robust, proven methods
+- Real-time applications where simplicity is valued
+
+**Example**:
+```python
+# Strategy A: doc1(rank1), doc2(rank3), doc3(rank5)
+# Strategy B: doc2(rank1), doc1(rank2), doc4(rank3)
+# RRF scores: doc1(1/61 + 1/62), doc2(1/63 + 1/61), doc3(1/65), doc4(1/63)
+# Final ranking: doc2, doc1, doc4, doc3
+```
+
 ### 3. Cascade Retrieval
 
-**Approach**: Use one strategy to filter, then refine with another.
+**What it is**: A two-stage approach where one strategy creates a candidate set, and another strategy refines the results.
 
+**How it works**:
+- **Stage 1**: Use a broad strategy (usually dense retrieval) to get a large candidate set
+- **Stage 2**: Apply a precise strategy (usually sparse retrieval) to the candidates
+- Combines the recall of the first stage with the precision of the second stage
+
+**Implementation**:
 ```python
 def cascade_retrieval(self, query: str, k: int):
     # First pass: broad retrieval with dense vectors
+    # Get more candidates than needed to ensure good coverage
     broad_results = self.dense_retrieval(query, k * 3)
     
-    # Second pass: refine with sparse retrieval
+    # Second pass: refine with sparse retrieval on the candidate subset
     candidate_docs = [doc for doc, _ in broad_results]
     refined_results = self.sparse_retrieval_on_subset(query, candidate_docs, k)
     
     return refined_results
 ```
 
+**Advanced Cascade with Multiple Stages**:
+```python
+def multi_stage_cascade(self, query: str, k: int):
+    # Stage 1: Dense retrieval for semantic coverage
+    stage1_results = self.dense_retrieval(query, k * 5)
+    candidates = [doc for doc, _ in stage1_results]
+    
+    # Stage 2: Entity retrieval for precision
+    stage2_results = self.entity_retrieval_on_subset(query, candidates, k * 3)
+    candidates = [doc for doc, _ in stage2_results]
+    
+    # Stage 3: Sparse retrieval for final ranking
+    final_results = self.sparse_retrieval_on_subset(query, candidates, k)
+    
+    return final_results
+```
+
+**Pros**:
+- Combines recall and precision effectively
+- Computationally efficient (narrower search space in later stages)
+- Can use different strategies for different stages
+- Good for queries requiring both semantic and lexical matching
+
+**Cons**:
+- Risk of losing relevant documents in early stages
+- Requires careful tuning of candidate set sizes
+- May not work well if early stages are poor
+- Less parallelizable than other methods
+
+**Best for**:
+- Large document collections
+- Queries requiring both semantic and keyword matching
+- Systems with computational constraints
+- Cases where you have complementary strategies
+
+**Example**:
+```python
+# Query: "Python list append method"
+# Stage 1 (Dense): Finds 15 documents about Python data structures
+# Stage 2 (Sparse): Refines to 5 documents specifically about list.append()
+# Result: High precision while maintaining good recall
+```
+
 ### 4. Ensemble Voting
 
-**Approach**: Use voting mechanisms to combine results.
+**What it is**: Uses democratic voting mechanisms where each strategy "votes" for documents, and documents are ranked by vote count and average scores.
 
+**How it works**:
+- Each strategy contributes votes for its top-ranked documents
+- Documents receive votes based on how many strategies rank them highly
+- Final ranking considers both vote count and average scores
+- Can use different voting schemes (simple majority, weighted voting, etc.)
+
+**Implementation**:
 ```python
 def ensemble_voting(self, results_dict: Dict[str, List], k: int):
     # Count votes for each document
     doc_votes = {}
     
     for strategy, results in results_dict.items():
-        for doc, score in results[:k//2]:  # Top half from each strategy
+        # Each strategy votes for its top half of results
+        for doc, score in results[:k//2]:
             if doc.id not in doc_votes:
-                doc_votes[doc.id] = {'votes': 0, 'total_score': 0}
+                doc_votes[doc.id] = {'votes': 0, 'total_score': 0, 'scores': []}
             doc_votes[doc.id]['votes'] += 1
             doc_votes[doc.id]['total_score'] += score
+            doc_votes[doc.id]['scores'].append(score)
     
-    # Sort by vote count, then by average score
+    # Calculate average scores
+    for doc_id, vote_data in doc_votes.items():
+        vote_data['avg_score'] = vote_data['total_score'] / vote_data['votes']
+    
+    # Sort by vote count first, then by average score
     sorted_docs = sorted(
         doc_votes.items(),
-        key=lambda x: (x[1]['votes'], x[1]['total_score']),
+        key=lambda x: (x[1]['votes'], x[1]['avg_score']),
         reverse=True
     )
     
     return sorted_docs[:k]
 ```
+
+**Advanced Voting with Confidence**:
+```python
+def confidence_weighted_voting(self, results_dict: Dict[str, List], k: int):
+    doc_votes = {}
+    
+    for strategy, results in results_dict.items():
+        # Calculate strategy confidence based on score distribution
+        scores = [score for _, score in results[:k//2]]
+        confidence = np.std(scores) / np.mean(scores) if scores else 1.0
+        
+        for doc, score in results[:k//2]:
+            if doc.id not in doc_votes:
+                doc_votes[doc.id] = {'weighted_votes': 0, 'total_score': 0}
+            
+            # Weight votes by strategy confidence
+            doc_votes[doc.id]['weighted_votes'] += confidence
+            doc_votes[doc.id]['total_score'] += score * confidence
+    
+    # Sort by weighted votes
+    sorted_docs = sorted(
+        doc_votes.items(),
+        key=lambda x: x[1]['weighted_votes'],
+        reverse=True
+    )
+    
+    return sorted_docs[:k]
+```
+
+**Pros**:
+- Robust to individual strategy failures
+- Intuitive and easy to understand
+- Can handle different confidence levels
+- Good for diverse strategy sets
+- Naturally handles missing documents
+
+**Cons**:
+- May not capture fine-grained score differences
+- Requires careful tuning of voting thresholds
+- Can be sensitive to strategy agreement
+- May not work well with very similar strategies
+
+**Best for**:
+- Systems with diverse, complementary strategies
+- Cases where robustness is more important than precision
+- Situations requiring interpretable results
+- Applications where strategy agreement indicates relevance
+
+**Example**:
+```python
+# Strategy A votes: [doc1, doc2, doc3]
+# Strategy B votes: [doc2, doc1, doc4]
+# Strategy C votes: [doc1, doc3, doc5]
+# Vote counts: doc1(3), doc2(2), doc3(2), doc4(1), doc5(1)
+# Final ranking: doc1, doc2, doc3, doc4, doc5
+```
+
+## Choosing the Right Combination Technique
+
+| Technique | Best When | Complexity | Robustness | Interpretability |
+|-----------|-----------|------------|------------|------------------|
+| **Weighted** | You have domain expertise | Medium | Medium | High |
+| **RRF** | You want proven, simple method | Low | High | Medium |
+| **Cascade** | You have complementary strategies | Medium | Medium | High |
+| **Ensemble** | You have diverse strategies | Medium | High | High |
+
+**Decision Framework**:
+1. **Start with RRF** if you want a proven, simple approach
+2. **Use Weighted Combination** if you have domain knowledge and want control
+3. **Try Cascade** if you have complementary strategies and computational constraints
+4. **Choose Ensemble Voting** if you have diverse strategies and want robustness
 
 ## Query Type Classification
 
