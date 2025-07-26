@@ -28,11 +28,15 @@ class AdvancedRAGRetriever:
         self, 
         vector_store: Optional[VectorStore] = None,
         chunk_size: int = 1000,
-        chunk_overlap: int = 200
+        chunk_overlap: int = 200,
+        max_history_messages: int = 20,  # Performance optimization
+        max_entities: int = 30  # Performance optimization
     ):
         self.vector_store = vector_store or VectorStore()
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.max_history_messages = max_history_messages
+        self.max_entities = max_entities
         
         # Initialize TF-IDF for sparse retrieval
         self.tfidf_vectorizer = TfidfVectorizer(
@@ -101,8 +105,14 @@ class AdvancedRAGRetriever:
             
             # Strategy 4: Conversational context retrieval
             context_results = []
-            if conversation_history:
-                context_results = self._contextual_retrieval(query, conversation_history, k * 2)
+            if conversation_history and len(conversation_history) > 0:
+                # Check if this is a context-dependent query
+                is_context_dependent = self._is_context_dependent_query(query, conversation_history)
+                if is_context_dependent:
+                    context_results = self._contextual_retrieval(query, conversation_history, k * 2)
+                    logger.info(f"Using contextual retrieval for query: '{query}'")
+                else:
+                    logger.info(f"Skipping contextual retrieval for general knowledge query: '{query}'")
             
             # Strategy 5: Entity-based retrieval
             entity_results = self._entity_based_retrieval(query, k * 2)
@@ -214,16 +224,26 @@ class AdvancedRAGRetriever:
         conversation_history: List[Dict], 
         k: int
     ) -> List[Tuple[LangChainDocument, float, str]]:
-        """Retrieval based on conversation context"""
+        """Retrieval based on conversation context with smart context detection"""
         try:
+            # Check if this is a context-dependent question
+            is_context_dependent = self._is_context_dependent_query(query, conversation_history)
+            
+            if not is_context_dependent:
+                logger.info(f"Query '{query}' appears to be general knowledge, skipping contextual retrieval")
+                return []
+            
             # Extract key entities and concepts from conversation history
             context_entities = self._extract_context_entities(conversation_history)
+            
+            # Debug logging
+            logger.info(f"Context entities extracted: {context_entities}")
             
             if not context_entities:
                 return []
             
-            # Create context-aware query
-            context_query = f"{query} {' '.join(context_entities)}"
+            # Create context-aware query with better formatting
+            context_query = f"{query} context: {' '.join(context_entities)}"
             
             # Retrieve with context
             results = self._dense_retrieval(context_query, k)
@@ -249,37 +269,295 @@ class AdvancedRAGRetriever:
             return []
     
     def _extract_context_entities(self, conversation_history: List[Dict]) -> List[str]:
-        """Extract key entities from conversation history"""
+        """Extract key entities from conversation history with performance optimization"""
         try:
-            entities = set()
+            # Performance optimization: Limit processing for very long conversations
+            if len(conversation_history) > self.max_history_messages:
+                conversation_history = conversation_history[-self.max_history_messages:]
+                logger.info(f"Performance optimization: Processing only last {self.max_history_messages} messages for entity extraction")
             
-            for message in conversation_history[-5:]:  # Last 5 messages
+            entities = set()
+            recent_entities = set()  # Entities from recent messages (higher priority)
+            
+            # Process messages with recency bias
+            total_messages = len(conversation_history)
+            for i, message in enumerate(conversation_history):
                 content = message.get('content', '')
+                is_recent = i >= total_messages - 5  # Last 5 messages are "recent"
+                
+                # Skip very short messages to improve performance
+                if len(content) < 10:
+                    continue
+                
                 if self.nlp:
                     doc = self.nlp(content)
                     # Extract named entities and noun phrases
                     for ent in doc.ents:
-                        entities.add(ent.text)
+                        if is_recent:
+                            recent_entities.add(ent.text)
+                        else:
+                            entities.add(ent.text)
                     for chunk in doc.noun_chunks:
-                        entities.add(chunk.text)
+                        if is_recent:
+                            recent_entities.add(chunk.text)
+                        else:
+                            entities.add(chunk.text)
                 else:
                     # Simple keyword extraction
                     words = content.lower().split()
                     # Add words that appear multiple times (likely important)
                     word_counts = defaultdict(int)
                     for word in words:
-                        if len(word) > 3:  # Skip short words
+                        if len(word) > 3 and word not in ['this', 'that', 'with', 'from', 'they', 'have', 'been', 'will', 'would', 'could', 'should']:  # Skip short words and common words
                             word_counts[word] += 1
                     
                     for word, count in word_counts.items():
                         if count > 1:
-                            entities.add(word)
+                            if is_recent:
+                                recent_entities.add(word)
+                            else:
+                                entities.add(word)
+                    
+                    # Also add important technical terms
+                    technical_terms = ['attention', 'transformer', 'neural', 'network', 'model', 'architecture', 'mechanism', 'layer', 'embedding', 'token', 'sequence', 'context', 'query', 'key', 'value']
+                    for term in technical_terms:
+                        if term in content.lower():
+                            if is_recent:
+                                recent_entities.add(term)
+                            else:
+                                entities.add(term)
             
-            return list(entities)[:10]  # Limit to 10 entities
+            # Combine entities with recent ones having priority
+            all_entities = list(recent_entities) + list(entities - recent_entities)
+            
+            # Performance optimization: Limit total entities
+            return all_entities[:self.max_entities]
             
         except Exception as e:
             logger.error(f"Error extracting context entities: {str(e)}")
             return []
+    
+    def _is_context_dependent_query(self, query: str, conversation_history: List[Dict]) -> bool:
+        """Determine if a query is context-dependent using LLM reasoning."""
+        try:
+            # If no conversation history, definitely not context-dependent
+            if not conversation_history or len(conversation_history) < 2:
+                return False
+            
+            # Create a summary of the conversation context
+            context_summary = self._create_conversation_summary(conversation_history)
+            
+            # Use LLM to determine if the query needs context
+            context_detection_prompt = f"""You are an AI assistant that determines whether a user's question requires conversation context to answer properly.
+
+CONVERSATION CONTEXT:
+{context_summary}
+
+CURRENT QUESTION: "{query}"
+
+TASK: Determine if this question is context-dependent or general knowledge.
+
+A question is CONTEXT-DEPENDENT if:
+- It uses pronouns like "it", "this", "that", "they", "them"
+- It refers to something mentioned in the conversation
+- It's a follow-up question that builds on previous answers
+- It asks for clarification or elaboration about previous topics
+- It compares or contrasts with previously discussed concepts
+
+A question is GENERAL KNOWLEDGE if:
+- It asks for basic facts, definitions, or information
+- It's a standalone question that doesn't reference the conversation
+- It's about geography, history, science, or other general topics
+- It doesn't use pronouns or references to previous discussion
+
+RESPONSE FORMAT: Answer with exactly "CONTEXT" or "GENERAL" followed by a brief explanation.
+
+Example:
+Question: "What is the capital of France?"
+Answer: "GENERAL - This is a basic geography question that doesn't reference the conversation."
+
+Question: "How does it work?"
+Answer: "CONTEXT - Uses pronoun 'it' and likely refers to something discussed previously."
+
+Your analysis:"""
+
+            # Try LLM-based detection first, fallback to heuristic
+            try:
+                return self._llm_context_detection(query, context_summary)
+            except Exception as e:
+                logger.warning(f"LLM context detection failed, using heuristic: {e}")
+                return self._llm_context_detection_heuristic(query, conversation_history)
+            
+        except Exception as e:
+            logger.error(f"Error in LLM context detection: {str(e)}")
+            return False  # Default to general knowledge on error
+    
+    def _create_conversation_summary(self, conversation_history: List[Dict]) -> str:
+        """Create a summary of the conversation for context analysis."""
+        try:
+            # Take last 5 messages for summary
+            recent_messages = conversation_history[-5:]
+            
+            summary_parts = []
+            for i, msg in enumerate(recent_messages):
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')[:200]  # Limit length
+                summary_parts.append(f"{role.upper()}: {content}")
+            
+            return "\n".join(summary_parts)
+            
+        except Exception as e:
+            logger.error(f"Error creating conversation summary: {str(e)}")
+            return "Error creating summary"
+    
+    def _llm_context_detection(self, query: str, context_summary: str) -> bool:
+        """Use LLM to determine if a query is context-dependent."""
+        try:
+            # Import here to avoid circular imports
+            import os
+            import httpx
+            
+            # Get Ollama URL from environment
+            ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+            
+            # Create the prompt for context detection
+            prompt = f"""You are an AI assistant that determines whether a user's question requires conversation context to answer properly.
+
+CONVERSATION CONTEXT:
+{context_summary}
+
+CURRENT QUESTION: "{query}"
+
+TASK: Determine if this question is context-dependent or general knowledge.
+
+A question is CONTEXT-DEPENDENT if:
+- It uses pronouns like "it", "this", "that", "they", "them"
+- It refers to something mentioned in the conversation
+- It's a follow-up question that builds on previous answers
+- It asks for clarification or elaboration about previous topics
+- It compares or contrasts with previously discussed concepts
+
+A question is GENERAL KNOWLEDGE if:
+- It asks for basic facts, definitions, or information
+- It's a standalone question that doesn't reference the conversation
+- It's about geography, history, science, or other general topics
+- It doesn't use pronouns or references to previous discussion
+
+IMPORTANT: Start your response with either "CONTEXT" or "GENERAL" followed by your explanation.
+
+Examples:
+Question: "What is the capital of France?"
+Answer: "GENERAL - This is a basic geography question that doesn't reference the conversation."
+
+Question: "How does it work?"
+Answer: "CONTEXT - Uses pronoun 'it' and likely refers to something discussed previously."
+
+Your analysis:"""
+
+            # Call Ollama for context detection
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(
+                    f"{ollama_url}/api/generate",
+                    json={
+                        "model": "llama3:latest",
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.1,  # Low temperature for consistent classification
+                            "top_p": 0.9
+                        }
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    llm_response = result.get("response", "").strip()
+                    
+                    # Parse the response - be more flexible with format
+                    llm_response_lower = llm_response.lower()
+                    
+                    # Look for context indicators in the response
+                    context_indicators = ["context", "context-dependent", "context dependent"]
+                    general_indicators = ["general", "general knowledge", "standalone"]
+                    
+                    # Check if response contains context indicators
+                    if any(indicator in llm_response_lower for indicator in context_indicators):
+                        logger.info(f"LLM determined '{query}' is context-dependent: {llm_response[:100]}...")
+                        return True
+                    elif any(indicator in llm_response_lower for indicator in general_indicators):
+                        logger.info(f"LLM determined '{query}' is general knowledge: {llm_response[:100]}...")
+                        return False
+                    else:
+                        logger.warning(f"Unclear LLM response format: {llm_response[:100]}...")
+                        # Fallback to heuristic
+                        raise Exception("Unclear response format")
+                else:
+                    logger.error(f"Ollama API error: {response.status_code}")
+                    raise Exception(f"API error: {response.status_code}")
+                    
+        except Exception as e:
+            logger.error(f"Error in LLM context detection: {str(e)}")
+            raise  # Re-raise to trigger fallback to heuristic
+    
+    def _llm_context_detection_heuristic(self, query: str, conversation_history: List[Dict]) -> bool:
+        """Heuristic-based context detection (fallback when LLM is not available)."""
+        try:
+            query_lower = query.lower().strip()
+            
+            # Quick checks for obvious context-dependent patterns
+            context_indicators = [
+                # Pronouns
+                r"\b(it|this|that|these|those)\b",
+                r"\b(he|she|they|them)\b",
+                r"\b(his|her|their)\b",
+                
+                # Follow-up patterns
+                r"what about",
+                r"how about", 
+                r"what else",
+                r"can you explain",
+                r"tell me more",
+                r"go on",
+                
+                # References
+                r"the first part",
+                r"the second part",
+                r"the previous",
+                r"the next",
+                
+                # Very short questions (likely context-dependent)
+                r"^what is it\?$",
+                r"^how does it work\?$",
+                r"^what about that\?$"
+            ]
+            
+            # Check for context indicators
+            for pattern in context_indicators:
+                if re.search(pattern, query_lower):
+                    return True
+            
+            # Check if query is very short (likely context-dependent)
+            if len(query.split()) <= 3:
+                return True
+            
+            # Check if query contains words from recent conversation
+            recent_content = " ".join([
+                msg.get('content', '').lower() 
+                for msg in conversation_history[-3:]
+            ])
+            
+            query_words = set(query_lower.split())
+            context_words = set(recent_content.split())
+            
+            # If query shares significant words with recent context, it's likely context-dependent
+            if len(query_words.intersection(context_words)) >= 2:
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in heuristic context detection: {str(e)}")
+            return False
     
     def _entity_based_retrieval(self, query: str, k: int) -> List[Tuple[LangChainDocument, float, str]]:
         """Retrieval based on named entities in query"""
@@ -397,7 +675,25 @@ Answer:"""
             
             context = "\n".join(context_parts)
             
-            return f"""You are a helpful AI assistant. Answer the following question using the provided context from multiple retrieval strategies.
+            # Check if this is a general knowledge question
+            is_context_dependent = self._is_context_dependent_query(query, conversation_history or [])
+            
+            if not is_context_dependent:
+                # For general knowledge questions, use a simpler prompt
+                return f"""You are a helpful AI assistant. Answer the following question using your general knowledge.
+
+Question: {query}
+
+Instructions:
+- This appears to be a general knowledge question
+- Use your knowledge to provide a complete and accurate answer
+- If relevant documents were found, you may reference them, but don't limit yourself to them
+- Provide a comprehensive answer based on your training
+
+Answer:"""
+            else:
+                # For context-dependent questions, use the full RAG prompt
+                return f"""You are a helpful AI assistant. Answer the following question using the provided context from multiple retrieval strategies.
 
 Context from documents (retrieved using multiple strategies):
 {context}

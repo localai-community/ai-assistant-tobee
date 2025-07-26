@@ -95,15 +95,20 @@ class ChatService:
     async def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available MCP tools."""
         await self._ensure_mcp_initialized()
-        tools = await self.mcp_manager.list_tools()
-        return [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema
-            }
-            for tool in tools
-        ]
+        # Get tool names with server prefixes
+        tool_names = self.mcp_manager.get_tool_names()
+        tools = []
+        
+        for tool_name in tool_names:
+            tool = self.mcp_manager.tools.get(tool_name)
+            if tool:
+                tools.append({
+                    "name": tool_name,  # This includes the server prefix (e.g., "filesystem.list_directory")
+                    "description": tool.description,
+                    "input_schema": tool.inputSchema
+                })
+        
+        return tools
     
     async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool."""

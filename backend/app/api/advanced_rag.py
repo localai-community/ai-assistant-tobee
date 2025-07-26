@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 import os
 import logging
+import time
 from pathlib import Path
 import json
 import asyncio
@@ -16,6 +17,7 @@ from pydantic import BaseModel
 
 from ..services.rag.advanced_retriever import AdvancedRAGRetriever
 from ..services.chat import ChatService
+from ..services.repository import MessageRepository
 from ..core.database import get_db
 from ..core.models import ErrorResponse
 
@@ -28,6 +30,34 @@ router = APIRouter(prefix="/api/v1/advanced-rag", tags=["advanced-rag"])
 # Initialize services
 advanced_rag_retriever = AdvancedRAGRetriever()
 chat_service = ChatService()
+
+def get_full_conversation_history(conversation_id: str, db: Session) -> List[Dict[str, Any]]:
+    """Get conversation history from database with performance optimization."""
+    try:
+        message_repo = MessageRepository(db)
+        
+        # Performance optimization: Limit to last 50 messages for very long conversations
+        max_messages = 50
+        messages = message_repo.get_messages(conversation_id, limit=max_messages)
+        
+        conversation_history = []
+        for msg in messages:
+            conversation_history.append({
+                "role": msg.role,
+                "content": msg.content,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None
+            })
+        
+        logger.info(f"Retrieved {len(conversation_history)} messages from conversation {conversation_id}")
+        
+        # Performance warning for very long conversations
+        if len(conversation_history) >= max_messages:
+            logger.warning(f"Conversation {conversation_id} has {len(conversation_history)}+ messages. Performance may be affected.")
+        
+        return conversation_history
+    except Exception as e:
+        logger.error(f"Error retrieving conversation history: {e}")
+        return []
 
 class AdvancedRAGRequest(BaseModel):
     message: str
@@ -60,18 +90,28 @@ async def advanced_rag_chat(request: AdvancedRAGRequest, db: Session = Depends(g
         dict: Advanced RAG response with strategy information
     """
     try:
+        # Get full conversation history if conversation_id is provided
+        conversation_history = request.conversation_history or []
+        if request.conversation_id:
+            db_history = get_full_conversation_history(request.conversation_id, db)
+            if db_history:
+                conversation_history = db_history
+                logger.info(f"Using database conversation history: {len(conversation_history)} messages")
+            else:
+                logger.info(f"No database history found for conversation {request.conversation_id}, using provided history")
+        
         if request.use_advanced_strategies:
             # Use advanced multi-strategy retrieval
             results = advanced_rag_retriever.retrieve_with_multiple_strategies(
                 request.message, 
-                request.conversation_history, 
+                conversation_history, 
                 request.k
             )
             
             # Create advanced prompt
             enhanced_prompt = advanced_rag_retriever.create_advanced_rag_prompt(
                 request.message, 
-                request.conversation_history, 
+                conversation_history, 
                 request.k
             )
             
@@ -152,17 +192,27 @@ async def advanced_rag_stream_chat(request: AdvancedRAGStreamRequest, db: Sessio
         StreamingResponse: Server-sent events with advanced RAG-enhanced response
     """
     try:
+        # Get full conversation history if conversation_id is provided
+        conversation_history = request.conversation_history or []
+        if request.conversation_id:
+            db_history = get_full_conversation_history(request.conversation_id, db)
+            if db_history:
+                conversation_history = db_history
+                logger.info(f"Using database conversation history: {len(conversation_history)} messages")
+            else:
+                logger.info(f"No database history found for conversation {request.conversation_id}, using provided history")
+        
         if request.use_advanced_strategies:
             # Get advanced RAG context
             results = advanced_rag_retriever.retrieve_with_multiple_strategies(
                 request.message, 
-                request.conversation_history, 
+                conversation_history, 
                 request.k
             )
             
             enhanced_prompt = advanced_rag_retriever.create_advanced_rag_prompt(
                 request.message, 
-                request.conversation_history, 
+                conversation_history, 
                 request.k
             )
             
@@ -380,6 +430,11 @@ async def advanced_rag_health():
                 "spacy_nlp": spacy_available,
                 "scikit_learn": sklearn_available,
                 "vector_store": True
+            },
+            "performance_config": {
+                "max_history_messages": advanced_rag_retriever.max_history_messages,
+                "max_entities": advanced_rag_retriever.max_entities,
+                "max_db_messages": 50
             },
             "recommendations": [
                 "Install spaCy model: python -m spacy download en_core_web_sm" if not spacy_available else None,
