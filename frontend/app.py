@@ -190,6 +190,119 @@ def get_mcp_health() -> Dict:
         pass
     return {}
 
+
+def get_reasoning_health() -> Dict:
+    """Get reasoning system health status."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/reasoning/health", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"status": "unhealthy", "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+def parse_problem(problem_statement: str) -> Dict:
+    """Parse a problem statement using the reasoning system."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/reasoning/parse-problem",
+                json={"problem_statement": problem_statement},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def parse_steps(step_output: str) -> Dict:
+    """Parse step-by-step reasoning output."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/reasoning/parse-steps",
+                json={"step_output": step_output},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def validate_reasoning(problem_statement: str, steps: List[Dict], final_answer: str = None, confidence: float = 0.0) -> Dict:
+    """Validate reasoning using the reasoning system."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/reasoning/validate",
+                json={
+                    "problem_statement": problem_statement,
+                    "steps": steps,
+                    "final_answer": final_answer,
+                    "confidence": confidence
+                },
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def format_reasoning(problem_statement: str, steps: List[Dict], final_answer: str = None, 
+                    confidence: float = 0.0, format_type: str = "json") -> Dict:
+    """Format reasoning result in the specified format."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/reasoning/format",
+                json={
+                    "problem_statement": problem_statement,
+                    "steps": steps,
+                    "final_answer": final_answer,
+                    "confidence": confidence,
+                    "format_type": format_type
+                },
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def test_reasoning_workflow(problem_statement: str, format_type: str = "json") -> Dict:
+    """Test the complete reasoning workflow."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/reasoning/test-workflow",
+                json={
+                    "problem_statement": problem_statement,
+                    "format_type": format_type
+                },
+                timeout=15.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def call_mcp_tool(tool_name: str, arguments: Dict) -> Dict:
     """Call an MCP tool."""
     try:
@@ -838,6 +951,80 @@ def main():
                         st.rerun()
             else:
                 st.warning("Backend not available for MCP tools")
+        
+        # Reasoning System Section (Collapsible)
+        with st.expander("🧠 Reasoning System", expanded=False):
+            if st.session_state.backend_health:
+                # Get reasoning health
+                reasoning_health = get_reasoning_health()
+                
+                if reasoning_health.get("status") == "healthy":
+                    st.success("✅ Reasoning System Available")
+                    st.info(f"Phase: {reasoning_health.get('phase', 'Unknown')}")
+                    
+                    # Show components
+                    components = reasoning_health.get("components", {})
+                    if components:
+                        st.markdown('<div class="section-header">Components</div>', unsafe_allow_html=True)
+                        for component_type, component_list in components.items():
+                            if isinstance(component_list, list):
+                                st.text(f"• {component_type}: {', '.join(component_list)}")
+                            else:
+                                st.text(f"• {component_type}: {component_list}")
+                    
+                    # Test workflow button
+                    if st.button("🧪 Test Complete Workflow"):
+                        with st.spinner("Testing reasoning workflow..."):
+                            test_result = test_reasoning_workflow("Solve 2x + 3 = 7", "json")
+                            if test_result.get("success"):
+                                st.success("✅ Workflow test successful!")
+                                st.json(test_result)
+                            else:
+                                st.error(f"❌ Workflow test failed: {test_result.get('error', 'Unknown error')}")
+                    
+                    # Individual component tests
+                    st.markdown('<div class="section-header">Component Tests</div>', unsafe_allow_html=True)
+                    
+                    # Problem parsing test
+                    if st.button("🔍 Test Problem Parsing"):
+                        with st.spinner("Testing problem parsing..."):
+                            parse_result = parse_problem("Calculate the area of a circle with radius 5")
+                            if parse_result.get("success"):
+                                st.success("✅ Problem parsing successful!")
+                                st.json(parse_result.get("data", {}))
+                            else:
+                                st.error(f"❌ Problem parsing failed: {parse_result.get('error', 'Unknown error')}")
+                    
+                    # Step parsing test
+                    if st.button("📝 Test Step Parsing"):
+                        with st.spinner("Testing step parsing..."):
+                            step_output = """
+                            Step 1: Identify the problem
+                            This is a mathematical problem involving area calculation.
+                            Confidence: 0.9
+                            
+                            Step 2: Apply the formula
+                            Area = π * r² = π * 5² = 25π
+                            Confidence: 0.95
+                            """
+                            parse_result = parse_steps(step_output)
+                            if parse_result.get("success"):
+                                st.success("✅ Step parsing successful!")
+                                st.json(parse_result.get("data", []))
+                            else:
+                                st.error(f"❌ Step parsing failed: {parse_result.get('error', 'Unknown error')}")
+                    
+                    # Refresh button
+                    if st.button("🔄 Refresh Reasoning Status"):
+                        st.session_state.reasoning_health = get_reasoning_health()
+                        st.rerun()
+                else:
+                    st.warning("⚠️ Reasoning System not available")
+                    if st.button("🔄 Check Reasoning Status"):
+                        st.session_state.reasoning_health = get_reasoning_health()
+                        st.rerun()
+            else:
+                st.warning("Backend not available for reasoning system")
         
         # Conversations Section (Collapsible)
         with st.expander("💬 Conversations", expanded=True):
