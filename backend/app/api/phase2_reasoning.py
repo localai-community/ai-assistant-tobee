@@ -314,18 +314,33 @@ async def phase2_reasoning_stream(request: Phase2ReasoningRequest, db: Session =
                     request
                 )
                 
-                # Generate enhanced response using the reasoning result
-                enhanced_response = await generate_enhanced_response(
-                    chat_service,
-                    request.message,
-                    reasoning_result,
-                    request
-                )
+                # Create enhanced prompt for streaming
+                steps_text = "\n".join([
+                    f"Step {i+1}: {step.get('description', '')}\n{step.get('reasoning', '')}"
+                    for i, step in enumerate(reasoning_result.get("steps", []))
+                ])
                 
-                # Stream the response in chunks
-                chunk_size = 50  # Characters per chunk
-                for i in range(0, len(enhanced_response), chunk_size):
-                    chunk = enhanced_response[i:i + chunk_size]
+                enhanced_prompt = f"""Based on the following step-by-step reasoning, provide a clear and comprehensive answer:
+
+Problem: {request.message}
+
+Reasoning Steps:
+{steps_text}
+
+Final Answer: {reasoning_result.get('final_answer', '')}
+
+Please provide a well-structured response that incorporates the reasoning steps and final answer."""
+                
+                # Stream the response using the chat service's streaming method
+                full_response = ""
+                async for chunk in chat_service.generate_streaming_response(
+                    message=enhanced_prompt,
+                    model=request.model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    conversation_id=request.conversation_id
+                ):
+                    full_response += chunk
                     data = {
                         "content": chunk,
                         "engine_used": engine_used,

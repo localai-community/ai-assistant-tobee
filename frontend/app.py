@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
+import time
 
 # Load environment variables
 load_dotenv()
@@ -112,7 +113,7 @@ def init_session_state():
         st.session_state.chat_input_key = 0
     # Add Phase 2 reasoning engine state variables
     if "use_phase2_reasoning" not in st.session_state:
-        st.session_state.use_phase2_reasoning = False
+        st.session_state.use_phase2_reasoning = True
     if "selected_phase2_engine" not in st.session_state:
         st.session_state.selected_phase2_engine = "auto"
     if "phase2_engine_status" not in st.session_state:
@@ -626,6 +627,11 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             chunk = data["content"]
                                             full_response += chunk
                                             message_placeholder.markdown(full_response + "▌")
+                                            print(f"🔍 Added chunk: {chunk[:50]}...")
+                                            
+                                            # Add artificial delay to see streaming effect (optional)
+                                            # Uncomment the next line to slow down streaming for testing
+                                            # time.sleep(0.2)  # 200ms delay
                                         
                                         elif "conversation_id" in data:
                                             # Update conversation ID
@@ -1499,6 +1505,7 @@ def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversa
 def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None):
     """Send message to backend with Phase 2 reasoning engine using streaming."""
     st.info("🚀 Starting Phase 2 reasoning streaming...")
+    print(f"🔍 Phase 2 streaming started for message: {message[:50]}...")
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
@@ -1518,6 +1525,9 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
             if conversation_id:
                 payload["conversation_id"] = conversation_id
             
+            print(f"🔍 Sending request to: {BACKEND_URL}/api/v1/phase2-reasoning/stream")
+            print(f"🔍 Payload: {payload}")
+            
             # Create assistant message container for streaming
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
@@ -1536,17 +1546,21 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                     timeout=300.0,  # Increased timeout for reasoning processing
                     headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
                 ) as response:
+                    print(f"🔍 Response status: {response.status_code}")
                     if response.status_code == 200:
                         # Process Server-Sent Events
                         for line in response.iter_lines():
                             if line:
+                                print(f"🔍 Received line: {line[:100]}...")
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
                                     data_str = line[6:]  # Remove 'data: ' prefix
                                     try:
                                         data = json.loads(data_str)
+                                        print(f"🔍 Parsed data: {data}")
                                         
                                         if data.get("error"):
+                                            print(f"🔍 Error in data: {data.get('error')}")
                                             return {"response": f"Error: {data.get('error', 'Unknown error')}"}
                                         
                                         # Handle different response types
@@ -1554,6 +1568,11 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                             chunk = data["content"]
                                             full_response += chunk
                                             message_placeholder.markdown(full_response + "▌")
+                                            print(f"🔍 Added chunk: {chunk[:50]}...")
+                                            
+                                            # Add artificial delay to see streaming effect (optional)
+                                            # Uncomment the next line to slow down streaming for testing
+                                            # time.sleep(0.2)  # 200ms delay
                                         
                                         # Update metadata
                                         if "engine_used" in data:
@@ -1569,6 +1588,7 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                         
                                         # Check if this is the final message
                                         if data.get("final"):
+                                            print(f"🔍 Final message received")
                                             message_placeholder.markdown(full_response)
                                             
                                             # Add Phase 2 engine info to the response
@@ -1595,13 +1615,32 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                             }
                                             
                                     except json.JSONDecodeError as e:
+                                        print(f"🔍 JSON decode error: {e}")
                                         continue
                         
+                        print(f"🔍 Streaming ended, full_response length: {len(full_response)}")
                         # If we get here without returning, the streaming ended without content
                         if not full_response:
+                            print("🔍 No response generated")
                             return {"response": "No response generated. Please try again."}
                         else:
                             # If we have content but no final message, return what we have
+                            print("🔍 Returning fallback response")
+                            message_placeholder.markdown(full_response)
+                            
+                            # Add Phase 2 engine info to the response
+                            phase2_info = f"\n\n🚀 **Phase 2 Engine Info:**\n"
+                            phase2_info += f"• Engine used: {engine_used.title()}\n"
+                            phase2_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                            phase2_info += f"• Confidence: {confidence:.2f}\n"
+                            phase2_info += f"• Steps generated: {steps_count}\n"
+                            
+                            if validation_summary:
+                                phase2_info += f"• Validation: {validation_summary}\n"
+                            
+                            full_response += phase2_info
+                            message_placeholder.markdown(full_response)
+                            
                             return {
                                 "response": full_response,
                                 "conversation_id": conversation_id,
@@ -1612,15 +1651,19 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                 "validation_summary": validation_summary
                             }
                     else:
+                        print(f"🔍 Backend error: {response.status_code}")
                         return {"response": f"Backend error: {response.status_code}"}
                         
     except httpx.TimeoutException:
+        print("🔍 Timeout exception")
         st.error("⏰ Phase 2 reasoning streaming timed out")
         return {"response": "Request timed out. Please try again."}
     except Exception as e:
+        print(f"🔍 Exception: {e}")
         st.error(f"💥 Phase 2 reasoning streaming error: {str(e)}")
         return {"response": f"Communication error: {str(e)}"}
     
+    print("🔍 Function completed without returning")
     st.error("🔚 Phase 2 reasoning streaming function completed without returning anything")
     return None
 
@@ -1695,7 +1738,7 @@ def main():
                 st.warning("Backend not available for reasoning system")
         
         # Phase 2 Reasoning Engines Section (Collapsible)
-        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=False):
+        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=True):
             st.markdown('<div class="section-header">Engine Selection</div>', unsafe_allow_html=True)
             
             # Phase 2 Reasoning Toggle
