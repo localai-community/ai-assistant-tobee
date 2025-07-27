@@ -1,0 +1,16 @@
+FROM public.ecr.aws/lambda/python:3.11
+
+# Copy requirements file
+COPY frontend/requirements.txt ${LAMBDA_TASK_ROOT}
+
+# Install dependencies
+RUN pip install -r requirements.txt
+
+# Copy application code
+COPY frontend/ ${LAMBDA_TASK_ROOT}
+
+# Create the handler function
+RUN echo 'import app as main\n\ndef handler(event, context):\n    return main.handler(event, context)' > ${LAMBDA_TASK_ROOT}/lambda_handler.py
+
+# Set the handler
+CMD ["lambda_handler.handler"] 
