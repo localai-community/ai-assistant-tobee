@@ -506,8 +506,15 @@ class LogicalProblemClassifier:
         problem_lower = problem_statement.lower()
         
         # Propositional logic patterns
-        prop_keywords = ['proposition', 'truth table', 'logical operator', 'and', 'or', 'not', 'implies']
+        prop_keywords = [
+            'proposition', 'truth table', 'logical operator', 'and', 'or', 'not', 'implies',
+            'logical expression', 'evaluate', 'evaluation', 'boolean', 'logic', 'if', 'then'
+        ]
         if any(keyword in problem_lower for keyword in prop_keywords):
+            # Check if this is actually a mathematical operation disguised as logical
+            mathematical_operation_keywords = ['solve for', 'find the value', 'calculate', 'differentiate', 'integrate', 'derivative', 'integral', 'find the perimeter', 'find the area', 'what is the area', 'what is the perimeter']
+            if any(keyword in problem_lower for keyword in mathematical_operation_keywords):
+                return LogicalProblemType.UNKNOWN
             return LogicalProblemType.PROPOSITIONAL
         
         # Syllogistic patterns
@@ -516,8 +523,12 @@ class LogicalProblemClassifier:
             return LogicalProblemType.SYLLOGISTIC
         
         # Inference patterns
-        inference_keywords = ['inference', 'deduce', 'conclude', 'therefore', 'thus', 'hence']
+        inference_keywords = ['inference', 'deduce', 'conclude', 'therefore', 'thus', 'hence', 'necessarily', 'if then']
         if any(keyword in problem_lower for keyword in inference_keywords):
+            # Check if this is actually a mathematical operation
+            mathematical_operation_keywords = ['find the', 'calculate the', 'what is the', 'solve for', 'differentiate', 'integrate']
+            if any(keyword in problem_lower for keyword in mathematical_operation_keywords):
+                return LogicalProblemType.UNKNOWN
             return LogicalProblemType.INFERENCE
         
         # Consistency patterns

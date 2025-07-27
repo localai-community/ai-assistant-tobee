@@ -529,9 +529,13 @@ class MathematicalProblemClassifier:
         if any(keyword in problem_lower for keyword in algebraic_keywords):
             return MathematicalProblemType.ALGEBRAIC
         
-        # Geometric patterns
+        # Geometric patterns - but check if it's a logical reasoning question first
         geometric_keywords = ['area', 'perimeter', 'volume', 'circle', 'rectangle', 'triangle', 'square']
         if any(keyword in problem_lower for keyword in geometric_keywords):
+            # Check if this is a logical reasoning question about geometric properties
+            logical_geometric_keywords = ['is it a', 'are all', 'is this', 'what follows', 'what can we conclude']
+            if any(keyword in problem_lower for keyword in logical_geometric_keywords):
+                return MathematicalProblemType.UNKNOWN
             return MathematicalProblemType.GEOMETRIC
         
         # Calculus patterns
@@ -549,9 +553,25 @@ class MathematicalProblemClassifier:
         if any(keyword in problem_lower for keyword in stat_keywords):
             return MathematicalProblemType.STATISTICAL
         
-        # Numerical patterns
+        # Numerical patterns - more specific to avoid false positives
         numerical_keywords = ['calculate', 'compute', 'evaluate', 'find']
+        # Only classify as numerical if it's clearly mathematical and not causal or logical
         if any(keyword in problem_lower for keyword in numerical_keywords):
+            # Check if it's a causal question (contains causal keywords)
+            causal_keywords = ['cause', 'causes', 'causing', 'caused by', 'causal', 'effect', 'relationship']
+            if any(causal_keyword in problem_lower for causal_keyword in causal_keywords):
+                return MathematicalProblemType.UNKNOWN
+            
+            # Check if it's a logical question (contains logical keywords)
+            logical_keywords = ['logical expression', 'logical operator', 'and', 'or', 'not', 'implies', 'boolean', 'logic', 'proposition', 'truth table', 'what is the truth', 'simplify the expression']
+            if any(logical_keyword in problem_lower for logical_keyword in logical_keywords):
+                return MathematicalProblemType.UNKNOWN
+            
+            # Check if it's a logical reasoning question (contains reasoning keywords)
+            reasoning_keywords = ['what can we conclude', 'what follows', 'what can we infer', 'is it necessarily']
+            if any(reasoning_keyword in problem_lower for reasoning_keyword in reasoning_keywords):
+                return MathematicalProblemType.UNKNOWN
+            
             return MathematicalProblemType.NUMERICAL
         
         return MathematicalProblemType.UNKNOWN 

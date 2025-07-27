@@ -500,8 +500,13 @@ class CausalProblemClassifier:
         """Classify the type of causal problem."""
         problem_lower = problem_statement.lower()
         
-        # Identification patterns
-        identification_keywords = ['identify', 'causal effect', 'causal relationship', 'does x cause y']
+        # Identification patterns - more comprehensive
+        identification_keywords = [
+            'identify', 'causal effect', 'causal relationship', 'does x cause y',
+            'does', 'cause', 'causes', 'causing', 'caused by', 'causal',
+            'smoking', 'lung cancer', 'education', 'income', 'exercise', 'health',
+            'diet', 'weight loss', 'treatment', 'outcome', 'effect', 'affect', 'affects', 'affecting'
+        ]
         if any(keyword in problem_lower for keyword in identification_keywords):
             return CausalProblemType.IDENTIFICATION
         

@@ -117,7 +117,17 @@ async def select_and_use_engine(
     
     if engine_type == "auto":
         # Auto-detect which engine to use
-        if mathematical_engine.can_handle(message):
+        # Check for causal keywords first to prioritize causal reasoning
+        causal_keywords = ['cause', 'causes', 'causing', 'caused by', 'causal', 'effect', 'relationship', 'smoking', 'lung cancer', 'affect', 'affects', 'affecting']
+        message_lower = message.lower()
+        
+        if any(keyword in message_lower for keyword in causal_keywords) and causal_engine.can_handle(message):
+            engine_used = "causal"
+            reasoning_result = causal_engine.solve(message)
+        elif any(keyword in message_lower for keyword in ['logical expression', 'logical operator', 'and', 'or', 'not', 'implies', 'boolean', 'logic', 'proposition', 'truth table']) and logical_engine.can_handle(message):
+            engine_used = "logical"
+            reasoning_result = logical_engine.solve(message)
+        elif mathematical_engine.can_handle(message):
             engine_used = "mathematical"
             reasoning_result = mathematical_engine.solve(message)
         elif logical_engine.can_handle(message):
@@ -168,7 +178,7 @@ async def generate_enhanced_response(
         for i, step in enumerate(reasoning_result.get("steps", []))
     ])
     
-    enhanced_prompt = f"""Based on the following step-by-step reasoning, provide a clear and comprehensive answer:
+    enhanced_prompt = f"""Based on the following {reasoning_result.get('reasoning_type', 'specialized')} reasoning analysis, provide a clear and comprehensive answer:
 
 Problem: {message}
 
@@ -320,7 +330,7 @@ async def phase2_reasoning_stream(request: Phase2ReasoningRequest, db: Session =
                     for i, step in enumerate(reasoning_result.get("steps", []))
                 ])
                 
-                enhanced_prompt = f"""Based on the following step-by-step reasoning, provide a clear and comprehensive answer:
+                enhanced_prompt = f"""Based on the following {reasoning_result.get('reasoning_type', 'specialized')} reasoning analysis, provide a clear and comprehensive answer:
 
 Problem: {request.message}
 

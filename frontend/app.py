@@ -97,6 +97,10 @@ def init_session_state():
         st.session_state.use_rag = False
     if "use_advanced_rag" not in st.session_state:
         st.session_state.use_advanced_rag = False
+    if "use_phase2_reasoning" not in st.session_state:
+        st.session_state.use_phase2_reasoning = True
+    if "selected_phase2_engine" not in st.session_state:
+        st.session_state.selected_phase2_engine = "auto"
     if "mcp_tools" not in st.session_state:
         st.session_state.mcp_tools = []
     if "mcp_health" not in st.session_state:
@@ -1710,17 +1714,17 @@ def main():
         with st.expander("🧠 Reasoning System", expanded=False):
             # Reasoning Chat Toggle (Always visible within the expander)
             use_reasoning_chat = st.checkbox(
-                "Enable Step-by-Step Reasoning",
+                "Enable Phase 1: Basic Step-by-Step Reasoning",
                 value=st.session_state.use_reasoning_chat,
-                help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
+                help="When enabled, responses will show basic step-by-step reasoning for general problems"
             )
             st.session_state.use_reasoning_chat = use_reasoning_chat
             
             if use_reasoning_chat:
-                st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
-                st.info("💡 Works best with mathematical, logical, and analytical questions")
+                st.success("✅ Phase 1 reasoning enabled - responses will show basic step-by-step solutions")
+                st.info("💡 Works best with general analytical questions")
             else:
-                st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
+                st.info("💡 Enable Phase 1 reasoning for basic step-by-step solutions")
             
             st.divider()
             
@@ -2116,6 +2120,112 @@ def main():
     
     # Main chat interface
     display_welcome_message()
+    
+    # Phase 2 Testing Section (Always visible when backend is available)
+    if st.session_state.backend_health:
+        # Check if Phase 2 engines are available
+        phase2_status = get_phase2_engine_status()
+        
+        if phase2_status.get("status") == "available":
+            st.markdown("---")
+            st.markdown("## 🚀 **Phase 2: Advanced Reasoning Engines Testing**")
+            st.markdown("Test the specialized reasoning engines for mathematical, logical, and causal problems.")
+            
+            # Engine Status Summary
+            engines = phase2_status.get("engines", {})
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                math_status = engines.get("mathematical", {})
+                if math_status.get("status") == "available":
+                    st.success("✅ Mathematical Engine")
+                else:
+                    st.warning("⚠️ Mathematical Engine")
+            
+            with col2:
+                logic_status = engines.get("logical", {})
+                if logic_status.get("status") == "available":
+                    st.success("✅ Logical Engine")
+                else:
+                    st.warning("⚠️ Logical Engine")
+            
+            with col3:
+                causal_status = engines.get("causal", {})
+                if causal_status.get("status") == "available":
+                    st.success("✅ Causal Engine")
+                else:
+                    st.warning("⚠️ Causal Engine")
+            
+            # Phase 2 Testing Controls
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Enable Phase 2 reasoning for testing
+                use_phase2_for_testing = st.checkbox(
+                    "🚀 Enable Phase 2 Reasoning for Testing",
+                    value=st.session_state.use_phase2_reasoning,
+                    help="Enable specialized reasoning engines for testing"
+                )
+                st.session_state.use_phase2_reasoning = use_phase2_for_testing
+            
+            with col2:
+                # Engine selection for testing
+                if use_phase2_for_testing:
+                    test_engine = st.selectbox(
+                        "Select Engine for Testing",
+                        options=[
+                            ("auto", "🔄 Auto-detect"),
+                            ("mathematical", "🔢 Mathematical"),
+                            ("logical", "🧮 Logical"),
+                            ("causal", "🔗 Causal")
+                        ],
+                        format_func=lambda x: x[1],
+                        index=0,
+                        key="phase2_test_engine"
+                    )
+                    st.session_state.selected_phase2_engine = test_engine[0]
+            
+            # Phase 2 Sample Questions
+            if use_phase2_for_testing:
+                st.markdown("### 📝 **Phase 2 Sample Questions**")
+                st.markdown("Click any question to test the Phase 2 reasoning engines:")
+                
+                # Create tabs for different problem types
+                tab1, tab2, tab3 = st.tabs(["🔢 Mathematical", "🧮 Logical", "🔗 Causal"])
+                
+                with tab1:
+                    st.markdown("**Mathematical Problems:**")
+                    for i, question in enumerate(st.session_state.phase2_sample_questions["mathematical"]):
+                        if st.button(f"📝 {question}", key=f"phase2_test_math_{i}_{st.session_state.chat_input_key}", use_container_width=True):
+                            st.session_state.sample_question = question
+                            st.session_state.chat_input_key += 1
+                            st.rerun()
+                
+                with tab2:
+                    st.markdown("**Logical Problems:**")
+                    for i, question in enumerate(st.session_state.phase2_sample_questions["logical"]):
+                        if st.button(f"📝 {question}", key=f"phase2_test_logic_{i}_{st.session_state.chat_input_key}", use_container_width=True):
+                            st.session_state.sample_question = question
+                            st.session_state.chat_input_key += 1
+                            st.rerun()
+                
+                with tab3:
+                    st.markdown("**Causal Problems:**")
+                    for i, question in enumerate(st.session_state.phase2_sample_questions["causal"]):
+                        if st.button(f"📝 {question}", key=f"phase2_test_causal_{i}_{st.session_state.chat_input_key}", use_container_width=True):
+                            st.session_state.sample_question = question
+                            st.session_state.chat_input_key += 1
+                            st.rerun()
+                
+                st.info("💡 **Phase 2 engines provide specialized reasoning with step-by-step solutions and confidence scoring.**")
+            else:
+                st.info("💡 **Enable Phase 2 reasoning above to test the specialized engines.**")
+        else:
+            st.markdown("---")
+            st.markdown("## 🚀 **Phase 2: Advanced Reasoning Engines**")
+            st.warning("⚠️ Phase 2 reasoning engines are not available.")
+            if phase2_status.get("error"):
+                st.error(f"Error: {phase2_status['error']}")
     
     # Display chat messages
     display_chat_messages()
