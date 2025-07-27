@@ -29,5 +29,9 @@ pydantic-settings>=2.5.0
 python-dotenv>=1.0.0
 matplotlib>=3.7.0
 
+# Mathematical reasoning dependencies
+sympy>=1.14.0
+numpy>=1.24.0
+
 # MCP (Model Context Protocol)
 mcp==1.0.0 
