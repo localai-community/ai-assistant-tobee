@@ -58,6 +58,21 @@ def get_css():
             font-size: 0.8em;
             margin: 2px;
         }
+        .sample-button {
+            background-color: #f0f8ff;
+            border: 1px solid #0066cc;
+            color: #0066cc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 2px;
+            font-size: 0.9em;
+        }
+        .sample-button:hover {
+            background-color: #0066cc;
+            color: white;
+        }
     </style>
     """
 
@@ -91,6 +106,11 @@ def init_session_state():
         st.session_state.advanced_rag_strategies = []
     if "use_reasoning_chat" not in st.session_state:
         st.session_state.use_reasoning_chat = True
+    if "sample_question" not in st.session_state:
+        st.session_state.sample_question = None
+    if "chat_input_key" not in st.session_state:
+        st.session_state.chat_input_key = 0
+
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -819,6 +839,64 @@ def display_welcome_message():
             st.info(f"**Available Models:** {', '.join(st.session_state.available_models)}")
         else:
             st.warning("**⚠️ No models available** - Please make sure Ollama is running and models are installed.")
+        
+        # Sample questions for testing reasoning
+        st.markdown("---")
+        st.markdown("### 🧠 **Sample Questions to Test Reasoning**")
+        st.markdown("Try these questions with reasoning enabled for step-by-step solutions:")
+        
+        # Create columns for different question types
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**🔢 Mathematical Problems:**")
+            sample_math_questions = [
+                "Solve 2x + 3 = 7",
+                "Find the derivative of f(x) = x³ + 2x² - 5x + 3",
+                "Calculate the area of a circle with radius 5",
+                "Solve the quadratic equation x² - 4x + 3 = 0"
+            ]
+            for i, question in enumerate(sample_math_questions, 1):
+                # Use dynamic key to prevent button state issues
+                button_key = f"math_{i}_{st.session_state.chat_input_key}"
+                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
+                    st.session_state.sample_question = question
+                    st.session_state.chat_input_key += 1  # Increment to force button refresh
+                    st.rerun()
+        
+        with col2:
+            st.markdown("**🧮 Logical Problems:**")
+            sample_logic_questions = [
+                "If all roses are flowers and some flowers are red, what can we conclude?",
+                "A train leaves at 2 PM and arrives at 4 PM. How long was the journey?",
+                "If 3 workers can complete a task in 6 hours, how long would 2 workers take?",
+                "What is the next number in the sequence: 2, 4, 8, 16, ...?"
+            ]
+            for i, question in enumerate(sample_logic_questions, 1):
+                # Use dynamic key to prevent button state issues
+                button_key = f"logic_{i}_{st.session_state.chat_input_key}"
+                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
+                    st.session_state.sample_question = question
+                    st.session_state.chat_input_key += 1  # Increment to force button refresh
+                    st.rerun()
+        
+        with col3:
+            st.markdown("**📝 General Problems:**")
+            sample_general_questions = [
+                "Explain how photosynthesis works step by step",
+                "What are the steps to make a sandwich?",
+                "How does a computer process information?",
+                "Explain the water cycle in detail"
+            ]
+            for i, question in enumerate(sample_general_questions, 1):
+                # Use dynamic key to prevent button state issues
+                button_key = f"general_{i}_{st.session_state.chat_input_key}"
+                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
+                    st.session_state.sample_question = question
+                    st.session_state.chat_input_key += 1  # Increment to force button refresh
+                    st.rerun()
+        
+        st.markdown("💡 **Tip:** Enable reasoning mode in the sidebar for step-by-step solutions!")
 
 def extract_rag_context_from_content(content: str) -> str:
     """Extract RAG context from response content by looking for document references."""
@@ -854,6 +932,403 @@ def extract_rag_context_from_content(content: str) -> str:
     
     # If no specific references found, don't extract general content
     return ""
+
+def process_chat_response(response_data, question):
+    """Process chat response and add to session state."""
+    if response_data and isinstance(response_data, dict) and not response_data.get("response", "").startswith("❌"):
+        # Update conversation ID if provided
+        if response_data.get("conversation_id"):
+            st.session_state.conversation_id = response_data["conversation_id"]
+        
+        # Add assistant response to chat history
+        message_data = {"role": "assistant", "content": response_data["response"]}
+        
+        # Handle advanced RAG information
+        if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
+            strategies_used = response_data.get("strategies_used", [])
+            results_count = response_data.get("results_count", 0)
+            
+            # Add advanced RAG info to the message
+            advanced_info = f"\n\n🚀 **Advanced RAG Info:**\n"
+            advanced_info += f"• Strategies used: {', '.join(strategies_used)}\n"
+            advanced_info += f"• Results retrieved: {results_count}\n"
+            
+            if response_data.get("has_context"):
+                advanced_info += "• Context-aware retrieval: ✅\n"
+            else:
+                advanced_info += "• Context-aware retrieval: ❌\n"
+            
+            # Add document references from results
+            if response_data.get("results"):
+                doc_references = []
+                for i, result in enumerate(response_data["results"][:3]):  # Show first 3 results
+                    filename = result.get("filename", f"Document {i+1}")
+                    strategy = result.get("strategy", "unknown")
+                    score = result.get("relevance_score", 0)
+                    doc_references.append(f"{filename} ({strategy}, score: {score:.2f})")
+                
+                if doc_references:
+                    advanced_info += f"• Documents used: {', '.join(doc_references)}\n"
+            
+            message_data["content"] += advanced_info
+            message_data["advanced_rag"] = True
+            message_data["strategies_used"] = strategies_used
+            message_data["results_count"] = results_count
+        
+        # Add RAG context if available (for basic RAG)
+        if not st.session_state.use_advanced_rag and response_data.get("rag_context") and response_data.get("has_context"):
+            message_data["rag_context"] = response_data["rag_context"]
+            message_data["has_context"] = response_data["has_context"]
+        
+        # Add reasoning metadata
+        if response_data.get("reasoning_used"):
+            message_data["reasoning_used"] = True
+            message_data["steps_count"] = response_data.get("steps_count")
+            message_data["validation_summary"] = response_data.get("validation_summary")
+        
+        st.session_state.messages.append(message_data)
+        
+        # Refresh conversation list to include the new conversation
+        st.session_state.conversations = get_conversations()
+        
+        return True
+    else:
+        if response_data and isinstance(response_data, dict):
+            error_msg = response_data.get("response", "❌ Unknown error from backend")
+        else:
+            error_msg = "❌ Unable to get response from backend. Please try again or check the backend logs."
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        with st.chat_message("assistant"):
+            st.error(error_msg)
+        return False
+
+def handle_sample_question(question):
+    """Handle sample question processing."""
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": question})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(question)
+    
+    # Process the question immediately
+    if not st.session_state.backend_health:
+        error_msg = f"❌ Backend service is not available. Please make sure the backend server is running on {BACKEND_URL}"
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        with st.chat_message("assistant"):
+            st.error(error_msg)
+    else:
+        # Send message to backend (with reasoning, RAG, or regular chat)
+        if st.session_state.use_reasoning_chat:
+            # Use reasoning chat for step-by-step solutions
+            if st.session_state.use_streaming:
+                # Use streaming reasoning response with real-time display
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in send_streaming_reasoning_chat(question, st.session_state.conversation_id):
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "reasoning_used": chunk.get("reasoning_used", False),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+            else:
+                # Use regular reasoning response
+                with st.spinner("🧠 Thinking step by step..."):
+                    response_data = send_reasoning_chat(question, st.session_state.conversation_id, use_streaming=False)
+                    process_chat_response(response_data, question)
+        elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            # Check if advanced RAG is enabled
+            if st.session_state.use_advanced_rag:
+                # Use advanced RAG
+                with st.spinner("🚀 Thinking with Advanced RAG..."):
+                    response_data = send_advanced_rag_chat(question, st.session_state.conversation_id)
+                    process_chat_response(response_data, question)
+            else:
+                # Use basic RAG
+                if st.session_state.use_streaming:
+                    # Use streaming RAG response with real-time display
+                    with st.chat_message("assistant"):
+                        message_placeholder = st.empty()
+                        full_response = ""
+                        
+                        # Stream the response chunks
+                        for chunk in send_streaming_rag_chat(question, st.session_state.conversation_id):
+                            if isinstance(chunk, str):
+                                full_response += chunk
+                                message_placeholder.markdown(full_response + "▌")
+                            elif isinstance(chunk, dict):
+                                # This is the final response data
+                                if chunk.get("response", "").startswith("❌"):
+                                    error_msg = chunk["response"]
+                                    message_placeholder.error(error_msg)
+                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                    break
+                                else:
+                                    # Update conversation ID if provided
+                                    if chunk.get("conversation_id"):
+                                        st.session_state.conversation_id = chunk["conversation_id"]
+                                    
+                                    # Update the final message
+                                    final_response = chunk.get("response", full_response)
+                                    message_placeholder.markdown(final_response)
+                                    
+                                    # Add to chat history
+                                    message_data = {
+                                        "role": "assistant", 
+                                        "content": final_response,
+                                        "rag_context": chunk.get("rag_context", ""),
+                                        "has_context": chunk.get("has_context", False)
+                                    }
+                                    st.session_state.messages.append(message_data)
+                                    break
+                        
+                        # Refresh conversation list to include the new conversation
+                        st.session_state.conversations = get_conversations()
+                else:
+                    # Use regular non-streaming RAG response
+                    with st.spinner("Thinking with RAG..."):
+                        response_data = send_rag_chat(question, st.session_state.conversation_id)
+                        process_chat_response(response_data, question)
+        else:
+            # Use streaming or regular response based on setting
+            if st.session_state.use_reasoning_chat:
+                # Use reasoning chat
+                if st.session_state.use_streaming:
+                    # Use streaming reasoning response
+                    response_data = send_streaming_reasoning_chat(question, st.session_state.conversation_id)
+                else:
+                    # Use regular non-streaming reasoning response
+                    with st.spinner("Thinking with reasoning..."):
+                        response_data = send_reasoning_chat(question, st.session_state.conversation_id, use_streaming=False)
+            else:
+                # Use regular chat
+                if st.session_state.use_streaming:
+                    # Use streaming response
+                    response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=True)
+                else:
+                    # Use regular non-streaming response
+                    with st.spinner("Thinking..."):
+                        response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=False)
+            
+            # Handle streaming RAG responses differently since they're already displayed
+            if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+                # For streaming RAG, the response is already displayed in real-time
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Handle advanced RAG information
+                    if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
+                        strategies_used = response_data.get("strategies_used", [])
+                        results_count = response_data.get("results_count", 0)
+                        
+                        # Add advanced RAG info to the message
+                        advanced_info = f"\n\n🚀 **Advanced RAG Info:**\n"
+                        advanced_info += f"• Strategies used: {', '.join(strategies_used)}\n"
+                        advanced_info += f"• Results retrieved: {results_count}\n"
+                        
+                        if response_data.get("has_context"):
+                            advanced_info += "• Context-aware retrieval: ✅\n"
+                        else:
+                            advanced_info += "• Context-aware retrieval: ❌\n"
+                        
+                        # Add document references from results
+                        if response_data.get("results"):
+                            doc_references = []
+                            for i, result in enumerate(response_data["results"][:3]):  # Show first 3 results
+                                filename = result.get("filename", f"Document {i+1}")
+                                strategy = result.get("strategy", "unknown")
+                                score = result.get("relevance_score", 0)
+                                doc_references.append(f"{filename} ({strategy}, score: {score:.2f})")
+                            
+                            if doc_references:
+                                advanced_info += f"• Documents used: {', '.join(doc_references)}\n"
+                        
+                        message_data["content"] += advanced_info
+                        message_data["advanced_rag"] = True
+                        message_data["strategies_used"] = strategies_used
+                        message_data["results_count"] = results_count
+                    
+                    # For advanced RAG, document references are already included in the advanced info above
+                    # For basic RAG, check if backend provided RAG context directly
+                    if not st.session_state.use_advanced_rag and response_data.get("rag_context") and response_data.get("has_context") == True:
+                        message_data["rag_context"] = response_data["rag_context"]
+                        message_data["has_context"] = response_data["has_context"]
+                        # Add RAG reference to the message content
+                        message_data["content"] += f"\n\n📚 **RAG Reference:** {response_data.get('rag_context', '')}"
+                    elif not st.session_state.use_advanced_rag:
+                        # Try to extract RAG context from the content itself for basic RAG
+                        extracted_rag_context = extract_rag_context_from_content(response_data["response"])
+                        
+                        if extracted_rag_context:
+                            message_data["rag_context"] = extracted_rag_context
+                            message_data["has_context"] = True
+                            # Add RAG reference to the message content
+                            message_data["content"] += f"\n\n📚 **RAG Reference:** {extracted_rag_context}"
+                        else:
+                            # Add note if no RAG context was found
+                            message_data["content"] += f"\n\nℹ️ *No relevant documents found in RAG database.*"
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+            elif st.session_state.use_reasoning_chat and st.session_state.use_streaming:
+                # Handle streaming reasoning responses
+                # Create a placeholder for the assistant message
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in response_data:
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message (no reasoning info needed)
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "reasoning_used": chunk.get("reasoning_used", False),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+            else:
+                # Handle regular responses (non-streaming or non-RAG)
+                if response_data and not response_data["response"].startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Handle advanced RAG information for regular responses
+                    if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
+                        strategies_used = response_data.get("strategies_used", [])
+                        results_count = response_data.get("results_count", 0)
+                        
+                        # Add advanced RAG info to the message
+                        advanced_info = f"\n\n🚀 **Advanced RAG Info:**\n"
+                        advanced_info += f"• Strategies used: {', '.join(strategies_used)}\n"
+                        advanced_info += f"• Results retrieved: {results_count}\n"
+                        
+                        if response_data.get("has_context"):
+                            advanced_info += "• Context-aware retrieval: ✅\n"
+                        else:
+                            advanced_info += "• Context-aware retrieval: ❌\n"
+                        
+                        # Add document references from results
+                        if response_data.get("results"):
+                            doc_references = []
+                            for i, result in enumerate(response_data["results"][:3]):  # Show first 3 results
+                                filename = result.get("filename", f"Document {i+1}")
+                                strategy = result.get("strategy", "unknown")
+                                score = result.get("relevance_score", 0)
+                                doc_references.append(f"{filename} ({strategy}, score: {score:.2f})")
+                            
+                            if doc_references:
+                                advanced_info += f"• Documents used: {', '.join(doc_references)}\n"
+                        
+                        message_data["content"] += advanced_info
+                        message_data["advanced_rag"] = True
+                        message_data["strategies_used"] = strategies_used
+                        message_data["results_count"] = results_count
+                    
+                    # Add RAG context if available (for basic RAG)
+                    if not st.session_state.use_advanced_rag and response_data.get("rag_context") and response_data.get("has_context"):
+                        message_data["rag_context"] = response_data["rag_context"]
+                        message_data["has_context"] = response_data["has_context"]
+                    
+                    # Add reasoning metadata for regular responses (no display needed)
+                    if response_data.get("reasoning_used"):
+                        message_data["reasoning_used"] = True
+                        message_data["steps_count"] = response_data.get("steps_count")
+                        message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Display assistant response (if not already displayed via streaming)
+                    if not st.session_state.use_streaming:
+                        with st.chat_message("assistant"):
+                            st.markdown(response_data["response"])
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
 
 def display_chat_messages():
     """Display chat messages."""
@@ -899,6 +1374,37 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Reasoning System Section (Collapsible)
+        with st.expander("🧠 Reasoning System", expanded=False):
+            # Reasoning Chat Toggle (Always visible within the expander)
+            use_reasoning_chat = st.checkbox(
+                "Enable Step-by-Step Reasoning",
+                value=st.session_state.use_reasoning_chat,
+                help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
+            )
+            st.session_state.use_reasoning_chat = use_reasoning_chat
+            
+            if use_reasoning_chat:
+                st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
+                st.info("💡 Works best with mathematical, logical, and analytical questions")
+            else:
+                st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
+            
+            st.divider()
+            
+            if st.session_state.backend_health:
+                # Get reasoning health
+                reasoning_health = get_reasoning_health()
+                
+                if reasoning_health.get("status") == "healthy":
+                    st.success("✅ Reasoning System Available")
+                else:
+                    st.warning("⚠️ Reasoning System not available")
+                    if reasoning_health.get("error"):
+                        st.error(f"Error: {reasoning_health['error']}")
+            else:
+                st.warning("Backend not available for reasoning system")
         
         # RAG Section (Collapsible)
         with st.expander("📚 RAG System", expanded=False):
@@ -1019,8 +1525,6 @@ def main():
             else:
                 st.warning("Backend not available for Advanced RAG")
         
-
-        
         # MCP Tools Section (Collapsible)
         with st.expander("🛠️ MCP Tools", expanded=False):
             # Get MCP tools and health
@@ -1063,96 +1567,6 @@ def main():
                         st.rerun()
             else:
                 st.warning("Backend not available for MCP tools")
-        
-        # Reasoning System Section (Collapsible)
-        with st.expander("🧠 Reasoning System", expanded=False):
-            # Reasoning Chat Toggle (Always visible within the expander)
-            use_reasoning_chat = st.checkbox(
-                "Enable Step-by-Step Reasoning",
-                value=st.session_state.use_reasoning_chat,
-                help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
-            )
-            st.session_state.use_reasoning_chat = use_reasoning_chat
-            
-            if use_reasoning_chat:
-                st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
-                st.info("💡 Works best with mathematical, logical, and analytical questions")
-            else:
-                st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
-            
-            st.divider()
-            
-            if st.session_state.backend_health:
-                # Get reasoning health
-                reasoning_health = get_reasoning_health()
-                
-                if reasoning_health.get("status") == "healthy":
-                    st.success("✅ Reasoning System Available")
-                    st.info(f"Phase: {reasoning_health.get('phase', 'Unknown')}")
-                    
-                    # Show components
-                    components = reasoning_health.get("components", {})
-                    if components:
-                        st.markdown('<div class="section-header">Components</div>', unsafe_allow_html=True)
-                        for component_type, component_list in components.items():
-                            if isinstance(component_list, list):
-                                st.text(f"• {component_type}: {', '.join(component_list)}")
-                            else:
-                                st.text(f"• {component_type}: {component_list}")
-                    
-                    # Test workflow button
-                    if st.button("🧪 Test Complete Workflow"):
-                        with st.spinner("Testing reasoning workflow..."):
-                            test_result = test_reasoning_workflow("Solve 2x + 3 = 7", "json")
-                            if test_result.get("success"):
-                                st.success("✅ Workflow test successful!")
-                                st.json(test_result)
-                            else:
-                                st.error(f"❌ Workflow test failed: {test_result.get('error', 'Unknown error')}")
-                    
-                    # Individual component tests
-                    st.markdown('<div class="section-header">Component Tests</div>', unsafe_allow_html=True)
-                    
-                    # Problem parsing test
-                    if st.button("🔍 Test Problem Parsing"):
-                        with st.spinner("Testing problem parsing..."):
-                            parse_result = parse_problem("Calculate the area of a circle with radius 5")
-                            if parse_result.get("success"):
-                                st.success("✅ Problem parsing successful!")
-                                st.json(parse_result.get("data", {}))
-                            else:
-                                st.error(f"❌ Problem parsing failed: {parse_result.get('error', 'Unknown error')}")
-                    
-                    # Step parsing test
-                    if st.button("📝 Test Step Parsing"):
-                        with st.spinner("Testing step parsing..."):
-                            step_output = """
-                            Step 1: Identify the problem
-                            This is a mathematical problem involving area calculation.
-                            Confidence: 0.9
-                            
-                            Step 2: Apply the formula
-                            Area = π * r² = π * 5² = 25π
-                            Confidence: 0.95
-                            """
-                            parse_result = parse_steps(step_output)
-                            if parse_result.get("success"):
-                                st.success("✅ Step parsing successful!")
-                                st.json(parse_result.get("data", []))
-                            else:
-                                st.error(f"❌ Step parsing failed: {parse_result.get('error', 'Unknown error')}")
-                    
-                    # Refresh button
-                    if st.button("🔄 Refresh Reasoning Status"):
-                        st.session_state.reasoning_health = get_reasoning_health()
-                        st.rerun()
-                else:
-                    st.warning("⚠️ Reasoning System not available")
-                    if st.button("🔄 Check Reasoning Status"):
-                        st.session_state.reasoning_health = get_reasoning_health()
-                        st.rerun()
-            else:
-                st.warning("Backend not available for reasoning system")
         
         # Conversations Section (Collapsible)
         with st.expander("💬 Conversations", expanded=False):
@@ -1250,8 +1664,6 @@ def main():
                 st.markdown('<div class="section-header">Available Models</div>', unsafe_allow_html=True)
                 for model in st.session_state.available_models:
                     st.text(f"• {model}")
-        
-
     
     # Main chat interface
     display_welcome_message()
@@ -1260,7 +1672,15 @@ def main():
     display_chat_messages()
     
     # Chat input
-    if prompt := st.chat_input("Ask me anything..."):
+    prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
+    
+    # Handle sample question if selected (moved here to be part of the main chat flow)
+    if st.session_state.sample_question:
+        prompt = st.session_state.sample_question
+        st.session_state.sample_question = None  # Clear the sample question
+        st.session_state.chat_input_key += 1  # Force chat input refresh
+    
+    if prompt:
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
