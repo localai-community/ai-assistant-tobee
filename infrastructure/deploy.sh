@@ -81,13 +81,21 @@ FRONTEND_REPO_NAME="${PROJECT_NAME}-frontend"
 if aws ecr describe-repositories --repository-names "$BACKEND_REPO_NAME" --region "$AWS_REGION" &>/dev/null || aws ecr describe-repositories --repository-names "$FRONTEND_REPO_NAME" --region "$AWS_REGION" &>/dev/null; then
     if [ "$AUTO_APPROVE" = true ]; then
         echo -e "${YELLOW}Found existing ECR repositories. Auto-importing...${NC}"
-        ./import-ecr.sh --auto-approve
+        if ./import-ecr.sh --auto-approve; then
+            echo -e "${GREEN}Successfully imported ECR repositories${NC}"
+        else
+            echo -e "${YELLOW}Import failed, continuing with deployment (repositories will be created if needed)${NC}"
+        fi
     else
         echo -e "${YELLOW}Found existing ECR repositories. Do you want to import them into OpenTofu state? (y/N)${NC}"
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
             echo -e "${YELLOW}Running import script...${NC}"
-            ./import-ecr.sh
+            if ./import-ecr.sh; then
+                echo -e "${GREEN}Successfully imported ECR repositories${NC}"
+            else
+                echo -e "${YELLOW}Import failed, continuing with deployment (repositories will be created if needed)${NC}"
+            fi
         fi
     fi
 fi
