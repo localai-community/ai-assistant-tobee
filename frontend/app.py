@@ -110,6 +110,34 @@ def init_session_state():
         st.session_state.sample_question = None
     if "chat_input_key" not in st.session_state:
         st.session_state.chat_input_key = 0
+    # Add Phase 2 reasoning engine state variables
+    if "use_phase2_reasoning" not in st.session_state:
+        st.session_state.use_phase2_reasoning = False
+    if "selected_phase2_engine" not in st.session_state:
+        st.session_state.selected_phase2_engine = "auto"
+    if "phase2_engine_status" not in st.session_state:
+        st.session_state.phase2_engine_status = {}
+    if "phase2_sample_questions" not in st.session_state:
+        st.session_state.phase2_sample_questions = {
+            "mathematical": [
+                "Solve 2x + 3 = 7",
+                "Calculate the area of a circle with radius 5",
+                "Find the derivative of x² + 3x + 1",
+                "Solve the quadratic equation x² - 4x + 3 = 0"
+            ],
+            "logical": [
+                "All A are B. Some B are C. What can we conclude?",
+                "If P then Q. P is true. Is Q necessarily true?",
+                "Evaluate the logical expression: (A AND B) OR (NOT A)",
+                "Prove that if x > 0 and y > 0, then x + y > 0"
+            ],
+            "causal": [
+                "Does smoking cause lung cancer? Assume S = smoking, L = lung cancer",
+                "What is the causal effect of education on income?",
+                "Does exercise cause better health outcomes?",
+                "Analyze the causal relationship between diet and weight loss"
+            ]
+        }
 
 
 def check_backend_health() -> bool:
@@ -986,6 +1014,30 @@ def process_chat_response(response_data, question):
             message_data["steps_count"] = response_data.get("steps_count")
             message_data["validation_summary"] = response_data.get("validation_summary")
         
+        # Add Phase 2 engine information
+        if st.session_state.use_phase2_reasoning and response_data.get("engine_used"):
+            engine_used = response_data.get("engine_used", "unknown")
+            reasoning_type = response_data.get("reasoning_type", "unknown")
+            confidence = response_data.get("confidence", 0.0)
+            
+            # Add Phase 2 engine info to the message
+            phase2_info = f"\n\n🚀 **Phase 2 Engine Info:**\n"
+            phase2_info += f"• Engine used: {engine_used.title()}\n"
+            phase2_info += f"• Reasoning type: {reasoning_type.title()}\n"
+            phase2_info += f"• Confidence: {confidence:.2f}\n"
+            
+            if response_data.get("steps_count"):
+                phase2_info += f"• Steps generated: {response_data['steps_count']}\n"
+            
+            if response_data.get("validation_summary"):
+                phase2_info += f"• Validation: {response_data['validation_summary']}\n"
+            
+            message_data["content"] += phase2_info
+            message_data["phase2_engine"] = True
+            message_data["engine_used"] = engine_used
+            message_data["reasoning_type"] = reasoning_type
+            message_data["confidence"] = confidence
+        
         st.session_state.messages.append(message_data)
         
         # Refresh conversation list to include the new conversation
@@ -1312,6 +1364,30 @@ def handle_sample_question(question):
                         message_data["steps_count"] = response_data.get("steps_count")
                         message_data["validation_summary"] = response_data.get("validation_summary")
                     
+                    # Add Phase 2 engine information
+                    if st.session_state.use_phase2_reasoning and response_data.get("engine_used"):
+                        engine_used = response_data.get("engine_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 2 engine info to the message
+                        phase2_info = f"\n\n🚀 **Phase 2 Engine Info:**\n"
+                        phase2_info += f"• Engine used: {engine_used.title()}\n"
+                        phase2_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase2_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase2_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase2_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase2_info
+                        message_data["phase2_engine"] = True
+                        message_data["engine_used"] = engine_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
+                    
                     st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
@@ -1335,6 +1411,82 @@ def display_chat_messages():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
+def get_phase2_engine_status() -> Dict:
+    """Get Phase 2 reasoning engine status."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/phase2-reasoning/status", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "status": "unavailable",
+                    "engines": {
+                        "mathematical": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                        "logical": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                        "causal": {"status": "unknown", "error": f"HTTP {response.status_code}"}
+                    }
+                }
+    except Exception as e:
+        return {
+            "status": "unavailable",
+            "engines": {
+                "mathematical": {"status": "unknown", "error": str(e)},
+                "logical": {"status": "unknown", "error": str(e)},
+                "causal": {"status": "unknown", "error": str(e)}
+            }
+        }
+
+
+def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
+    """Send message to backend with Phase 2 reasoning engine."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_phase2_reasoning": True,
+                "engine_type": engine_type,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Use Phase 2 reasoning endpoint
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/phase2-reasoning/",
+                json=payload,
+                timeout=120.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "response": data.get("response", "No response from backend"),
+                    "conversation_id": data.get("conversation_id"),
+                    "engine_used": data.get("engine_used", "unknown"),
+                    "reasoning_type": data.get("reasoning_type", "unknown"),
+                    "steps_count": data.get("steps_count"),
+                    "confidence": data.get("confidence", 0.0),
+                    "validation_summary": data.get("validation_summary")
+                }
+            elif response.status_code == 503:
+                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
+            else:
+                return {"response": f"Backend error: {response.status_code}"}
+                    
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
 
 def main():
     """Main application function."""
@@ -1405,6 +1557,124 @@ def main():
                         st.error(f"Error: {reasoning_health['error']}")
             else:
                 st.warning("Backend not available for reasoning system")
+        
+        # Phase 2 Reasoning Engines Section (Collapsible)
+        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=False):
+            st.markdown('<div class="section-header">Engine Selection</div>', unsafe_allow_html=True)
+            
+            # Phase 2 Reasoning Toggle
+            use_phase2_reasoning = st.checkbox(
+                "Enable Phase 2 Reasoning Engines",
+                value=st.session_state.use_phase2_reasoning,
+                help="When enabled, uses specialized reasoning engines for mathematical, logical, and causal problems"
+            )
+            st.session_state.use_phase2_reasoning = use_phase2_reasoning
+            
+            if use_phase2_reasoning:
+                st.success("✅ Phase 2 engines enabled - specialized reasoning for complex problems")
+                
+                # Engine Selection
+                selected_engine = st.selectbox(
+                    "Select Reasoning Engine",
+                    options=[
+                        ("auto", "🔄 Auto-detect (Recommended)"),
+                        ("mathematical", "🔢 Mathematical Engine"),
+                        ("logical", "🧮 Logical Engine"),
+                        ("causal", "🔗 Causal Engine")
+                    ],
+                    format_func=lambda x: x[1],
+                    index=0,
+                    key="phase2_engine_select"
+                )
+                st.session_state.selected_phase2_engine = selected_engine[0]
+                
+                st.info(f"💡 Selected: {selected_engine[1]}")
+                
+                # Engine Status
+                if st.session_state.backend_health:
+                    st.markdown('<div class="section-header">Engine Status</div>', unsafe_allow_html=True)
+                    
+                    # Get Phase 2 engine status
+                    phase2_status = get_phase2_engine_status()
+                    
+                    if phase2_status.get("status") == "available":
+                        engines = phase2_status.get("engines", {})
+                        
+                        # Mathematical Engine Status
+                        math_status = engines.get("mathematical", {})
+                        if math_status.get("status") == "available":
+                            st.success("✅ Mathematical Engine: Available")
+                            if math_status.get("features"):
+                                st.caption(f"Features: {', '.join(math_status['features'])}")
+                        else:
+                            st.warning("⚠️ Mathematical Engine: Limited")
+                            if math_status.get("error"):
+                                st.caption(f"Error: {math_status['error']}")
+                        
+                        # Logical Engine Status
+                        logic_status = engines.get("logical", {})
+                        if logic_status.get("status") == "available":
+                            st.success("✅ Logical Engine: Available")
+                            if logic_status.get("features"):
+                                st.caption(f"Features: {', '.join(logic_status['features'])}")
+                        else:
+                            st.warning("⚠️ Logical Engine: Limited")
+                            if logic_status.get("error"):
+                                st.caption(f"Error: {logic_status['error']}")
+                        
+                        # Causal Engine Status
+                        causal_status = engines.get("causal", {})
+                        if causal_status.get("status") == "available":
+                            st.success("✅ Causal Engine: Available")
+                            if causal_status.get("features"):
+                                st.caption(f"Features: {', '.join(causal_status['features'])}")
+                        else:
+                            st.warning("⚠️ Causal Engine: Limited")
+                            if causal_status.get("error"):
+                                st.caption(f"Error: {causal_status['error']}")
+                        
+                        # Refresh button
+                        if st.button("🔄 Refresh Engine Status", key="refresh_phase2_status"):
+                            st.session_state.phase2_engine_status = get_phase2_engine_status()
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ Phase 2 engines not available")
+                        if phase2_status.get("error"):
+                            st.error(f"Error: {phase2_status['error']}")
+                else:
+                    st.warning("Backend not available for Phase 2 engines")
+                
+                # Sample Questions
+                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
+                
+                # Mathematical Sample Questions
+                st.markdown("**🔢 Mathematical Problems:**")
+                for i, question in enumerate(st.session_state.phase2_sample_questions["mathematical"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase2_math_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Logical Sample Questions
+                st.markdown("**🧮 Logical Problems:**")
+                for i, question in enumerate(st.session_state.phase2_sample_questions["logical"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase2_logic_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Causal Sample Questions
+                st.markdown("**🔗 Causal Problems:**")
+                for i, question in enumerate(st.session_state.phase2_sample_questions["causal"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase2_causal_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                st.divider()
+                st.info("💡 Phase 2 engines provide specialized reasoning for complex mathematical, logical, and causal problems with step-by-step solutions.")
+            else:
+                st.info("💡 Enable Phase 2 engines for specialized reasoning capabilities")
         
         # RAG Section (Collapsible)
         with st.expander("📚 RAG System", expanded=False):
@@ -1695,8 +1965,27 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
-            # Send message to backend (with reasoning, RAG, or regular chat)
-            if st.session_state.use_reasoning_chat:
+            # Send message to backend (with Phase 2 reasoning, reasoning, RAG, or regular chat)
+            if st.session_state.use_phase2_reasoning:
+                # Use Phase 2 reasoning engines for specialized problem solving
+                if st.session_state.use_streaming:
+                    # Use streaming Phase 2 reasoning response
+                    with st.spinner("🚀 Using Phase 2 reasoning engine..."):
+                        response_data = send_phase2_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase2_engine, 
+                            st.session_state.conversation_id
+                        )
+                else:
+                    # Use regular Phase 2 reasoning response
+                    with st.spinner("🚀 Using Phase 2 reasoning engine..."):
+                        response_data = send_phase2_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase2_engine, 
+                            st.session_state.conversation_id, 
+                            use_streaming=False
+                        )
+            elif st.session_state.use_reasoning_chat:
                 # Use reasoning chat for step-by-step solutions
                 if st.session_state.use_streaming:
                     # Use streaming reasoning response
@@ -1914,6 +2203,30 @@ def main():
                         message_data["reasoning_used"] = True
                         message_data["steps_count"] = response_data.get("steps_count")
                         message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    # Add Phase 2 engine information
+                    if st.session_state.use_phase2_reasoning and response_data.get("engine_used"):
+                        engine_used = response_data.get("engine_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 2 engine info to the message
+                        phase2_info = f"\n\n🚀 **Phase 2 Engine Info:**\n"
+                        phase2_info += f"• Engine used: {engine_used.title()}\n"
+                        phase2_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase2_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase2_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase2_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase2_info
+                        message_data["phase2_engine"] = True
+                        message_data["engine_used"] = engine_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
                     
                     st.session_state.messages.append(message_data)
                     
