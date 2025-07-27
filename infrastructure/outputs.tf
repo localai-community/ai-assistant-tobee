@@ -34,18 +34,13 @@ output "frontend_lambda_arn" {
 }
 
 output "vpc_id" {
-  description = "ID of the VPC"
-  value       = aws_vpc.main.id
+  description = "ID of the default VPC"
+  value       = data.aws_vpc.default.id
 }
 
-output "private_subnet_ids" {
-  description = "IDs of the private subnets"
-  value       = aws_subnet.private[*].id
-}
-
-output "public_subnet_ids" {
-  description = "IDs of the public subnets"
-  value       = aws_subnet.public[*].id
+output "subnet_ids" {
+  description = "IDs of the default VPC subnets"
+  value       = data.aws_subnets.default.ids
 }
 
 output "backend_ecr_repository_url" {
