@@ -373,37 +373,40 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
             if conversation_id:
                 payload["conversation_id"] = conversation_id
             
-            # Use streaming endpoint
-            response = client.post(
+            # Use streaming endpoint with proper httpx streaming
+            with client.stream(
+                "POST",
                 f"{BACKEND_URL}/api/v1/reasoning-chat/stream",
                 json=payload,
-                timeout=120.0,
-                stream=True
-            )
-            
-            if response.status_code == 200:
-                # Handle streaming response
-                full_response = ""
-                for line in response.iter_lines():
-                    if line:
-                        line_str = line.decode('utf-8')
-                        if line_str.startswith('data: '):
-                            try:
-                                data = json.loads(line_str[6:])
-                                chunk = data.get('content', '')
+                timeout=120.0
+            ) as response:
+                if response.status_code == 200:
+                    # Handle streaming response
+                    full_response = ""
+                    for chunk in response.iter_text():
+                        if chunk:
+                            # Handle different response formats
+                            if chunk.startswith('data: '):
+                                try:
+                                    data = json.loads(chunk[6:])  # Remove 'data: ' prefix
+                                    content = data.get('content', '')
+                                    full_response += content
+                                    yield content
+                                except json.JSONDecodeError:
+                                    continue
+                            else:
+                                # Direct text response
                                 full_response += chunk
                                 yield chunk
-                            except json.JSONDecodeError:
-                                continue
-                
-                # Return final response data
-                yield {
-                    "response": full_response,
-                    "conversation_id": conversation_id,
-                    "reasoning_used": True
-                }
-            else:
-                yield {"response": f"Backend error: {response.status_code}"}
+                    
+                    # Return final response data
+                    yield {
+                        "response": full_response,
+                        "conversation_id": conversation_id,
+                        "reasoning_used": True
+                    }
+                else:
+                    yield {"response": f"Backend error: {response.status_code}"}
                     
     except httpx.TimeoutException:
         yield {"response": "Request timed out. Please try again."}
@@ -1299,13 +1302,24 @@ def main():
                             response_data = send_rag_chat(prompt, st.session_state.conversation_id)
             else:
                 # Use streaming or regular response based on setting
-                if st.session_state.use_streaming:
-                    # Use streaming response
-                    response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
+                if st.session_state.use_reasoning_chat:
+                    # Use reasoning chat
+                    if st.session_state.use_streaming:
+                        # Use streaming reasoning response
+                        response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
+                    else:
+                        # Use regular non-streaming reasoning response
+                        with st.spinner("Thinking with reasoning..."):
+                            response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
                 else:
-                    # Use regular non-streaming response
-                    with st.spinner("Thinking..."):
-                        response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
+                    # Use regular chat
+                    if st.session_state.use_streaming:
+                        # Use streaming response
+                        response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
+                    else:
+                        # Use regular non-streaming response
+                        with st.spinner("Thinking..."):
+                            response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
             
             # Handle streaming RAG responses differently since they're already displayed
             if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:

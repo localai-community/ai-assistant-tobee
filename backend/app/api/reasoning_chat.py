@@ -277,7 +277,12 @@ def create_reasoning_prompt(problem: str, parsed_problem: Dict[str, Any]) -> str
     problem_type = parsed_problem.get("problem_type", "general")
     
     if problem_type == "mathematical":
-        return f"""Please solve this mathematical problem step by step:
+        # Check if it's an equation solving problem or other mathematical problem
+        equation_keywords = ["solve", "equation", "=", "find x", "solve for x", "value of x"]
+        is_equation_problem = any(keyword in problem.lower() for keyword in equation_keywords)
+        
+        if is_equation_problem:
+            return f"""Please solve this mathematical problem step by step:
 
 Problem: {problem}
 
@@ -304,8 +309,42 @@ Please provide your solution in the following EXACT format:
 **Final Answer:** [Your final answer]
 
 EXACT FORMATTING RULES:
-1. Use "**Step 1:**" (bold) + rest of title (normal text)
-2. Use "**Final Answer:**" (bold) + answer (normal text)
+1. Use "**Step 1:**" (with bold)
+2. Use "**Final Answer:**" (with bold)
+3. Show clear step-by-step work with proper line breaks
+4. Include explanations for each step
+5. Separate equations and calculations from text with line breaks
+6. Use clear, readable formatting"""
+        else:
+            return f"""Please solve this mathematical problem step by step:
+
+Problem: {problem}
+
+Please provide your solution in the following EXACT format:
+
+**Step 1:** [Brief description of what you're doing]
+
+[Explanation of why you're doing this step]
+
+[Show your work and calculations with clear line breaks]
+
+[Result of this step]
+
+**Step 2:** [Brief description of what you're doing]
+
+[Explanation of why you're doing this step]
+
+[Show your work and calculations with clear line breaks]
+
+[Result of this step]
+
+[Continue with more steps as needed]
+
+**Final Answer:** [Your final answer]
+
+EXACT FORMATTING RULES:
+1. Use "**Step 1:**" (with bold)
+2. Use "**Final Answer:**" (with bold)
 3. Show clear step-by-step work with proper line breaks
 4. Include explanations for each step
 5. Separate equations and calculations from text with line breaks
@@ -318,13 +357,13 @@ Problem: {problem}
 
 Please provide your solution in the following structured format:
 
-**Step 1: [Brief description of what you're analyzing]**
+**Step 1:** [Brief description of what you're analyzing]
 [Explanation of your logical reasoning]
 [Show the logical statements/conditions]
 [Apply logical rules]
 [Show the result]
 
-**Step 2: [Brief description of what you're analyzing]**
+**Step 2:** [Brief description of what you're analyzing]
 [Explanation of your logical reasoning]
 [Show the logical statements/conditions]
 [Apply logical rules]
@@ -343,13 +382,13 @@ Question: {problem}
 
 Please provide your answer in the following structured format:
 
-**Step 1: [Brief description of what you're thinking about]**
+**Step 1:** [Brief description of what you're thinking about]
 [Explanation of your reasoning]
 [Show the key information/facts]
 [Apply your analysis]
 [Show the result]
 
-**Step 2: [Brief description of what you're thinking about]**
+**Step 2:** [Brief description of what you're thinking about]
 [Explanation of your reasoning]
 [Show the key information/facts]
 [Apply your analysis]
