@@ -15,7 +15,7 @@ resource "aws_lambda_function" "backend_container" {
   }
 
   vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
+    subnet_ids         = data.aws_subnets.default.ids
     security_group_ids = [aws_security_group.lambda.id]
   }
 
