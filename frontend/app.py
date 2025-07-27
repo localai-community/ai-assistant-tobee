@@ -1441,6 +1441,14 @@ def get_phase2_engine_status() -> Dict:
 
 def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
     """Send message to backend with Phase 2 reasoning engine."""
+    if use_streaming:
+        # Use streaming version
+        for response in send_streaming_phase2_reasoning_chat(message, engine_type, conversation_id):
+            if isinstance(response, dict):
+                return response
+        return {"response": "❌ Streaming failed"}
+    
+    # Non-streaming version
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
@@ -1487,6 +1495,134 @@ def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversa
         return {"response": "Request timed out. Please try again."}
     except Exception as e:
         return {"response": f"Communication error: {str(e)}"}
+
+def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None):
+    """Send message to backend with Phase 2 reasoning engine using streaming."""
+    st.info("🚀 Starting Phase 2 reasoning streaming...")
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_phase2_reasoning": True,
+                "engine_type": engine_type,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Create assistant message container for streaming
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                engine_used = "auto"
+                reasoning_type = "unknown"
+                steps_count = 0
+                confidence = 0.0
+                validation_summary = None
+                
+                # Stream the response
+                with client.stream(
+                    "POST",
+                    f"{BACKEND_URL}/api/v1/phase2-reasoning/stream",
+                    json=payload,
+                    timeout=300.0,  # Increased timeout for reasoning processing
+                    headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
+                ) as response:
+                    if response.status_code == 200:
+                        # Process Server-Sent Events
+                        for line in response.iter_lines():
+                            if line:
+                                # httpx.iter_lines() returns strings, not bytes
+                                if line.startswith('data: '):
+                                    data_str = line[6:]  # Remove 'data: ' prefix
+                                    try:
+                                        data = json.loads(data_str)
+                                        
+                                        if data.get("error"):
+                                            return {"response": f"Error: {data.get('error', 'Unknown error')}"}
+                                        
+                                        # Handle different response types
+                                        if "content" in data:
+                                            chunk = data["content"]
+                                            full_response += chunk
+                                            message_placeholder.markdown(full_response + "▌")
+                                        
+                                        # Update metadata
+                                        if "engine_used" in data:
+                                            engine_used = data["engine_used"]
+                                        if "reasoning_type" in data:
+                                            reasoning_type = data["reasoning_type"]
+                                        if "steps_count" in data:
+                                            steps_count = data["steps_count"]
+                                        if "confidence" in data:
+                                            confidence = data["confidence"]
+                                        if "validation_summary" in data:
+                                            validation_summary = data["validation_summary"]
+                                        
+                                        # Check if this is the final message
+                                        if data.get("final"):
+                                            message_placeholder.markdown(full_response)
+                                            
+                                            # Add Phase 2 engine info to the response
+                                            phase2_info = f"\n\n🚀 **Phase 2 Engine Info:**\n"
+                                            phase2_info += f"• Engine used: {engine_used.title()}\n"
+                                            phase2_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                                            phase2_info += f"• Confidence: {confidence:.2f}\n"
+                                            phase2_info += f"• Steps generated: {steps_count}\n"
+                                            
+                                            if validation_summary:
+                                                phase2_info += f"• Validation: {validation_summary}\n"
+                                            
+                                            full_response += phase2_info
+                                            message_placeholder.markdown(full_response)
+                                            
+                                            return {
+                                                "response": full_response,
+                                                "conversation_id": data.get("conversation_id") or conversation_id,
+                                                "engine_used": engine_used,
+                                                "reasoning_type": reasoning_type,
+                                                "steps_count": steps_count,
+                                                "confidence": confidence,
+                                                "validation_summary": validation_summary
+                                            }
+                                            
+                                    except json.JSONDecodeError as e:
+                                        continue
+                        
+                        # If we get here without returning, the streaming ended without content
+                        if not full_response:
+                            return {"response": "No response generated. Please try again."}
+                        else:
+                            # If we have content but no final message, return what we have
+                            return {
+                                "response": full_response,
+                                "conversation_id": conversation_id,
+                                "engine_used": engine_used,
+                                "reasoning_type": reasoning_type,
+                                "steps_count": steps_count,
+                                "confidence": confidence,
+                                "validation_summary": validation_summary
+                            }
+                    else:
+                        return {"response": f"Backend error: {response.status_code}"}
+                        
+    except httpx.TimeoutException:
+        st.error("⏰ Phase 2 reasoning streaming timed out")
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        st.error(f"💥 Phase 2 reasoning streaming error: {str(e)}")
+        return {"response": f"Communication error: {str(e)}"}
+    
+    st.error("🔚 Phase 2 reasoning streaming function completed without returning anything")
+    return None
 
 def main():
     """Main application function."""
@@ -1970,12 +2106,11 @@ def main():
                 # Use Phase 2 reasoning engines for specialized problem solving
                 if st.session_state.use_streaming:
                     # Use streaming Phase 2 reasoning response
-                    with st.spinner("🚀 Using Phase 2 reasoning engine..."):
-                        response_data = send_phase2_reasoning_chat(
-                            prompt, 
-                            st.session_state.selected_phase2_engine, 
-                            st.session_state.conversation_id
-                        )
+                    response_data = send_streaming_phase2_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_phase2_engine, 
+                        st.session_state.conversation_id
+                    )
                 else:
                     # Use regular Phase 2 reasoning response
                     with st.spinner("🚀 Using Phase 2 reasoning engine..."):
@@ -2032,8 +2167,39 @@ def main():
                         with st.spinner("Thinking..."):
                             response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
             
-            # Handle streaming RAG responses differently since they're already displayed
-            if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            # Handle streaming responses differently since they're already displayed
+            if st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+                # For streaming Phase 2 reasoning, the response is already displayed in real-time
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add Phase 2 engine information
+                    if response_data.get("engine_used"):
+                        message_data["phase2_engine"] = True
+                        message_data["engine_used"] = response_data.get("engine_used", "unknown")
+                        message_data["reasoning_type"] = response_data.get("reasoning_type", "unknown")
+                        message_data["confidence"] = response_data.get("confidence", 0.0)
+                        message_data["steps_count"] = response_data.get("steps_count", 0)
+                        message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+            elif st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided

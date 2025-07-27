@@ -235,19 +235,135 @@ async def phase2_status():
 
 @router.get("/health")
 async def phase2_health():
-    """Health check for Phase 2 reasoning engines."""
-    return {
-        "status": "healthy",
-        "service": "phase2-reasoning",
-        "engines": {
-            "mathematical": "MathematicalReasoningEngine",
-            "logical": "LogicalReasoningEngine",
-            "causal": "CausalReasoningEngine"
-        },
-        "features": {
-            "auto_detection": "enabled",
-            "step_by_step_reasoning": "enabled",
-            "confidence_scoring": "enabled",
-            "validation": "enabled"
+    """
+    Health check endpoint for Phase 2 reasoning engines.
+    
+    Returns:
+        Dict: Health status of Phase 2 reasoning engines
+    """
+    try:
+        # Test each engine
+        test_results = {}
+        
+        # Test mathematical engine
+        try:
+            math_result = mathematical_engine.can_handle("Solve 2x + 3 = 7")
+            test_results["mathematical"] = "available" if math_result else "error"
+        except Exception as e:
+            test_results["mathematical"] = f"error: {str(e)}"
+        
+        # Test logical engine
+        try:
+            logic_result = logical_engine.can_handle("If all A are B and all B are C, then all A are C")
+            test_results["logical"] = "available" if logic_result else "error"
+        except Exception as e:
+            test_results["logical"] = f"error: {str(e)}"
+        
+        # Test causal engine
+        try:
+            causal_result = causal_engine.can_handle("What is the causal effect of X on Y?")
+            test_results["causal"] = "available" if causal_result else "error"
+        except Exception as e:
+            test_results["causal"] = f"error: {str(e)}"
+        
+        return {
+            "status": "healthy" if all(status == "available" for status in test_results.values()) else "degraded",
+            "engines": test_results,
+            "service": "phase2-reasoning"
         }
-    } 
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "service": "phase2-reasoning"
+        }
+
+
+@router.post("/stream")
+async def phase2_reasoning_stream(request: Phase2ReasoningRequest, db: Session = Depends(get_db)):
+    """
+    Send a message and get a streaming response using Phase 2 reasoning engines.
+    
+    Args:
+        request: Phase 2 reasoning request containing message and engine selection
+        db: Database session
+        
+    Returns:
+        StreamingResponse: Streaming AI response with engine-specific reasoning
+    """
+    try:
+        # Create chat service with database
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        # Check if Ollama is available
+        if not await chat_service.check_ollama_health():
+            raise HTTPException(
+                status_code=503,
+                detail="Ollama service is not available. Please make sure Ollama is running."
+            )
+        
+        async def generate_stream():
+            try:
+                # Determine which engine to use
+                engine_used, reasoning_result = await select_and_use_engine(
+                    request.message, 
+                    request.engine_type,
+                    chat_service,
+                    request
+                )
+                
+                # Generate enhanced response using the reasoning result
+                enhanced_response = await generate_enhanced_response(
+                    chat_service,
+                    request.message,
+                    reasoning_result,
+                    request
+                )
+                
+                # Stream the response in chunks
+                chunk_size = 50  # Characters per chunk
+                for i in range(0, len(enhanced_response), chunk_size):
+                    chunk = enhanced_response[i:i + chunk_size]
+                    data = {
+                        "content": chunk,
+                        "engine_used": engine_used,
+                        "reasoning_type": reasoning_result.get("reasoning_type", "unknown"),
+                        "steps_count": reasoning_result.get("steps_count", 0),
+                        "confidence": reasoning_result.get("confidence", 0.0),
+                        "validation_summary": reasoning_result.get("validation_summary")
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+                
+                # Send final metadata
+                final_data = {
+                    "content": "",
+                    "conversation_id": reasoning_result.get("conversation_id") or "phase2-reasoning",
+                    "engine_used": engine_used,
+                    "reasoning_type": reasoning_result.get("reasoning_type", "unknown"),
+                    "steps_count": reasoning_result.get("steps_count", 0),
+                    "confidence": reasoning_result.get("confidence", 0.0),
+                    "validation_summary": reasoning_result.get("validation_summary"),
+                    "final": True
+                }
+                yield f"data: {json.dumps(final_data)}\n\n"
+                
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                error_data = {"content": f"❌ Error: {str(e)}", "error": True}
+                yield f"data: {json.dumps(error_data)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Phase 2 streaming request failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
