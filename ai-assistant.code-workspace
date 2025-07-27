@@ -1,0 +1,36 @@
+{
+    "folders": [
+        {
+            "name": "Backend",
+            "path": "./backend"
+        },
+        {
+            "name": "Frontend", 
+            "path": "./frontend"
+        },
+        {
+            "name": "Root",
+            "path": "."
+        }
+    ],
+    "settings": {
+        "python.defaultInterpreterPath": "./backend/venv/bin/python3",
+        "python.terminal.activateEnvironment": true,
+        "python.analysis.extraPaths": [
+            "./backend/app"
+        ],
+        "[python]": {
+            "editor.defaultFormatter": "ms-python.python"
+        },
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black"
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.black-formatter",
+            "ms-python.pylint"
+        ]
+    }
+} 
