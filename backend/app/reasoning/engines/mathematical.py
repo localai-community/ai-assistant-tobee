@@ -17,7 +17,7 @@ from enum import Enum
 
 try:
     import sympy as sp
-    from sympy import symbols, solve, diff, integrate, simplify, expand, factor
+    from sympy import symbols, solve, diff, integrate, simplify, expand, factor, sympify
     from sympy.geometry import Point, Line, Circle, Triangle
     from sympy.solvers import solve_linear_system
     SYMPY_AVAILABLE = True
