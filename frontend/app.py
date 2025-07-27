@@ -89,6 +89,8 @@ def init_session_state():
         st.session_state.use_streaming = True
     if "advanced_rag_strategies" not in st.session_state:
         st.session_state.advanced_rag_strategies = []
+    if "use_reasoning_chat" not in st.session_state:
+        st.session_state.use_reasoning_chat = False
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -302,6 +304,111 @@ def test_reasoning_workflow(problem_statement: str, format_type: str = "json") -
                 return {"success": False, "error": f"HTTP {response.status_code}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def send_reasoning_chat(message: str, conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
+    """Send message to backend with reasoning enhancement."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_reasoning": True,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Use regular endpoint (streaming will be handled separately)
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/reasoning-chat/",
+                json=payload,
+                timeout=120.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "response": data.get("response", "No response from backend"),
+                    "conversation_id": data.get("conversation_id"),
+                    "reasoning_used": data.get("reasoning_used", False),
+                    "steps_count": data.get("steps_count"),
+                    "validation_summary": data.get("validation_summary")
+                }
+            elif response.status_code == 503:
+                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
+            else:
+                return {"response": f"Backend error: {response.status_code}"}
+                    
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
+
+
+def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] = None):
+    """Send message to backend with reasoning enhancement using streaming."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_reasoning": True,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Use streaming endpoint
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/reasoning-chat/stream",
+                json=payload,
+                timeout=120.0,
+                stream=True
+            )
+            
+            if response.status_code == 200:
+                # Handle streaming response
+                full_response = ""
+                for line in response.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            try:
+                                data = json.loads(line_str[6:])
+                                chunk = data.get('content', '')
+                                full_response += chunk
+                                yield chunk
+                            except json.JSONDecodeError:
+                                continue
+                
+                # Return final response data
+                yield {
+                    "response": full_response,
+                    "conversation_id": conversation_id,
+                    "reasoning_used": True
+                }
+            else:
+                yield {"response": f"Backend error: {response.status_code}"}
+                    
+    except httpx.TimeoutException:
+        yield {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        yield {"response": f"Communication error: {str(e)}"}
 
 def call_mcp_tool(tool_name: str, arguments: Dict) -> Dict:
     """Call an MCP tool."""
@@ -909,6 +1016,22 @@ def main():
             else:
                 st.warning("Backend not available for Advanced RAG")
         
+        # Reasoning Chat Section (Always Visible)
+        st.markdown('<div class="section-header">🧠 Reasoning Chat</div>', unsafe_allow_html=True)
+        
+        use_reasoning_chat = st.checkbox(
+            "Enable Step-by-Step Reasoning",
+            value=st.session_state.use_reasoning_chat,
+            help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
+        )
+        st.session_state.use_reasoning_chat = use_reasoning_chat
+        
+        if use_reasoning_chat:
+            st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
+            st.info("💡 Works best with mathematical, logical, and analytical questions")
+        else:
+            st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
+        
         # MCP Tools Section (Collapsible)
         with st.expander("🛠️ MCP Tools", expanded=False):
             # Get MCP tools and health
@@ -1147,8 +1270,18 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
-            # Send message to backend (with or without RAG)
-            if st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            # Send message to backend (with reasoning, RAG, or regular chat)
+            if st.session_state.use_reasoning_chat:
+                # Use reasoning chat for step-by-step solutions
+                if st.session_state.use_streaming:
+                    # Use streaming reasoning response
+                    with st.spinner("🧠 Thinking step by step..."):
+                        response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
+                else:
+                    # Use regular reasoning response
+                    with st.spinner("🧠 Thinking step by step..."):
+                        response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
+            elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # Check if advanced RAG is enabled
                 if st.session_state.use_advanced_rag:
                     # Use advanced RAG
@@ -1249,6 +1382,50 @@ def main():
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
+            elif st.session_state.use_reasoning_chat and st.session_state.use_streaming:
+                # Handle streaming reasoning responses
+                # Create a placeholder for the assistant message
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in response_data:
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message (no reasoning info needed)
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "reasoning_used": chunk.get("reasoning_used", False),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
             else:
                 # Handle regular responses (non-streaming or non-RAG)
                 if response_data and not response_data["response"].startswith("❌"):
@@ -1295,6 +1472,12 @@ def main():
                     if not st.session_state.use_advanced_rag and response_data.get("rag_context") and response_data.get("has_context"):
                         message_data["rag_context"] = response_data["rag_context"]
                         message_data["has_context"] = response_data["has_context"]
+                    
+                    # Add reasoning metadata for regular responses (no display needed)
+                    if response_data.get("reasoning_used"):
+                        message_data["reasoning_used"] = True
+                        message_data["steps_count"] = response_data.get("steps_count")
+                        message_data["validation_summary"] = response_data.get("validation_summary")
                     
                     st.session_state.messages.append(message_data)
                     

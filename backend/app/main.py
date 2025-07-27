@@ -10,6 +10,7 @@ from app.api.chat import router as chat_router
 from app.api.rag import router as rag_router
 from app.api.advanced_rag import router as advanced_rag_router
 from app.api.reasoning import router as reasoning_router
+from app.api.reasoning_chat import router as reasoning_chat_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -57,6 +58,7 @@ app.include_router(chat_router)
 app.include_router(rag_router)
 app.include_router(advanced_rag_router)
 app.include_router(reasoning_router)
+app.include_router(reasoning_chat_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():
@@ -86,7 +88,8 @@ async def api_status():
             "rag": "enabled",
             "advanced_rag": "enabled",
             "mcp": "enabled",
-            "reasoning": "enabled"
+            "reasoning": "enabled",
+            "reasoning_chat": "enabled"
         }
     )
 
