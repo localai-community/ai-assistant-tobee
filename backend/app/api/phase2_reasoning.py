@@ -92,7 +92,8 @@ async def phase2_reasoning_chat(request: Phase2ReasoningRequest, db: Session = D
         # Create response with engine information
         response = Phase2ReasoningResponse(
             response=enhanced_response,
-            conversation_id=reasoning_result.get("conversation_id"),
+            model=request.model,
+            conversation_id=reasoning_result.get("conversation_id") or "phase2-reasoning",
             engine_used=engine_used,
             reasoning_type=reasoning_result.get("reasoning_type", "unknown"),
             steps_count=reasoning_result.get("steps_count", 0),
@@ -147,7 +148,7 @@ async def select_and_use_engine(
         "reasoning_type": reasoning_result.reasoning_type.value,
         "final_answer": reasoning_result.final_answer,
         "confidence": reasoning_result.confidence,
-        "steps": [step.__dict__ for step in reasoning_result.steps],
+        "steps": [step.to_dict() for step in reasoning_result.steps],
         "steps_count": len(reasoning_result.steps)
     }
     

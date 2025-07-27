@@ -467,13 +467,18 @@ class MathematicalReasoningEngine(BaseReasoner):
         return info
     
     def _extract_final_answer(self, steps: List[ReasoningStep]) -> str:
-        """Extract final answer from reasoning steps."""
+        """Extract the final answer from reasoning steps."""
         for step in reversed(steps):
-            if step.status == StepStatus.COMPLETED and step.content:
-                # Look for solution patterns in the content
-                if 'solution:' in step.content.lower() or 'answer:' in step.content.lower():
-                    return step.content
-        return "Solution completed"
+            if step.status == StepStatus.COMPLETED and step.reasoning:
+                if 'solution:' in step.reasoning.lower() or 'answer:' in step.reasoning.lower():
+                    return step.reasoning
+        
+        # Fallback to the last completed step
+        for step in reversed(steps):
+            if step.status == StepStatus.COMPLETED and step.reasoning:
+                return step.reasoning
+        
+        return "No final answer found"
     
     def _create_error_result(self, problem_statement: str, error_message: str) -> ReasoningResult:
         """Create an error result when reasoning fails."""
