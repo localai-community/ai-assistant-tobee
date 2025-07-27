@@ -3,6 +3,11 @@ Reasoning System Module
 
 This module provides a comprehensive step-by-step reasoning system with support for
 multiple reasoning types, validation, and various output formats.
+
+Phase 2: Basic Reasoning Engines
+- Mathematical Reasoning Engine
+- Logical Reasoning Engine  
+- Causal Reasoning Engine
 """
 
 from .core.base import (
@@ -48,6 +53,13 @@ from .utils.formatters import (
     FormatConfig
 )
 
+# Phase 2: Basic Reasoning Engines
+from .engines import (
+    MathematicalReasoningEngine,
+    LogicalReasoningEngine,
+    CausalReasoningEngine
+)
+
 __version__ = "1.0.0"
 
 __all__ = [
@@ -88,5 +100,10 @@ __all__ = [
     "FormatterFactory",
     "FormatConverter",
     "OutputFormat",
-    "FormatConfig"
+    "FormatConfig",
+    
+    # Phase 2: Basic Reasoning Engines
+    "MathematicalReasoningEngine",
+    "LogicalReasoningEngine",
+    "CausalReasoningEngine"
 ]
