@@ -1,3 +1,47 @@
+# Docker image build and push resources
+resource "null_resource" "backend_image" {
+  triggers = {
+    dockerfile_hash = filemd5("${path.module}/Dockerfile.backend")
+    source_hash     = filemd5("${path.root}/backend/requirements.txt")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      # Login to ECR
+      aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com
+      
+      # Build and push backend image
+      docker build -f ${path.module}/Dockerfile.backend -t ${aws_ecr_repository.backend.repository_url}:latest ${path.root}
+      docker push ${aws_ecr_repository.backend.repository_url}:latest
+    EOT
+  }
+
+  depends_on = [aws_ecr_repository.backend]
+}
+
+resource "null_resource" "frontend_image" {
+  triggers = {
+    dockerfile_hash = filemd5("${path.module}/Dockerfile.frontend")
+    source_hash     = filemd5("${path.root}/frontend/requirements.txt")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      # Login to ECR
+      aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com
+      
+      # Build and push frontend image
+      docker build -f ${path.module}/Dockerfile.frontend -t ${aws_ecr_repository.frontend.repository_url}:latest ${path.root}
+      docker push ${aws_ecr_repository.frontend.repository_url}:latest
+    EOT
+  }
+
+  depends_on = [aws_ecr_repository.frontend]
+}
+
+# Data source for current AWS account
+data "aws_caller_identity" "current" {}
+
 # Containerized Lambda functions using ECR images
 resource "aws_lambda_function" "backend_container" {
   function_name = "${var.project_name}-backend-container"
@@ -20,7 +64,8 @@ resource "aws_lambda_function" "backend_container" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.lambda_backend_basic
+    aws_iam_role_policy_attachment.lambda_backend_basic,
+    null_resource.backend_image
   ]
 }
 
@@ -40,7 +85,8 @@ resource "aws_lambda_function" "frontend_container" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.lambda_frontend_basic
+    aws_iam_role_policy_attachment.lambda_frontend_basic,
+    null_resource.frontend_image
   ]
 }
 
