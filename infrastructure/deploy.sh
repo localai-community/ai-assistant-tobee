@@ -2,6 +2,29 @@
 
 set -e
 
+# Parse command line arguments
+AUTO_APPROVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --auto-approve|-y)
+            AUTO_APPROVE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --auto-approve, -y    Auto-approve all prompts (non-interactive)"
+            echo "  --help, -h           Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Load environment variables from .env file
 source ./load-env.sh
 
@@ -56,11 +79,16 @@ BACKEND_REPO_NAME="${PROJECT_NAME}-backend"
 FRONTEND_REPO_NAME="${PROJECT_NAME}-frontend"
 
 if aws ecr describe-repositories --repository-names "$BACKEND_REPO_NAME" --region "$AWS_REGION" &>/dev/null || aws ecr describe-repositories --repository-names "$FRONTEND_REPO_NAME" --region "$AWS_REGION" &>/dev/null; then
-    echo -e "${YELLOW}Found existing ECR repositories. Do you want to import them into OpenTofu state? (y/N)${NC}"
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}Running import script...${NC}"
-        ./import-ecr.sh
+    if [ "$AUTO_APPROVE" = true ]; then
+        echo -e "${YELLOW}Found existing ECR repositories. Auto-importing...${NC}"
+        ./import-ecr.sh --auto-approve
+    else
+        echo -e "${YELLOW}Found existing ECR repositories. Do you want to import them into OpenTofu state? (y/N)${NC}"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Running import script...${NC}"
+            ./import-ecr.sh
+        fi
     fi
 fi
 
@@ -69,11 +97,15 @@ echo -e "${YELLOW}Planning OpenTofu deployment...${NC}"
 tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
 # Ask for user approval
-echo -e "${YELLOW}Do you want to apply these changes? (y/N)${NC}"
-read -r response
-if [[ ! "$response" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Deployment cancelled by user.${NC}"
-    exit 0
+if [ "$AUTO_APPROVE" = true ]; then
+    echo -e "${YELLOW}Auto-approving infrastructure changes...${NC}"
+else
+    echo -e "${YELLOW}Do you want to apply these changes? (y/N)${NC}"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Deployment cancelled by user.${NC}"
+        exit 0
+    fi
 fi
 
 # Apply the infrastructure
@@ -134,11 +166,15 @@ echo -e "${YELLOW}Planning Lambda function updates...${NC}"
 tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
 # Ask for user approval for Lambda updates
-echo -e "${YELLOW}Do you want to update the Lambda functions with new container images? (y/N)${NC}"
-read -r response
-if [[ ! "$response" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Lambda function update cancelled by user.${NC}"
-    exit 0
+if [ "$AUTO_APPROVE" = true ]; then
+    echo -e "${YELLOW}Auto-approving Lambda function updates...${NC}"
+else
+    echo -e "${YELLOW}Do you want to update the Lambda functions with new container images? (y/N)${NC}"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Lambda function update cancelled by user.${NC}"
+        exit 0
+    fi
 fi
 
 tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"

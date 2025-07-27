@@ -2,6 +2,29 @@
 
 set -e
 
+# Parse command line arguments
+AUTO_APPROVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --auto-approve|-y)
+            AUTO_APPROVE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --auto-approve, -y    Auto-approve all prompts (non-interactive)"
+            echo "  --help, -h           Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Load environment variables from .env file
 source ./load-env.sh
 
@@ -86,12 +109,17 @@ BACKEND_REPO_NAME="${PROJECT_NAME}-backend"
 echo -e "${YELLOW}Checking backend repository: $BACKEND_REPO_NAME${NC}"
 
 if check_repository "$BACKEND_REPO_NAME" "$AWS_REGION"; then
-    echo -e "${YELLOW}Do you want to import the backend repository? (y/N)${NC}"
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
+    if [ "$AUTO_APPROVE" = true ]; then
+        echo -e "${YELLOW}Auto-importing backend repository...${NC}"
         import_repository "$BACKEND_REPO_NAME" "$AWS_REGION" "backend"
     else
-        echo -e "${YELLOW}Skipping backend repository import${NC}"
+        echo -e "${YELLOW}Do you want to import the backend repository? (y/N)${NC}"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            import_repository "$BACKEND_REPO_NAME" "$AWS_REGION" "backend"
+        else
+            echo -e "${YELLOW}Skipping backend repository import${NC}"
+        fi
     fi
 else
     echo -e "${YELLOW}Backend repository does not exist, will be created during deployment${NC}"
@@ -104,12 +132,17 @@ FRONTEND_REPO_NAME="${PROJECT_NAME}-frontend"
 echo -e "${YELLOW}Checking frontend repository: $FRONTEND_REPO_NAME${NC}"
 
 if check_repository "$FRONTEND_REPO_NAME" "$AWS_REGION"; then
-    echo -e "${YELLOW}Do you want to import the frontend repository? (y/N)${NC}"
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
+    if [ "$AUTO_APPROVE" = true ]; then
+        echo -e "${YELLOW}Auto-importing frontend repository...${NC}"
         import_repository "$FRONTEND_REPO_NAME" "$AWS_REGION" "frontend"
     else
-        echo -e "${YELLOW}Skipping frontend repository import${NC}"
+        echo -e "${YELLOW}Do you want to import the frontend repository? (y/N)${NC}"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            import_repository "$FRONTEND_REPO_NAME" "$AWS_REGION" "frontend"
+        else
+            echo -e "${YELLOW}Skipping frontend repository import${NC}"
+        fi
     fi
 else
     echo -e "${YELLOW}Frontend repository does not exist, will be created during deployment${NC}"
