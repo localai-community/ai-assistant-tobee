@@ -54,9 +54,17 @@ tofu init
 echo -e "${YELLOW}Planning OpenTofu deployment...${NC}"
 tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
+# Ask for user approval
+echo -e "${YELLOW}Do you want to apply these changes? (y/N)${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Deployment cancelled by user.${NC}"
+    exit 0
+fi
+
 # Apply the infrastructure
 echo -e "${YELLOW}Applying OpenTofu configuration...${NC}"
-tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}" -auto-approve
+tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
 # Get ECR repository URLs
 BACKEND_ECR_URL=$(tofu output -raw backend_ecr_repository_url)
@@ -106,7 +114,20 @@ if [ ! -f "main.tf" ]; then
         exit 1
     fi
 fi
-tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}" -auto-approve
+
+# Plan the update
+echo -e "${YELLOW}Planning Lambda function updates...${NC}"
+tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
+
+# Ask for user approval for Lambda updates
+echo -e "${YELLOW}Do you want to update the Lambda functions with new container images? (y/N)${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Lambda function update cancelled by user.${NC}"
+    exit 0
+fi
+
+tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
 # Get API Gateway URL
 API_URL=$(tofu output -raw api_gateway_url)
