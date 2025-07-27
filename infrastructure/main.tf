@@ -199,53 +199,7 @@ resource "aws_iam_role_policy_attachment" "lambda_frontend_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Lambda functions
-resource "aws_lambda_function" "backend" {
-  filename         = data.archive_file.backend_zip.output_path
-  function_name    = "${var.project_name}-backend"
-  role            = aws_iam_role.lambda_backend.arn
-  handler         = "app.main.handler"
-  runtime         = "python3.11"
-  timeout         = 900
-  memory_size     = 2048
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.environment
-      LOG_LEVEL  = var.log_level
-    }
-  }
-
-  vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
-    security_group_ids = [aws_security_group.lambda.id]
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.lambda_backend_basic
-  ]
-}
-
-resource "aws_lambda_function" "frontend" {
-  filename         = data.archive_file.frontend_zip.output_path
-  function_name    = "${var.project_name}-frontend"
-  role            = aws_iam_role.lambda_frontend.arn
-  handler         = "app.main.handler"
-  runtime         = "python3.11"
-  timeout         = 30
-  memory_size     = 512
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.environment
-      LOG_LEVEL  = var.log_level
-    }
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.lambda_frontend_basic
-  ]
-}
+# Lambda functions are defined in container-lambda.tf for containerized deployment
 
 # API Gateway
 resource "aws_api_gateway_rest_api" "main" {
@@ -308,71 +262,15 @@ resource "aws_api_gateway_method" "frontend_proxy_any" {
   authorization = "NONE"
 }
 
-# Lambda permissions
-resource "aws_lambda_permission" "backend" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.backend.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "frontend" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.frontend.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-# API Gateway integrations
-resource "aws_api_gateway_integration" "backend" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  resource_id = aws_api_gateway_resource.backend.id
-  http_method = aws_api_gateway_method.backend_any.http_method
-
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.backend.invoke_arn
-}
-
-resource "aws_api_gateway_integration" "backend_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  resource_id = aws_api_gateway_resource.backend_proxy.id
-  http_method = aws_api_gateway_method.backend_proxy_any.http_method
-
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.backend.invoke_arn
-}
-
-resource "aws_api_gateway_integration" "frontend" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  resource_id = aws_api_gateway_resource.frontend.id
-  http_method = aws_api_gateway_method.frontend_any.http_method
-
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.frontend.invoke_arn
-}
-
-resource "aws_api_gateway_integration" "frontend_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.main.id
-  resource_id = aws_api_gateway_resource.frontend_proxy.id
-  http_method = aws_api_gateway_method.frontend_proxy_any.http_method
-
-  integration_http_method = "POST"
-  type                   = "AWS_PROXY"
-  uri                    = aws_lambda_function.frontend.invoke_arn
-}
+# Lambda permissions and API Gateway integrations are defined in container-lambda.tf
 
 # API Gateway deployment
 resource "aws_api_gateway_deployment" "main" {
   depends_on = [
-    aws_api_gateway_integration.backend,
-    aws_api_gateway_integration.backend_proxy,
-    aws_api_gateway_integration.frontend,
-    aws_api_gateway_integration.frontend_proxy,
+    aws_api_gateway_integration.backend_container,
+    aws_api_gateway_integration.backend_container_proxy,
+    aws_api_gateway_integration.frontend_container,
+    aws_api_gateway_integration.frontend_container_proxy,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.main.id
@@ -382,18 +280,4 @@ resource "aws_api_gateway_deployment" "main" {
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
-}
-
-data "archive_file" "backend_zip" {
-  type        = "zip"
-  source_dir  = "${path.root}/backend"
-  output_path = "${path.root}/infrastructure/backend.zip"
-  excludes    = ["venv", "__pycache__", "*.pyc", ".pytest_cache", "tests"]
-}
-
-data "archive_file" "frontend_zip" {
-  type        = "zip"
-  source_dir  = "${path.root}/frontend"
-  output_path = "${path.root}/infrastructure/frontend.zip"
-  excludes    = ["venv", "__pycache__", "*.pyc", ".pytest_cache", "tests"]
 } 

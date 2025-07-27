@@ -37,7 +37,17 @@ echo -e "${YELLOW}AWS Account ID: ${AWS_ACCOUNT_ID}${NC}"
 
 # Initialize OpenTofu
 echo -e "${YELLOW}Initializing OpenTofu...${NC}"
-cd infrastructure
+# Check if we're in the infrastructure directory or need to navigate to it
+if [ -f "main.tf" ]; then
+    echo -e "${GREEN}Already in infrastructure directory${NC}"
+else
+    if [ -d "infrastructure" ]; then
+        cd infrastructure
+    else
+        echo -e "${RED}Could not find infrastructure directory. Please run from project root or infrastructure directory.${NC}"
+        exit 1
+    fi
+fi
 tofu init
 
 # Plan the deployment
@@ -61,22 +71,41 @@ aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS 
 
 # Build and push backend image
 echo -e "${YELLOW}Building backend Docker image...${NC}"
-cd ..
-docker build -f infrastructure/Dockerfile.backend -t ${BACKEND_ECR_URL}:latest .
+# Navigate to project root for Docker build
+if [ -d "../backend" ] || [ -d "../frontend" ]; then
+    cd ..
+    DOCKERFILE_PATH="infrastructure/Dockerfile.backend"
+else
+    DOCKERFILE_PATH="Dockerfile.backend"
+fi
+docker build -f ${DOCKERFILE_PATH} -t ${BACKEND_ECR_URL}:latest .
 
 echo -e "${YELLOW}Pushing backend image to ECR...${NC}"
 docker push ${BACKEND_ECR_URL}:latest
 
 # Build and push frontend image
 echo -e "${YELLOW}Building frontend Docker image...${NC}"
-docker build -f infrastructure/Dockerfile.frontend -t ${FRONTEND_ECR_URL}:latest .
+if [ -d "../backend" ] || [ -d "../frontend" ]; then
+    DOCKERFILE_PATH="infrastructure/Dockerfile.frontend"
+else
+    DOCKERFILE_PATH="Dockerfile.frontend"
+fi
+docker build -f ${DOCKERFILE_PATH} -t ${FRONTEND_ECR_URL}:latest .
 
 echo -e "${YELLOW}Pushing frontend image to ECR...${NC}"
 docker push ${FRONTEND_ECR_URL}:latest
 
 # Update Lambda functions with new images
 echo -e "${YELLOW}Updating Lambda functions with new container images...${NC}"
-cd infrastructure
+# Navigate back to infrastructure directory for OpenTofu
+if [ ! -f "main.tf" ]; then
+    if [ -d "infrastructure" ]; then
+        cd infrastructure
+    else
+        echo -e "${RED}Could not find infrastructure directory. Please run from project root or infrastructure directory.${NC}"
+        exit 1
+    fi
+fi
 tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}" -auto-approve
 
 # Get API Gateway URL

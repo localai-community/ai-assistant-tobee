@@ -15,22 +15,22 @@ output "frontend_endpoint" {
 
 output "backend_lambda_function_name" {
   description = "Name of the backend Lambda function"
-  value       = aws_lambda_function.backend.function_name
+  value       = aws_lambda_function.backend_container.function_name
 }
 
 output "frontend_lambda_function_name" {
   description = "Name of the frontend Lambda function"
-  value       = aws_lambda_function.frontend.function_name
+  value       = aws_lambda_function.frontend_container.function_name
 }
 
 output "backend_lambda_arn" {
   description = "ARN of the backend Lambda function"
-  value       = aws_lambda_function.backend.arn
+  value       = aws_lambda_function.backend_container.arn
 }
 
 output "frontend_lambda_arn" {
   description = "ARN of the frontend Lambda function"
-  value       = aws_lambda_function.frontend.arn
+  value       = aws_lambda_function.frontend_container.arn
 }
 
 output "vpc_id" {
