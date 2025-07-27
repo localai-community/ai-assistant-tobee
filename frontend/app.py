@@ -90,7 +90,7 @@ def init_session_state():
     if "advanced_rag_strategies" not in st.session_state:
         st.session_state.advanced_rag_strategies = []
     if "use_reasoning_chat" not in st.session_state:
-        st.session_state.use_reasoning_chat = False
+        st.session_state.use_reasoning_chat = True
 
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
@@ -1019,21 +1019,7 @@ def main():
             else:
                 st.warning("Backend not available for Advanced RAG")
         
-        # Reasoning Chat Section (Always Visible)
-        st.markdown('<div class="section-header">🧠 Reasoning Chat</div>', unsafe_allow_html=True)
-        
-        use_reasoning_chat = st.checkbox(
-            "Enable Step-by-Step Reasoning",
-            value=st.session_state.use_reasoning_chat,
-            help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
-        )
-        st.session_state.use_reasoning_chat = use_reasoning_chat
-        
-        if use_reasoning_chat:
-            st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
-            st.info("💡 Works best with mathematical, logical, and analytical questions")
-        else:
-            st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
+
         
         # MCP Tools Section (Collapsible)
         with st.expander("🛠️ MCP Tools", expanded=False):
@@ -1080,6 +1066,22 @@ def main():
         
         # Reasoning System Section (Collapsible)
         with st.expander("🧠 Reasoning System", expanded=False):
+            # Reasoning Chat Toggle (Always visible within the expander)
+            use_reasoning_chat = st.checkbox(
+                "Enable Step-by-Step Reasoning",
+                value=st.session_state.use_reasoning_chat,
+                help="When enabled, responses will show step-by-step reasoning for mathematical, logical, and general problems"
+            )
+            st.session_state.use_reasoning_chat = use_reasoning_chat
+            
+            if use_reasoning_chat:
+                st.success("✅ Reasoning mode enabled - responses will show step-by-step solutions")
+                st.info("💡 Works best with mathematical, logical, and analytical questions")
+            else:
+                st.info("💡 Enable reasoning mode for detailed step-by-step solutions")
+            
+            st.divider()
+            
             if st.session_state.backend_health:
                 # Get reasoning health
                 reasoning_health = get_reasoning_health()
@@ -1153,7 +1155,7 @@ def main():
                 st.warning("Backend not available for reasoning system")
         
         # Conversations Section (Collapsible)
-        with st.expander("💬 Conversations", expanded=True):
+        with st.expander("💬 Conversations", expanded=False):
             if st.session_state.backend_health and st.session_state.conversations:
                 # Show "New Chat" option
                 col1, col2 = st.columns(2)
