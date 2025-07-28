@@ -149,6 +149,10 @@ def init_session_state():
         st.session_state.use_phase3_reasoning = False
     if "selected_phase3_strategy" not in st.session_state:
         st.session_state.selected_phase3_strategy = "auto"
+    if "use_phase4_reasoning" not in st.session_state:
+        st.session_state.use_phase4_reasoning = False
+    if "selected_phase4_task_type" not in st.session_state:
+        st.session_state.selected_phase4_task_type = "general"
     if "phase3_health" not in st.session_state:
         st.session_state.phase3_health = {}
     if "phase3_sample_questions" not in st.session_state:
@@ -1619,6 +1623,149 @@ def get_phase3_strategies() -> Dict:
         pass
     return {"strategies": {}, "error": "Backend not available"}
 
+def get_phase4_health() -> Dict:
+    """Get Phase 4 multi-agent system health from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/phase4-reasoning/health", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+    except:
+        pass
+    return {"error": "Backend not available"}
+
+def get_phase4_agents() -> Dict:
+    """Get available Phase 4 agents from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/phase4-reasoning/agents", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+    except:
+        pass
+    return {"error": "Backend not available"}
+
+def send_phase4_reasoning_chat(message: str, task_type: str = "general", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
+    """Send message to backend with Phase 4 multi-agent reasoning system."""
+    if use_streaming:
+        # Use streaming version
+        for response in send_streaming_phase4_reasoning_chat(message, task_type, conversation_id):
+            if isinstance(response, dict):
+                return response
+        return {"response": "❌ Streaming failed"}
+    
+    # Non-streaming version
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "task_type": task_type,
+                "use_phase4_reasoning": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Use Phase 4 reasoning endpoint
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/phase4-reasoning/",
+                json=payload,
+                timeout=120.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "response": data.get("response", "No response from backend"),
+                    "conversation_id": data.get("conversation_id"),
+                    "approach": data.get("approach", "unknown"),
+                    "agents_used": data.get("agents_used", []),
+                    "total_agents": data.get("total_agents", 0),
+                    "confidence": data.get("confidence", 0.0),
+                    "processing_time": data.get("processing_time", 0.0),
+                    "synthesis_method": data.get("synthesis_method", "unknown")
+                }
+            elif response.status_code == 503:
+                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
+            else:
+                return {"response": f"Backend error: {response.status_code}"}
+                    
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
+
+def send_streaming_phase4_reasoning_chat(message: str, task_type: str = "general", conversation_id: Optional[str] = None):
+    """Send message to backend with Phase 4 multi-agent reasoning system using streaming."""
+    st.info("🤖 Starting Phase 4 multi-agent reasoning streaming...")
+    print(f"🔍 Phase 4 streaming started for message: {message[:50]}...")
+    
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "task_type": task_type,
+                "use_phase4_reasoning": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            print(f"🔍 Sending request to: {BACKEND_URL}/api/v1/phase4-reasoning/stream")
+            print(f"🔍 Payload: {payload}")
+            
+            # Create assistant message container for streaming
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                # Use streaming endpoint
+                with client.stream("POST", f"{BACKEND_URL}/api/v1/phase4-reasoning/stream", json=payload, timeout=60) as response:
+                    if response.status_code == 200:
+                        for line in response.iter_lines():
+                            if line:
+                                line_str = line.decode('utf-8')
+                                if line_str.startswith('data: '):
+                                    try:
+                                        data = json.loads(line_str[6:])
+                                        if data.get('type') == 'status':
+                                            message_placeholder.info(f"🔄 {data.get('message', 'Processing...')}")
+                                        elif data.get('type') == 'result':
+                                            result = data
+                                            full_response = result.get('response', '')
+                                            message_placeholder.markdown(full_response)
+                                            
+                                            # Add Phase 4 system information
+                                            phase4_info = f"\n\n🤖 **Phase 4 Multi-Agent System Info:**\n"
+                                            phase4_info += f"• **Approach:** {result.get('approach', 'unknown')}\n"
+                                            phase4_info += f"• **Agents Used:** {', '.join(result.get('agents_used', []))}\n"
+                                            phase4_info += f"• **Total Agents:** {result.get('total_agents', 0)}\n"
+                                            phase4_info += f"• **Confidence:** {result.get('confidence', 0.0):.2f}\n"
+                                            phase4_info += f"• **Processing Time:** {result.get('processing_time', 0.0):.2f}s\n"
+                                            phase4_info += f"• **Synthesis Method:** {result.get('synthesis_method', 'unknown')}\n"
+                                            
+                                            message_placeholder.markdown(full_response + phase4_info)
+                                            break
+                                        elif data.get('type') == 'error':
+                                            message_placeholder.error(f"❌ Error: {data.get('message', 'Unknown error')}")
+                                            break
+                                    except json.JSONDecodeError:
+                                        continue
+                    else:
+                        st.error(f"❌ Phase 4 streaming failed: {response.status_code}")
+                        
+    except Exception as e:
+        print(f"🔍 Exception in Phase 4 streaming: {e}")
+        st.error(f"❌ Error in Phase 4 streaming: {str(e)}")
+
 
 def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
     """Send message to backend with Phase 2 reasoning engine."""
@@ -2299,6 +2446,124 @@ def main():
             else:
                 st.info("💡 Enable Phase 3 strategies for advanced reasoning capabilities")
         
+        # Phase 4 Multi-Agent System Section (Collapsible)
+        with st.expander("🤖 Phase 4: Multi-Agent System", expanded=False):
+            st.markdown('<div class="section-header">Multi-Agent Coordination</div>', unsafe_allow_html=True)
+            
+            # Phase 4 Reasoning Toggle
+            use_phase4_reasoning = st.checkbox(
+                "Enable Phase 4 Multi-Agent System",
+                value=st.session_state.use_phase4_reasoning,
+                help="When enabled, uses multiple specialized agents working together for enhanced problem solving"
+            )
+            st.session_state.use_phase4_reasoning = use_phase4_reasoning
+            
+            if use_phase4_reasoning:
+                st.success("✅ Phase 4 multi-agent system enabled - coordinated problem solving")
+                
+                # Task Type Selection
+                selected_task_type = st.selectbox(
+                    "Select Task Type",
+                    options=[
+                        ("general", "🔄 General (Auto-detect)"),
+                        ("mathematical", "🔢 Mathematical"),
+                        ("logical", "🧮 Logical"),
+                        ("causal", "🔗 Causal")
+                    ],
+                    format_func=lambda x: x[1],
+                    index=0,
+                    key="phase4_task_type_select"
+                )
+                st.session_state.selected_phase4_task_type = selected_task_type[0]
+                
+                st.info(f"💡 Selected: {selected_task_type[1]}")
+                
+                # System Status
+                if st.session_state.backend_health:
+                    st.markdown('<div class="section-header">System Status</div>', unsafe_allow_html=True)
+                    
+                    # Get Phase 4 system status
+                    phase4_health = get_phase4_health()
+                    
+                    if phase4_health.get("status") == "healthy":
+                        st.success("✅ Phase 4 Multi-Agent System: Available")
+                        
+                        # Show agent information
+                        agents_info = get_phase4_agents()
+                        if not agents_info.get("error"):
+                            st.info(f"🤖 Total Agents: {agents_info.get('total_agents', 0)}")
+                            st.info(f"🔄 Local Agents: {agents_info.get('local_agents', 0)}")
+                            st.info(f"🌐 A2A Agents: {agents_info.get('a2a_agents', 0)}")
+                            
+                            # Show individual agents
+                            if agents_info.get("agents"):
+                                st.markdown("**Available Agents:**")
+                                for agent in agents_info["agents"]:
+                                    status_icon = "✅" if agent["status"] == "available" else "⚠️"
+                                    st.caption(f"{status_icon} {agent['agent_id']} ({agent['type']}) - {', '.join(agent['capabilities'][:3])}")
+                        
+                        # Configuration info
+                        config = phase4_health.get("configuration", {})
+                        st.info(f"⚙️ Enhancement Threshold: {config.get('enhancement_threshold', 0.7)}")
+                        st.info(f"🌐 A2A Available: {config.get('a2a_available', False)}")
+                        
+                        # Refresh button
+                        if st.button("🔄 Refresh System Status", key="refresh_phase4_status"):
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ Phase 4 multi-agent system not available")
+                        if phase4_health.get("error"):
+                            st.error(f"Error: {phase4_health['error']}")
+                else:
+                    st.warning("Backend not available for Phase 4 multi-agent system")
+                
+                # Sample Questions
+                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
+                
+                # Mathematical Sample Questions
+                st.markdown("**🔢 Mathematical Problems:**")
+                math_questions = [
+                    "What is 15 + 27? Please explain step by step.",
+                    "Solve the equation: 2x + 5 = 13",
+                    "Calculate the area of a circle with radius 5 units"
+                ]
+                for i, question in enumerate(math_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase4_math_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Logical Sample Questions
+                st.markdown("**🧮 Logical Problems:**")
+                logic_questions = [
+                    "If all A are B, and some B are C, what can we conclude about A and C?",
+                    "Three people are in a room. If Alice is older than Bob, and Bob is older than Charlie, who is the youngest?",
+                    "A train leaves station A at 2 PM and arrives at station B at 4 PM. Another train leaves station B at 1 PM and arrives at station A at 3 PM. When do they meet?"
+                ]
+                for i, question in enumerate(logic_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase4_logic_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Causal Sample Questions
+                st.markdown("**🔗 Causal Problems:**")
+                causal_questions = [
+                    "What causes inflation and how does it affect the economy?",
+                    "How does smoking affect lung cancer rates?",
+                    "What are the effects of climate change on biodiversity?"
+                ]
+                for i, question in enumerate(causal_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase4_causal_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                st.divider()
+                st.info("💡 Phase 4 multi-agent system coordinates multiple specialized agents for enhanced problem solving with local-first approach and A2A fallback.")
+            else:
+                st.info("💡 Enable Phase 4 multi-agent system for coordinated problem solving")
+        
         # RAG Section (Collapsible)
         with st.expander("📚 RAG System", expanded=False):
             st.markdown('<div class="section-header">Document Upload</div>', unsafe_allow_html=True)
@@ -2694,8 +2959,26 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
-            # Send message to backend (with Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
-            if st.session_state.use_phase3_reasoning:
+            # Send message to backend (with Phase 4, Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
+            if st.session_state.use_phase4_reasoning:
+                # Use Phase 4 multi-agent system for coordinated problem solving
+                if st.session_state.use_streaming:
+                    # Use streaming Phase 4 reasoning response
+                    response_data = send_streaming_phase4_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_phase4_task_type, 
+                        st.session_state.conversation_id
+                    )
+                else:
+                    # Use regular Phase 4 reasoning response
+                    with st.spinner("🤖 Using Phase 4 multi-agent system..."):
+                        response_data = send_phase4_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase4_task_type, 
+                            st.session_state.conversation_id, 
+                            use_streaming=False
+                        )
+            elif st.session_state.use_phase3_reasoning:
                 # Use Phase 3 advanced reasoning strategies for complex problem solving
                 if st.session_state.use_streaming:
                     # Use streaming Phase 3 reasoning response
@@ -2779,7 +3062,56 @@ def main():
                             response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
             
             # Handle streaming responses differently since they're already displayed
-            if st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+            if st.session_state.use_phase4_reasoning and st.session_state.use_streaming:
+                # For streaming Phase 4 reasoning, the response is already displayed in real-time
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add Phase 4 system information
+                    if response_data.get("approach"):
+                        approach = response_data.get("approach", "unknown")
+                        agents_used = response_data.get("agents_used", [])
+                        total_agents = response_data.get("total_agents", 0)
+                        confidence = response_data.get("confidence", 0.0)
+                        processing_time = response_data.get("processing_time", 0.0)
+                        synthesis_method = response_data.get("synthesis_method", "unknown")
+                        
+                        # Add Phase 4 system info to the message
+                        phase4_info = f"\n\n🤖 **Phase 4 Multi-Agent System Info:**\n"
+                        phase4_info += f"• Approach: {approach.title()}\n"
+                        phase4_info += f"• Agents Used: {', '.join(agents_used)}\n"
+                        phase4_info += f"• Total Agents: {total_agents}\n"
+                        phase4_info += f"• Confidence: {confidence:.2f}\n"
+                        phase4_info += f"• Processing Time: {processing_time:.2f}s\n"
+                        phase4_info += f"• Synthesis Method: {synthesis_method.title()}\n"
+                        
+                        message_data["content"] += phase4_info
+                        message_data["phase4_system"] = True
+                        message_data["approach"] = approach
+                        message_data["agents_used"] = agents_used
+                        message_data["total_agents"] = total_agents
+                        message_data["confidence"] = confidence
+                        message_data["processing_time"] = processing_time
+                        message_data["synthesis_method"] = synthesis_method
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+            elif st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
                 # For streaming Phase 2 reasoning, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -3052,6 +3384,33 @@ def main():
                         message_data["strategy_used"] = strategy_used
                         message_data["reasoning_type"] = reasoning_type
                         message_data["confidence"] = confidence
+                    
+                    # Add Phase 4 system information
+                    if st.session_state.use_phase4_reasoning and response_data.get("approach"):
+                        approach = response_data.get("approach", "unknown")
+                        agents_used = response_data.get("agents_used", [])
+                        total_agents = response_data.get("total_agents", 0)
+                        confidence = response_data.get("confidence", 0.0)
+                        processing_time = response_data.get("processing_time", 0.0)
+                        synthesis_method = response_data.get("synthesis_method", "unknown")
+                        
+                        # Add Phase 4 system info to the message
+                        phase4_info = f"\n\n🤖 **Phase 4 Multi-Agent System Info:**\n"
+                        phase4_info += f"• Approach: {approach.title()}\n"
+                        phase4_info += f"• Agents Used: {', '.join(agents_used)}\n"
+                        phase4_info += f"• Total Agents: {total_agents}\n"
+                        phase4_info += f"• Confidence: {confidence:.2f}\n"
+                        phase4_info += f"• Processing Time: {processing_time:.2f}s\n"
+                        phase4_info += f"• Synthesis Method: {synthesis_method.title()}\n"
+                        
+                        message_data["content"] += phase4_info
+                        message_data["phase4_system"] = True
+                        message_data["approach"] = approach
+                        message_data["agents_used"] = agents_used
+                        message_data["total_agents"] = total_agents
+                        message_data["confidence"] = confidence
+                        message_data["processing_time"] = processing_time
+                        message_data["synthesis_method"] = synthesis_method
                     
                     st.session_state.messages.append(message_data)
                     
