@@ -55,14 +55,14 @@ echo -e "${YELLOW}Building backend Docker image...${NC}"
 # Navigate to project root for Docker build
 if [ -d "../backend" ] || [ -d "../frontend" ]; then
     cd ..
-    DOCKERFILE_PATH="infrastructure/Dockerfile.backend"
+    DOCKERFILE_PATH="infrastructure/Dockerfile.backend-simple"
 else
     DOCKERFILE_PATH="Dockerfile.backend"
 fi
 
 BACKEND_ECR_URL="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-backend"
 
-if ! docker build -f ${DOCKERFILE_PATH} -t ${BACKEND_ECR_URL}:latest .; then
+if ! docker build --platform linux/amd64 -f ${DOCKERFILE_PATH} -t ${BACKEND_ECR_URL}:latest .; then
     echo -e "${RED}Failed to build backend Docker image.${NC}"
     exit 1
 fi
@@ -78,14 +78,14 @@ echo -e "${GREEN}✓ Backend image built and pushed successfully${NC}"
 echo -e "${YELLOW}Building frontend Docker image...${NC}"
 
 if [ -d "backend" ] || [ -d "frontend" ]; then
-    DOCKERFILE_PATH="infrastructure/Dockerfile.frontend"
+    DOCKERFILE_PATH="infrastructure/Dockerfile.frontend-simple"
 else
     DOCKERFILE_PATH="Dockerfile.frontend"
 fi
 
 FRONTEND_ECR_URL="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-frontend"
 
-if ! docker build -f ${DOCKERFILE_PATH} -t ${FRONTEND_ECR_URL}:latest .; then
+if ! docker build --platform linux/amd64 -f ${DOCKERFILE_PATH} -t ${FRONTEND_ECR_URL}:latest .; then
     echo -e "${RED}Failed to build frontend Docker image.${NC}"
     exit 1
 fi

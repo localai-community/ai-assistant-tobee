@@ -108,11 +108,7 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
                     yield f"data: {json.dumps({'content': chunk})}\n\n"
                 
                 # Send completion signal with RAG context
-                yield f"data: {json.dumps({
-                    'content': '',
-                    'rag_context': rag_context,
-                    'has_context': has_context
-                })}\n\n"
+                yield f"data: {json.dumps({'content': '', 'rag_context': rag_context, 'has_context': has_context})}\n\n"
             except Exception as e:
                 error_chunk = {"error": str(e), "type": "error"}
                 yield f"data: {json.dumps(error_chunk)}\n\n"

@@ -34,4 +34,5 @@ sympy>=1.14.0
 numpy>=1.24.0
 
 # MCP (Model Context Protocol)
-mcp==1.0.0 
+mcp==1.0.0
+mangum
