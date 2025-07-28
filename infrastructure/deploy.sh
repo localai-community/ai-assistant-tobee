@@ -4,16 +4,22 @@ set -e
 
 # Parse command line arguments
 AUTO_APPROVE=false
+PLAN_ONLY=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --auto-approve|-y)
             AUTO_APPROVE=true
             shift
             ;;
+        --plan|-p)
+            PLAN_ONLY=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
             echo "  --auto-approve, -y    Auto-approve all prompts (non-interactive)"
+            echo "  --plan, -p           Show plan only, don't apply changes"
             echo "  --help, -h           Show this help message"
             exit 0
             ;;
@@ -75,23 +81,15 @@ tofu init
 
 
 
-# Plan the deployment
-echo -e "${YELLOW}Planning OpenTofu deployment...${NC}"
-tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
-
-# Ask for user approval
-if [ "$AUTO_APPROVE" = true ]; then
-    echo -e "${YELLOW}Auto-approving infrastructure changes...${NC}"
-else
-    echo -e "${YELLOW}Do you want to apply these changes? (y/N)${NC}"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}Deployment cancelled by user.${NC}"
-        exit 0
-    fi
+# Plan the deployment (optional)
+if [ "$PLAN_ONLY" = true ]; then
+    echo -e "${YELLOW}Planning OpenTofu deployment (plan only mode)...${NC}"
+    tofu plan -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
+    echo -e "${GREEN}Plan completed. Run without --plan to apply changes.${NC}"
+    exit 0
 fi
 
-# Apply the infrastructure
+# Apply the infrastructure directly (no planning by default)
 echo -e "${YELLOW}Applying OpenTofu configuration...${NC}"
 tofu apply -var="aws_region=${AWS_REGION}" -var="aws_profile=${AWS_PROFILE}" -var="project_name=${PROJECT_NAME}" -var="environment=${ENVIRONMENT}" -var="log_level=${LOG_LEVEL}" -var="backend_timeout=${BACKEND_TIMEOUT}" -var="frontend_timeout=${FRONTEND_TIMEOUT}" -var="backend_memory_size=${BACKEND_MEMORY_SIZE}" -var="frontend_memory_size=${FRONTEND_MEMORY_SIZE}"
 
