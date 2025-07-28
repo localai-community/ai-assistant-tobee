@@ -34,6 +34,81 @@ class ParseResult:
             self.metadata = {}
 
 
+def parse_problem_statement(problem_statement: str) -> Dict[str, Any]:
+    """
+    Parse a problem statement to extract type and content.
+    
+    Args:
+        problem_statement: The problem statement to parse
+        
+    Returns:
+        Dictionary containing parsed information
+    """
+    if not problem_statement or not problem_statement.strip():
+        return {
+            "type": "general",
+            "content": "",
+            "length": 0,
+            "word_count": 0
+        }
+    
+    # Clean the input
+    cleaned_statement = problem_statement.strip()
+    
+    # Detect problem type
+    problem_type = "general"
+    input_lower = cleaned_statement.lower()
+    
+    # Mathematical problem detection
+    math_patterns = [
+        r'\b(solve|calculate|compute|find|evaluate)\b',
+        r'[\+\-\*/=\^√∫∑∏∞≤≥≠≈]',
+        r'\b(equation|formula|function|derivative|integral)\b',
+        r'\b(number|sum|product|average|mean|median)\b',
+        r'\b(what is|how much|calculate)\b'
+    ]
+    
+    for pattern in math_patterns:
+        if re.search(pattern, input_lower):
+            problem_type = "mathematical"
+            break
+    
+    # Logical problem detection
+    if problem_type == "general":
+        logic_patterns = [
+            r'\b(logic|logical|deduce|infer|conclude)\b',
+            r'\b(if|then|else|and|or|not)\b',
+            r'\b(premise|conclusion|argument|valid|invalid)\b',
+            r'\b(truth|false|true|boolean)\b'
+        ]
+        
+        for pattern in logic_patterns:
+            if re.search(pattern, input_lower):
+                problem_type = "logical"
+                break
+    
+    # Causal problem detection
+    if problem_type == "general":
+        causal_patterns = [
+            r'\b(cause|effect|because|therefore|since)\b',
+            r'\b(leads to|results in|due to|as a result)\b',
+            r'\b(correlation|causation|relationship)\b',
+            r'\b(why|how|what causes)\b'
+        ]
+        
+        for pattern in causal_patterns:
+            if re.search(pattern, input_lower):
+                problem_type = "causal"
+                break
+    
+    return {
+        "type": problem_type,
+        "content": cleaned_statement,
+        "length": len(cleaned_statement),
+        "word_count": len(cleaned_statement.split())
+    }
+
+
 class BaseParser(ABC):
     """Abstract base class for parsers."""
 

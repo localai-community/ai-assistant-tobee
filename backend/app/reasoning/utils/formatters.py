@@ -15,6 +15,29 @@ from enum import Enum
 from ..core.base import ReasoningStep, ReasoningResult, ReasoningType, StepStatus, ValidationResult
 
 
+def format_reasoning_output(result: ReasoningResult, format_type: str = "text") -> str:
+    """
+    Format a reasoning result using the specified format.
+    
+    Args:
+        result: The reasoning result to format
+        format_type: The desired output format ("text", "json", "markdown", "html")
+        
+    Returns:
+        Formatted string representation
+    """
+    if format_type == "json":
+        formatter = JSONFormatter()
+    elif format_type == "markdown":
+        formatter = MarkdownFormatter()
+    elif format_type == "html":
+        formatter = HTMLFormatter()
+    else:  # Default to text
+        formatter = TextFormatter()
+    
+    return formatter.format(result)
+
+
 class OutputFormat(Enum):
     """Supported output formats."""
     JSON = "json"

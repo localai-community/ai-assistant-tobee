@@ -8,6 +8,11 @@ Phase 2: Basic Reasoning Engines
 - Mathematical Reasoning Engine
 - Logical Reasoning Engine  
 - Causal Reasoning Engine
+
+Phase 3: Advanced Reasoning Strategies
+- Chain-of-Thought (CoT) Reasoning Strategy
+- Tree-of-Thoughts (ToT) Reasoning Strategy
+- Prompt Engineering Framework
 """
 
 from .core.base import (
@@ -60,7 +65,14 @@ from .engines import (
     CausalReasoningEngine
 )
 
-__version__ = "1.0.0"
+# Phase 3: Advanced Reasoning Strategies
+from .strategies import (
+    ChainOfThoughtStrategy,
+    TreeOfThoughtsStrategy,
+    PromptEngineeringFramework
+)
+
+__version__ = "2.0.0"
 
 __all__ = [
     # Core classes
@@ -105,5 +117,10 @@ __all__ = [
     # Phase 2: Basic Reasoning Engines
     "MathematicalReasoningEngine",
     "LogicalReasoningEngine",
-    "CausalReasoningEngine"
+    "CausalReasoningEngine",
+    
+    # Phase 3: Advanced Reasoning Strategies
+    "ChainOfThoughtStrategy",
+    "TreeOfThoughtsStrategy",
+    "PromptEngineeringFramework"
 ]
