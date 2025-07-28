@@ -98,6 +98,7 @@ class TreeOfThoughtsStrategy(BaseReasoner[ReasoningResult]):
         self.best_path: Optional[ToTPath] = None
         self.iteration_count = 0
         self.explored_nodes: Set[str] = set()
+        self.original_problem_statement: str = ""
 
     async def reason(self, problem_statement: str, **kwargs) -> ReasoningResult:
         """
@@ -111,6 +112,9 @@ class TreeOfThoughtsStrategy(BaseReasoner[ReasoningResult]):
             ReasoningResult containing the ToT reasoning steps and final answer
         """
         start_time = datetime.now(timezone.utc)
+        
+        # Store original problem statement
+        self.original_problem_statement = problem_statement
         
         # Validate input
         validation = self.validate_input(problem_statement)
@@ -526,7 +530,7 @@ class TreeOfThoughtsStrategy(BaseReasoner[ReasoningResult]):
     async def _convert_path_to_steps(self, path: ToTPath) -> ReasoningResult:
         """Convert a ToT path to reasoning steps."""
         result = ReasoningResult(
-            problem_statement=path.nodes[0].thought if path.nodes else "",
+            problem_statement=self.original_problem_statement,
             reasoning_type=ReasoningType.HYBRID,
             created_at=datetime.now(timezone.utc)
         )
@@ -558,7 +562,7 @@ class TreeOfThoughtsStrategy(BaseReasoner[ReasoningResult]):
     def can_handle(self, problem_statement: str) -> bool:
         """Check if this strategy can handle the given problem."""
         # ToT can handle complex problems that benefit from exploration
-        return len(problem_statement.strip()) > 10  # Prefer complex problems
+        return len(problem_statement.strip()) > 50  # Prefer complex problems
 
     def get_tree_stats(self) -> Dict[str, Any]:
         """Get statistics about the explored tree."""
