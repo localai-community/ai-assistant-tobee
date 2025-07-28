@@ -143,6 +143,35 @@ def init_session_state():
                 "Analyze the causal relationship between diet and weight loss"
             ]
         }
+    
+    # Phase 3 Advanced Reasoning Strategies
+    if "use_phase3_reasoning" not in st.session_state:
+        st.session_state.use_phase3_reasoning = False
+    if "selected_phase3_strategy" not in st.session_state:
+        st.session_state.selected_phase3_strategy = "auto"
+    if "phase3_health" not in st.session_state:
+        st.session_state.phase3_health = {}
+    if "phase3_sample_questions" not in st.session_state:
+        st.session_state.phase3_sample_questions = {
+            "chain_of_thought": [
+                "What is 15 + 27? Show your work step by step.",
+                "If a train travels 60 mph for 2 hours, how far does it go?",
+                "Calculate the perimeter of a rectangle with length 8 and width 5",
+                "Solve: 3x + 4 = 16"
+            ],
+            "tree_of_thoughts": [
+                "How can I design a scalable microservices architecture?",
+                "What are the best strategies for implementing user authentication?",
+                "How should I approach building a recommendation system?",
+                "What's the optimal way to structure a database for an e-commerce site?"
+            ],
+            "prompt_engineering": [
+                "Create a prompt for explaining quantum computing to a high school student",
+                "Design a prompt for analyzing customer feedback sentiment",
+                "Write a prompt for generating creative writing ideas",
+                "Craft a prompt for debugging code issues"
+            ]
+        }
 
 
 def check_backend_health() -> bool:
@@ -1048,6 +1077,30 @@ def process_chat_response(response_data, question):
             message_data["reasoning_type"] = reasoning_type
             message_data["confidence"] = confidence
         
+        # Add Phase 3 strategy information
+        if st.session_state.use_phase3_reasoning and response_data.get("strategy_used"):
+            strategy_used = response_data.get("strategy_used", "unknown")
+            reasoning_type = response_data.get("reasoning_type", "unknown")
+            confidence = response_data.get("confidence", 0.0)
+            
+            # Add Phase 3 strategy info to the message
+            phase3_info = f"\n\n🚀 **Phase 3 Strategy Info:**\n"
+            phase3_info += f"• Strategy used: {strategy_used.title()}\n"
+            phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+            phase3_info += f"• Confidence: {confidence:.2f}\n"
+            
+            if response_data.get("steps_count"):
+                phase3_info += f"• Steps generated: {response_data['steps_count']}\n"
+            
+            if response_data.get("validation_summary"):
+                phase3_info += f"• Validation: {response_data['validation_summary']}\n"
+            
+            message_data["content"] += phase3_info
+            message_data["phase3_strategy"] = True
+            message_data["strategy_used"] = strategy_used
+            message_data["reasoning_type"] = reasoning_type
+            message_data["confidence"] = confidence
+        
         st.session_state.messages.append(message_data)
         
         # Refresh conversation list to include the new conversation
@@ -1203,7 +1256,62 @@ def handle_sample_question(question):
                         response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=False)
             
             # Handle streaming RAG responses differently since they're already displayed
-            if st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            if st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+                # For streaming Phase 2 reasoning, the response is already displayed in real-time
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    
+                    # Add Phase 2 engine information
+                    if response_data.get("engine_used"):
+                        message_data["phase2_engine"] = True
+                        message_data["engine_used"] = response_data.get("engine_used", "unknown")
+                        message_data["reasoning_type"] = response_data.get("reasoning_type", "unknown")
+                        message_data["confidence"] = response_data.get("confidence", 0.0)
+                        message_data["steps_count"] = response_data.get("steps_count", 0)
+                        message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    # Add Phase 3 strategy information
+                    if st.session_state.use_phase3_reasoning and response_data.get("strategy_used"):
+                        strategy_used = response_data.get("strategy_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 3 strategy info to the message
+                        phase3_info = f"\n\n🚀 **Phase 3 Strategy Info:**\n"
+                        phase3_info += f"• Strategy used: {strategy_used.title()}\n"
+                        phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase3_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase3_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase3_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase3_info
+                        message_data["phase3_strategy"] = True
+                        message_data["strategy_used"] = strategy_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
+                    
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+            elif st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -1398,6 +1506,30 @@ def handle_sample_question(question):
                         message_data["reasoning_type"] = reasoning_type
                         message_data["confidence"] = confidence
                     
+                    # Add Phase 3 strategy information
+                    if st.session_state.use_phase3_reasoning and response_data.get("strategy_used"):
+                        strategy_used = response_data.get("strategy_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 3 strategy info to the message
+                        phase3_info = f"\n\n🚀 **Phase 3 Strategy Info:**\n"
+                        phase3_info += f"• Strategy used: {strategy_used.title()}\n"
+                        phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase3_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase3_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase3_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase3_info
+                        message_data["phase3_strategy"] = True
+                        message_data["strategy_used"] = strategy_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
+                    
                     st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
@@ -1447,6 +1579,45 @@ def get_phase2_engine_status() -> Dict:
                 "causal": {"status": "unknown", "error": str(e)}
             }
         }
+
+
+def get_phase3_health() -> Dict:
+    """Get Phase 3 advanced reasoning strategies health from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/phase3-reasoning/health", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "status": "unavailable",
+                    "strategies": {
+                        "chain_of_thought": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                        "tree_of_thoughts": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                        "prompt_engineering": {"status": "unknown", "error": f"HTTP {response.status_code}"}
+                    }
+                }
+    except Exception as e:
+        return {
+            "status": "unavailable",
+            "strategies": {
+                "chain_of_thought": {"status": "unknown", "error": str(e)},
+                "tree_of_thoughts": {"status": "unknown", "error": str(e)},
+                "prompt_engineering": {"status": "unknown", "error": str(e)}
+            }
+        }
+
+
+def get_phase3_strategies() -> Dict:
+    """Get available Phase 3 strategies from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/phase3-reasoning/strategies", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+    except:
+        pass
+    return {"strategies": {}, "error": "Backend not available"}
 
 
 def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
@@ -1671,6 +1842,56 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
     st.error("🔚 Phase 2 reasoning streaming function completed without returning anything")
     return None
 
+def send_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conversation_id: Optional[str] = None, use_streaming: bool = False) -> Optional[Dict]:
+    """Send message to backend with Phase 3 advanced reasoning strategies."""
+    # For now, use a simple implementation without streaming
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_phase3_reasoning": True,
+                "strategy_type": strategy_type,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            # Use Phase 3 reasoning endpoint
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/phase3-reasoning/",
+                json=payload,
+                timeout=120.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "response": data.get("response", "No response from backend"),
+                    "conversation_id": data.get("conversation_id"),
+                    "strategy_used": data.get("strategy_used", "unknown"),
+                    "reasoning_type": data.get("reasoning_type", "unknown"),
+                    "steps_count": data.get("steps_count"),
+                    "confidence": data.get("confidence", 0.0),
+                    "validation_summary": data.get("validation_summary")
+                }
+            elif response.status_code == 503:
+                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
+            else:
+                return {"response": f"Backend error: {response.status_code}"}
+                    
+    except httpx.TimeoutException:
+        return {"response": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"response": f"Communication error: {str(e)}"}
+
 def main():
     """Main application function."""
     init_session_state()
@@ -1858,6 +2079,124 @@ def main():
                 st.info("💡 Phase 2 engines provide specialized reasoning for complex mathematical, logical, and causal problems with step-by-step solutions.")
             else:
                 st.info("💡 Enable Phase 2 engines for specialized reasoning capabilities")
+        
+        # Phase 3 Advanced Reasoning Strategies Section (Collapsible)
+        with st.expander("🧠 Phase 3: Advanced Reasoning Strategies", expanded=False):
+            st.markdown('<div class="section-header">Strategy Selection</div>', unsafe_allow_html=True)
+            
+            # Phase 3 Reasoning Toggle
+            use_phase3_reasoning = st.checkbox(
+                "Enable Phase 3 Advanced Reasoning Strategies",
+                value=st.session_state.use_phase3_reasoning,
+                help="When enabled, uses advanced reasoning strategies for complex problem solving"
+            )
+            st.session_state.use_phase3_reasoning = use_phase3_reasoning
+            
+            if use_phase3_reasoning:
+                st.success("✅ Phase 3 strategies enabled - advanced reasoning for complex problems")
+                
+                # Strategy Selection
+                selected_strategy = st.selectbox(
+                    "Select Reasoning Strategy",
+                    options=[
+                        ("auto", "🔄 Auto-detect (Recommended)"),
+                        ("chain_of_thought", "🔗 Chain-of-Thought"),
+                        ("tree_of_thoughts", "🌳 Tree-of-Thoughts"),
+                        ("prompt_engineering", "📝 Prompt Engineering")
+                    ],
+                    format_func=lambda x: x[1],
+                    index=0,
+                    key="phase3_strategy_select"
+                )
+                st.session_state.selected_phase3_strategy = selected_strategy[0]
+                
+                st.info(f"💡 Selected: {selected_strategy[1]}")
+                
+                # Strategy Status
+                if st.session_state.backend_health:
+                    st.markdown('<div class="section-header">Strategy Status</div>', unsafe_allow_html=True)
+                    
+                    # Get Phase 3 strategy status
+                    phase3_status = get_phase3_health()
+                    
+                    if phase3_status.get("status") == "available":
+                        strategies = phase3_status.get("strategies", {})
+                        
+                        # Chain-of-Thought Strategy Status
+                        cot_status = strategies.get("chain_of_thought", {})
+                        if cot_status.get("status") == "available":
+                            st.success("✅ Chain-of-Thought: Available")
+                            if cot_status.get("features"):
+                                st.caption(f"Features: {', '.join(cot_status['features'])}")
+                        else:
+                            st.warning("⚠️ Chain-of-Thought: Limited")
+                            if cot_status.get("error"):
+                                st.caption(f"Error: {cot_status['error']}")
+                        
+                        # Tree-of-Thoughts Strategy Status
+                        tot_status = strategies.get("tree_of_thoughts", {})
+                        if tot_status.get("status") == "available":
+                            st.success("✅ Tree-of-Thoughts: Available")
+                            if tot_status.get("features"):
+                                st.caption(f"Features: {', '.join(tot_status['features'])}")
+                        else:
+                            st.warning("⚠️ Tree-of-Thoughts: Limited")
+                            if tot_status.get("error"):
+                                st.caption(f"Error: {tot_status['error']}")
+                        
+                        # Prompt Engineering Strategy Status
+                        pe_status = strategies.get("prompt_engineering", {})
+                        if pe_status.get("status") == "available":
+                            st.success("✅ Prompt Engineering: Available")
+                            if pe_status.get("features"):
+                                st.caption(f"Features: {', '.join(pe_status['features'])}")
+                        else:
+                            st.warning("⚠️ Prompt Engineering: Limited")
+                            if pe_status.get("error"):
+                                st.caption(f"Error: {pe_status['error']}")
+                        
+                        # Refresh button
+                        if st.button("🔄 Refresh Strategy Status", key="refresh_phase3_status"):
+                            st.session_state.phase3_health = get_phase3_health()
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ Phase 3 strategies not available")
+                        if phase3_status.get("error"):
+                            st.error(f"Error: {phase3_status['error']}")
+                else:
+                    st.warning("Backend not available for Phase 3 strategies")
+                
+                # Sample Questions
+                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
+                
+                # Chain-of-Thought Sample Questions
+                st.markdown("**🔗 Chain-of-Thought Problems:**")
+                for i, question in enumerate(st.session_state.phase3_sample_questions["chain_of_thought"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase3_cot_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Tree-of-Thoughts Sample Questions
+                st.markdown("**🌳 Tree-of-Thoughts Problems:**")
+                for i, question in enumerate(st.session_state.phase3_sample_questions["tree_of_thoughts"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase3_tot_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Prompt Engineering Sample Questions
+                st.markdown("**📝 Prompt Engineering Problems:**")
+                for i, question in enumerate(st.session_state.phase3_sample_questions["prompt_engineering"]):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase3_pe_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                st.divider()
+                st.info("💡 Phase 3 strategies provide advanced reasoning capabilities including Chain-of-Thought, Tree-of-Thoughts, and Prompt Engineering for complex problem solving.")
+            else:
+                st.info("💡 Enable Phase 3 strategies for advanced reasoning capabilities")
         
         # RAG Section (Collapsible)
         with st.expander("📚 RAG System", expanded=False):
@@ -2254,8 +2593,17 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
-            # Send message to backend (with Phase 2 reasoning, reasoning, RAG, or regular chat)
-            if st.session_state.use_phase2_reasoning:
+            # Send message to backend (with Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
+            if st.session_state.use_phase3_reasoning:
+                # Use Phase 3 advanced reasoning strategies for complex problem solving
+                with st.spinner("🧠 Using Phase 3 advanced reasoning strategies..."):
+                    response_data = send_phase3_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_phase3_strategy, 
+                        st.session_state.conversation_id, 
+                        use_streaming=False
+                    )
+            elif st.session_state.use_phase2_reasoning:
                 # Use Phase 2 reasoning engines for specialized problem solving
                 if st.session_state.use_streaming:
                     # Use streaming Phase 2 reasoning response
@@ -2339,6 +2687,30 @@ def main():
                         message_data["confidence"] = response_data.get("confidence", 0.0)
                         message_data["steps_count"] = response_data.get("steps_count", 0)
                         message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    # Add Phase 3 strategy information
+                    if st.session_state.use_phase3_reasoning and response_data.get("strategy_used"):
+                        strategy_used = response_data.get("strategy_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 3 strategy info to the message
+                        phase3_info = f"\n\n🚀 **Phase 3 Strategy Info:**\n"
+                        phase3_info += f"• Strategy used: {strategy_used.title()}\n"
+                        phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase3_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase3_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase3_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase3_info
+                        message_data["phase3_strategy"] = True
+                        message_data["strategy_used"] = strategy_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
                     
                     st.session_state.messages.append(message_data)
                     
@@ -2544,6 +2916,30 @@ def main():
                         message_data["content"] += phase2_info
                         message_data["phase2_engine"] = True
                         message_data["engine_used"] = engine_used
+                        message_data["reasoning_type"] = reasoning_type
+                        message_data["confidence"] = confidence
+                    
+                    # Add Phase 3 strategy information
+                    if st.session_state.use_phase3_reasoning and response_data.get("strategy_used"):
+                        strategy_used = response_data.get("strategy_used", "unknown")
+                        reasoning_type = response_data.get("reasoning_type", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        
+                        # Add Phase 3 strategy info to the message
+                        phase3_info = f"\n\n🚀 **Phase 3 Strategy Info:**\n"
+                        phase3_info += f"• Strategy used: {strategy_used.title()}\n"
+                        phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                        phase3_info += f"• Confidence: {confidence:.2f}\n"
+                        
+                        if response_data.get("steps_count"):
+                            phase3_info += f"• Steps generated: {response_data['steps_count']}\n"
+                        
+                        if response_data.get("validation_summary"):
+                            phase3_info += f"• Validation: {response_data['validation_summary']}\n"
+                        
+                        message_data["content"] += phase3_info
+                        message_data["phase3_strategy"] = True
+                        message_data["strategy_used"] = strategy_used
                         message_data["reasoning_type"] = reasoning_type
                         message_data["confidence"] = confidence
                     
