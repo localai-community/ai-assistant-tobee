@@ -1981,19 +1981,6 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                                             print(f"🔍 Final message received")
                                             message_placeholder.markdown(full_response)
                                             
-                                            # Add Phase 3 strategy info to the response
-                                            phase3_info = f"\n\n🧠 **Phase 3 Strategy Info:**\n"
-                                            phase3_info += f"• Strategy used: {strategy_used.replace('_', ' ').title()}\n"
-                                            phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
-                                            phase3_info += f"• Confidence: {confidence:.2f}\n"
-                                            phase3_info += f"• Steps generated: {steps_count}\n"
-                                            
-                                            if validation_summary:
-                                                phase3_info += f"• Validation: {validation_summary}\n"
-                                            
-                                            full_response += phase3_info
-                                            message_placeholder.markdown(full_response)
-                                            
                                             return {"response": full_response, "conversation_id": conversation_id, "strategy_used": strategy_used, "reasoning_type": reasoning_type, "steps_count": steps_count, "confidence": confidence, "validation_summary": validation_summary}
                                     except json.JSONDecodeError as e:
                                         print(f"🔍 JSON decode error: {e}")
