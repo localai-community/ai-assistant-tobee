@@ -336,74 +336,85 @@ async def phase3_reasoning_stream(request: Phase3ReasoningRequest, db: Session =
                 detail="Ollama service is not available"
             )
         
-        # Select and use strategy
-        strategy_used, reasoning_result = await select_and_use_strategy(
-            request.message,
-            request.strategy_type,
-            chat_service,
-            request
-        )
-        
         async def generate_stream():
-            """Generate streaming response."""
             try:
-                # Send initial strategy info
-                strategy_name = strategy_used.replace("_", " ").title()
-                initial_content = f"🚀 Using {strategy_name} strategy...\\n\\n"
-                initial_data = {
-                    'content': initial_content,
-                    'strategy_used': strategy_used,
-                    'reasoning_type': reasoning_result.get('reasoning_type', 'unknown'),
-                    'steps_count': reasoning_result.get('steps_count', 0),
-                    'confidence': reasoning_result.get('confidence', 0.0),
-                    'validation_summary': reasoning_result.get('validation_summary')
-                }
-                yield f"data: {json.dumps(initial_data)}\\n\\n"
-                
-                # Generate enhanced response
-                enhanced_response = await generate_enhanced_response(
-                    chat_service,
+                # Select and use strategy
+                strategy_used, reasoning_result = await select_and_use_strategy(
                     request.message,
-                    reasoning_result,
+                    request.strategy_type,
+                    chat_service,
                     request
                 )
                 
-                # Send the response in chunks
-                chunk_size = 50
-                for i in range(0, len(enhanced_response), chunk_size):
-                    chunk = enhanced_response[i:i + chunk_size]
-                    chunk_data = {
-                        'content': chunk,
-                        'strategy_used': strategy_used,
-                        'reasoning_type': reasoning_result.get('reasoning_type', 'unknown'),
-                        'steps_count': reasoning_result.get('steps_count', 0),
-                        'confidence': reasoning_result.get('confidence', 0.0),
-                        'validation_summary': reasoning_result.get('validation_summary')
-                    }
-                    yield f"data: {json.dumps(chunk_data)}\\n\\n"
-                    await asyncio.sleep(0.01)  # Small delay for streaming effect
+                # Create enhanced prompt for streaming
+                strategy_name = strategy_used.replace("_", " ").title()
+                steps_text = "\n".join([
+                    f"Step {i+1}: {step.get('description', '')}\n{step.get('reasoning', '')}"
+                    for i, step in enumerate(reasoning_result.get("steps", []))
+                ])
                 
-                # Send final message
+                enhanced_prompt = f"""Based on the following {strategy_name} reasoning analysis, provide a clear and comprehensive answer:
+
+Problem: {request.message}
+
+Strategy Used: {strategy_name}
+Reasoning Type: {reasoning_result.get('reasoning_type', 'advanced')}
+Steps Generated: {reasoning_result.get('steps_count', 0)}
+Confidence Level: {reasoning_result.get('confidence', 0.0):.2f}
+
+Reasoning Steps:
+{steps_text}
+
+Final Answer: {reasoning_result.get('final_answer', '')}
+
+Please provide a well-structured response that incorporates the reasoning steps and demonstrates advanced reasoning capabilities."""
+                
+                # Stream the response using the chat service's streaming method
+                full_response = ""
+                async for chunk in chat_service.generate_streaming_response(
+                    message=enhanced_prompt,
+                    model=request.model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    conversation_id=request.conversation_id
+                ):
+                    full_response += chunk
+                    data = {
+                        "content": chunk,
+                        "strategy_used": strategy_used,
+                        "reasoning_type": reasoning_result.get("reasoning_type", "unknown"),
+                        "steps_count": reasoning_result.get("steps_count", 0),
+                        "confidence": reasoning_result.get("confidence", 0.0),
+                        "validation_summary": reasoning_result.get("validation_summary")
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+                
+                # Send final metadata
                 final_data = {
-                    'final': True,
-                    'conversation_id': request.conversation_id,
-                    'strategy_used': strategy_used,
-                    'reasoning_type': reasoning_result.get('reasoning_type', 'unknown'),
-                    'steps_count': reasoning_result.get('steps_count', 0),
-                    'confidence': reasoning_result.get('confidence', 0.0),
-                    'validation_summary': reasoning_result.get('validation_summary')
+                    "content": "",
+                    "conversation_id": reasoning_result.get("conversation_id") or "phase3-reasoning",
+                    "strategy_used": strategy_used,
+                    "reasoning_type": reasoning_result.get("reasoning_type", "unknown"),
+                    "steps_count": reasoning_result.get("steps_count", 0),
+                    "confidence": reasoning_result.get("confidence", 0.0),
+                    "validation_summary": reasoning_result.get("validation_summary"),
+                    "final": True
                 }
-                yield f"data: {json.dumps(final_data)}\\n\\n"
+                yield f"data: {json.dumps(final_data)}\n\n"
                 
             except Exception as e:
-                logger.error(f"Error in streaming: {str(e)}")
-                error_data = {'error': str(e)}
-                yield f"data: {json.dumps(error_data)}\\n\\n"
+                logger.error(f"Streaming error: {str(e)}")
+                error_data = {"content": f"❌ Error: {str(e)}", "error": True}
+                yield f"data: {json.dumps(error_data)}\n\n"
         
         return StreamingResponse(
             generate_stream(),
             media_type="text/plain",
-            headers={"Cache-Control": "no-cache"}
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
         )
         
     except HTTPException:
