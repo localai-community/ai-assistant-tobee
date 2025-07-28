@@ -88,7 +88,7 @@ class LogicalReasoningEngine(BaseReasoner):
         except Exception:
             return False
     
-    def reason(self, problem_statement: str, **kwargs) -> ReasoningResult:
+    async def reason(self, problem_statement: str, **kwargs) -> ReasoningResult:
         """Reason about a logical problem step by step."""
         return self.solve(problem_statement)
     

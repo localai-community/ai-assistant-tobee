@@ -91,7 +91,7 @@ class MathematicalReasoningEngine(BaseReasoner):
         except Exception:
             return False
     
-    def reason(self, problem_statement: str, **kwargs) -> ReasoningResult:
+    async def reason(self, problem_statement: str, **kwargs) -> ReasoningResult:
         """Reason about a mathematical problem step by step."""
         return self.solve(problem_statement)
     
@@ -312,13 +312,95 @@ class MathematicalReasoningEngine(BaseReasoner):
     
     def _solve_general(self, problem_statement: str, context: MathematicalContext, step_number: int) -> ReasoningStep:
         """Solve general mathematical problems."""
-        return ReasoningStep(
-            step_number=step_number,
-            description="General Solution",
-            reasoning="Applied general mathematical methods to solve the problem.",
-            status=StepStatus.COMPLETED,
-            confidence=0.7
-        )
+        try:
+            # Try to extract and solve simple arithmetic problems
+            import re
+            
+            # Look for arithmetic operations (both symbols and words)
+            arithmetic_patterns = [
+                r'(\d+)\s*([+\-*/])\s*(\d+)',  # Symbol operators
+                r'(\d+)\s+(times|multiplied by)\s+(\d+)',  # Multiplication words
+                r'(\d+)\s+(plus|added to)\s+(\d+)',  # Addition words
+                r'(\d+)\s+(minus|subtracted from)\s+(\d+)',  # Subtraction words
+                r'(\d+)\s+(divided by)\s+(\d+)',  # Division words
+            ]
+            
+            for pattern in arithmetic_patterns:
+                match = re.search(pattern, problem_statement.lower())
+                if match:
+                    num1 = int(match.group(1))
+                    operator_word = match.group(2)
+                    num2 = int(match.group(3))
+                    
+                    # Determine the operation and provide step-by-step solution
+                    if operator_word in ['+', 'plus', 'added to']:
+                        result = num1 + num2
+                        solution = f"""**Step 1:** Identify the operation
+We need to add {num1} and {num2}.
+
+**Step 2:** Perform the addition
+{num1} + {num2} = {result}
+
+**Final Answer:** {result}"""
+                    elif operator_word in ['-', 'minus', 'subtracted from']:
+                        result = num1 - num2
+                        solution = f"""**Step 1:** Identify the operation
+We need to subtract {num2} from {num1}.
+
+**Step 2:** Perform the subtraction
+{num1} - {num2} = {result}
+
+**Final Answer:** {result}"""
+                    elif operator_word in ['*', 'times', 'multiplied by']:
+                        result = num1 * num2
+                        solution = f"""**Step 1:** Identify the operation
+We need to multiply {num1} by {num2}.
+
+**Step 2:** Perform the multiplication
+{num1} × {num2} = {result}
+
+**Final Answer:** {result}"""
+                    elif operator_word in ['/', 'divided by']:
+                        if num2 != 0:
+                            result = num1 / num2
+                            solution = f"""**Step 1:** Identify the operation
+We need to divide {num1} by {num2}.
+
+**Step 2:** Perform the division
+{num1} ÷ {num2} = {result}
+
+**Final Answer:** {result}"""
+                        else:
+                            solution = "Error: Division by zero"
+                    else:
+                        solution = "Applied general mathematical methods to solve the problem."
+                    
+                    return ReasoningStep(
+                        step_number=step_number,
+                        description="General Solution",
+                        reasoning=solution,
+                        status=StepStatus.COMPLETED,
+                        confidence=0.8
+                    )
+            
+            # If no pattern matches, return generic response
+            solution = "Applied general mathematical methods to solve the problem."
+            
+            return ReasoningStep(
+                step_number=step_number,
+                description="General Solution",
+                reasoning=solution,
+                status=StepStatus.COMPLETED,
+                confidence=0.8
+            )
+        except Exception as e:
+            return ReasoningStep(
+                step_number=step_number,
+                description="General Solution",
+                reasoning=f"Error in general solution: {str(e)}",
+                status=StepStatus.FAILED,
+                confidence=0.0
+            )
     
     def _verify_solution(self, steps: List[ReasoningStep], context: MathematicalContext) -> ReasoningStep:
         """Verify the mathematical solution."""
@@ -336,20 +418,178 @@ class MathematicalReasoningEngine(BaseReasoner):
         )
     
     def _solve_equation(self, equation: str) -> str:
-        """Solve a single equation using SymPy."""
+        """Solve a single equation with step-by-step explanation."""
         try:
+            # Clean the equation first
+            equation = equation.strip()
+            
+            # Remove any remaining prefixes that might have been missed
+            prefixes_to_remove = [
+                'solve the equation:',
+                'solve:',
+                'equation:',
+                'find:',
+                'calculate:',
+                'solve for',
+                'find the value of',
+                'what is',
+                'solve'
+            ]
+            
+            for prefix in prefixes_to_remove:
+                if equation.lower().startswith(prefix):
+                    equation = equation[len(prefix):].strip()
+                    break
+            
             # Parse equation
             if '=' in equation:
                 left, right = equation.split('=', 1)
-                expr = sp.sympify(f"({left})-({right})")
+                # Clean both sides
+                left = left.strip()
+                right = right.strip()
+                
+                # Fix implicit multiplication for SymPy parsing
+                left_fixed = self._fix_implicit_multiplication(left)
+                right_fixed = self._fix_implicit_multiplication(right)
+                
+                # Create the expression to solve: left - right = 0
+                expr = sp.sympify(f"({left_fixed}) - ({right_fixed})")
+                
+                # Solve with SymPy for verification
+                solution = solve(expr)
+                
+                # Generate step-by-step solution
+                steps = self._generate_step_by_step_solution(left, right, solution)
+                
+                return steps
             else:
-                expr = sp.sympify(equation)
-            
-            # Solve
-            solution = solve(expr)
-            return f"Equation: {equation}\nSolution: {solution}"
+                # If no equals sign, treat as expression to solve
+                equation_fixed = self._fix_implicit_multiplication(equation)
+                expr = sp.sympify(equation_fixed)
+                solution = solve(expr)
+                
+                steps = self._generate_step_by_step_solution(equation, "0", solution)
+                return steps
+                
         except Exception as e:
-            return f"Error solving equation {equation}: {str(e)}"
+            return f"Error solving equation '{equation}': {str(e)}"
+    
+    def _generate_step_by_step_solution(self, left: str, right: str, solution) -> str:
+        """Generate step-by-step solution for an equation."""
+        try:
+            # Parse the sides for step-by-step work
+            left_parsed = sp.sympify(self._fix_implicit_multiplication(left))
+            right_parsed = sp.sympify(self._fix_implicit_multiplication(right))
+            
+            steps = []
+            steps.append(f"**Step 1:** Start with the equation")
+            steps.append(f"{left} = {right}")
+            steps.append("")
+            
+            # Move all terms to left side
+            if right_parsed != 0:
+                steps.append(f"**Step 2:** Move all terms to the left side")
+                steps.append(f"{left} - {right} = 0")
+                steps.append("")
+            
+            # Simplify the left side
+            simplified = left_parsed - right_parsed
+            if simplified != left_parsed - right_parsed:  # If simplification happened
+                steps.append(f"**Step 3:** Simplify the left side")
+                steps.append(f"{simplified} = 0")
+                steps.append("")
+            
+            # For linear equations, show the actual solving steps
+            if len(solution) == 1 and isinstance(solution[0], (int, float, sp.core.numbers.Rational)):
+                # This is a linear equation, show the actual steps
+                simplified_expr = simplified
+                
+                # Check if it's in the form ax + b = 0
+                x = sp.symbols('x')
+                if simplified_expr.has(x):
+                    # Extract coefficient of x and constant term
+                    coeff_x = simplified_expr.coeff(x)
+                    constant = simplified_expr.subs(x, 0)
+                    
+                    if coeff_x != 0:
+                        steps.append(f"**Step 3:** Simplify to standard form")
+                        steps.append(f"{simplified_expr} = 0")
+                        steps.append("")
+                        
+                        steps.append(f"**Step 4:** Isolate x")
+                        # Fix the display of negative numbers
+                        if constant < 0:
+                            steps.append(f"{coeff_x}x + {constant} = 0")
+                            steps.append(f"{coeff_x}x = {-constant}")
+                            steps.append(f"x = {-constant}/{coeff_x}")
+                        else:
+                            steps.append(f"{coeff_x}x + {constant} = 0")
+                            steps.append(f"{coeff_x}x = -{constant}")
+                            steps.append(f"x = -{constant}/{coeff_x}")
+                        steps.append(f"x = {solution[0]}")
+                        steps.append("")
+                        
+                        steps.append(f"**Final Answer:** x = {solution[0]}")
+                    else:
+                        steps.append(f"**Step 4:** No solution (coefficient of x is 0)")
+                        steps.append("")
+                        steps.append(f"**Final Answer:** No solution")
+                else:
+                    steps.append(f"**Step 4:** Solve for x")
+                    steps.append(f"x = {solution[0]}")
+                    steps.append("")
+                    steps.append(f"**Final Answer:** x = {solution[0]}")
+            else:
+                # For other types of equations (quadratic, etc.)
+                if solution:
+                    if len(solution) == 1:
+                        steps.append(f"**Step 4:** Solve for x")
+                        steps.append(f"x = {solution[0]}")
+                        steps.append("")
+                        steps.append(f"**Final Answer:** x = {solution[0]}")
+                    else:
+                        steps.append(f"**Step 4:** Solve for x")
+                        steps.append(f"x = {solution}")
+                        steps.append("")
+                        steps.append(f"**Final Answer:** x = {solution}")
+                else:
+                    steps.append(f"**Step 4:** No solution found")
+                    steps.append("")
+                    steps.append(f"**Final Answer:** No solution")
+            
+            return "\n".join(steps)
+            
+        except Exception as e:
+            # Fallback to simple solution if step-by-step fails
+            if solution:
+                if len(solution) == 1:
+                    return f"Equation: {left} = {right}\nSolution: x = {solution[0]}"
+                else:
+                    return f"Equation: {left} = {right}\nSolutions: {solution}"
+            else:
+                return f"Equation: {left} = {right}\nNo solution found"
+    
+    def _fix_implicit_multiplication(self, expression: str) -> str:
+        """Fix implicit multiplication for SymPy parsing."""
+        import re
+        
+        # Add explicit multiplication where needed
+        # Pattern: number followed by variable (e.g., 2x -> 2*x)
+        expression = re.sub(r'(\d+)([a-zA-Z])', r'\1*\2', expression)
+        
+        # Pattern: variable followed by number (e.g., x2 -> x*2)
+        expression = re.sub(r'([a-zA-Z])(\d+)', r'\1*\2', expression)
+        
+        # Pattern: variable followed by variable (e.g., xy -> x*y)
+        expression = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', expression)
+        
+        # Pattern: closing parenthesis followed by variable or number
+        expression = re.sub(r'\)([a-zA-Z0-9])', r')*\1', expression)
+        
+        # Pattern: variable or number followed by opening parenthesis
+        expression = re.sub(r'([a-zA-Z0-9])\(', r'\1*(', expression)
+        
+        return expression
     
     def _apply_geometric_formulas(self, geometric_info: Dict[str, Any]) -> str:
         """Apply geometric formulas."""
@@ -417,11 +657,71 @@ class MathematicalReasoningEngine(BaseReasoner):
     def _extract_equations(self, problem_statement: str) -> List[str]:
         """Extract equations from problem statement."""
         equations = []
-        # Look for equation patterns
-        eq_pattern = r'([^=]+=[^=]+)'
-        matches = re.findall(eq_pattern, problem_statement)
+        
+        # First, try to find clean equation patterns (just the mathematical expression)
+        # Look for patterns like "2x + 5 = 13" or "x^2 + 3x = 10"
+        clean_eq_pattern = r'([a-zA-Z0-9\s+\-*/^()=]+)'
+        matches = re.findall(clean_eq_pattern, problem_statement)
+        
         for match in matches:
-            equations.append(match.strip())
+            # Clean up the match to extract just the equation part
+            cleaned_match = match.strip()
+            
+            # Skip if it doesn't contain an equals sign
+            if '=' not in cleaned_match:
+                continue
+                
+            # Remove common prefixes that might be included
+            prefixes_to_remove = [
+                'solve the equation:',
+                'solve:',
+                'equation:',
+                'find:',
+                'calculate:',
+                'solve for',
+                'find the value of',
+                'what is',
+                'solve'
+            ]
+            
+            for prefix in prefixes_to_remove:
+                if cleaned_match.lower().startswith(prefix):
+                    cleaned_match = cleaned_match[len(prefix):].strip()
+                    break
+            
+            # Only add if it looks like a valid equation
+            if '=' in cleaned_match and len(cleaned_match.strip()) > 0:
+                equations.append(cleaned_match.strip())
+        
+        # If no equations found with the clean pattern, try the original pattern
+        if not equations:
+            eq_pattern = r'([^=]+=[^=]+)'
+            matches = re.findall(eq_pattern, problem_statement)
+            for match in matches:
+                # Clean up the match
+                cleaned_match = match.strip()
+                
+                # Remove common prefixes
+                prefixes_to_remove = [
+                    'solve the equation:',
+                    'solve:',
+                    'equation:',
+                    'find:',
+                    'calculate:',
+                    'solve for',
+                    'find the value of',
+                    'what is',
+                    'solve'
+                ]
+                
+                for prefix in prefixes_to_remove:
+                    if cleaned_match.lower().startswith(prefix):
+                        cleaned_match = cleaned_match[len(prefix):].strip()
+                        break
+                
+                if '=' in cleaned_match and len(cleaned_match.strip()) > 0:
+                    equations.append(cleaned_match.strip())
+        
         return equations
     
     def _extract_geometric_info(self, problem_statement: str) -> Dict[str, Any]:
@@ -468,14 +768,18 @@ class MathematicalReasoningEngine(BaseReasoner):
     
     def _extract_final_answer(self, steps: List[ReasoningStep]) -> str:
         """Extract the final answer from reasoning steps."""
+        # First, look for steps that contain actual solutions (not verification)
         for step in reversed(steps):
             if step.status == StepStatus.COMPLETED and step.reasoning:
-                if 'solution:' in step.reasoning.lower() or 'answer:' in step.reasoning.lower():
+                # Look for actual solution patterns, not verification
+                if ('solution:' in step.reasoning.lower() and 'verification' not in step.reasoning.lower()) or \
+                   ('answer:' in step.reasoning.lower()) or \
+                   ('=' in step.reasoning and any(op in step.reasoning for op in ['+', '-', '*', '/', '×', '÷'])):
                     return step.reasoning
         
-        # Fallback to the last completed step
+        # Fallback to the last completed step that's not verification
         for step in reversed(steps):
-            if step.status == StepStatus.COMPLETED and step.reasoning:
+            if step.status == StepStatus.COMPLETED and step.reasoning and 'verification' not in step.reasoning.lower():
                 return step.reasoning
         
         return "No final answer found"
@@ -524,10 +828,25 @@ class MathematicalProblemClassifier:
         """Classify the type of mathematical problem."""
         problem_lower = problem_statement.lower()
         
-        # Algebraic patterns
+        # Algebraic patterns - but be more specific to avoid false positives
         algebraic_keywords = ['solve', 'equation', 'inequality', 'variable', 'x=', 'y=']
         if any(keyword in problem_lower for keyword in algebraic_keywords):
             return MathematicalProblemType.ALGEBRAIC
+        
+        # Check for "find" and "calculate" but only if they're followed by variables or equations
+        if 'find' in problem_lower or 'calculate' in problem_lower:
+            # Check if it contains variables (x, y, z) as standalone variables or equations (=)
+            # Look for variables that are actually variables, not part of words
+            var_pattern = r'\b[x-z]\b'  # Standalone variables
+            if re.search(var_pattern, problem_lower) or '=' in problem_lower:
+                return MathematicalProblemType.ALGEBRAIC
+            # Check if it's a simple arithmetic problem
+            arithmetic_patterns = [
+                r'\d+\s+(times|multiplied by|plus|minus|divided by)\s+\d+',
+                r'\d+\s*[+\-*/]\s*\d+'
+            ]
+            if any(re.search(pattern, problem_lower) for pattern in arithmetic_patterns):
+                return MathematicalProblemType.NUMERICAL
         
         # Geometric patterns - but check if it's a logical reasoning question first
         geometric_keywords = ['area', 'perimeter', 'volume', 'circle', 'rectangle', 'triangle', 'square']
@@ -554,7 +873,7 @@ class MathematicalProblemClassifier:
             return MathematicalProblemType.STATISTICAL
         
         # Numerical patterns - more specific to avoid false positives
-        numerical_keywords = ['calculate', 'compute', 'evaluate', 'find']
+        numerical_keywords = ['calculate', 'compute', 'evaluate', 'find', 'what is']
         # Only classify as numerical if it's clearly mathematical and not causal or logical
         if any(keyword in problem_lower for keyword in numerical_keywords):
             # Check if it's a causal question (contains causal keywords)
@@ -571,6 +890,14 @@ class MathematicalProblemClassifier:
             reasoning_keywords = ['what can we conclude', 'what follows', 'what can we infer', 'is it necessarily']
             if any(reasoning_keyword in problem_lower for reasoning_keyword in reasoning_keywords):
                 return MathematicalProblemType.UNKNOWN
+            
+            # Check if it's a simple arithmetic problem
+            arithmetic_patterns = [
+                r'\d+\s+(times|multiplied by|plus|minus|divided by)\s+\d+',
+                r'\d+\s*[+\-*/]\s*\d+'
+            ]
+            if any(re.search(pattern, problem_lower) for pattern in arithmetic_patterns):
+                return MathematicalProblemType.NUMERICAL
             
             return MathematicalProblemType.NUMERICAL
         

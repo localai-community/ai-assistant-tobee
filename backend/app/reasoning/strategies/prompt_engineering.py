@@ -636,4 +636,61 @@ Improved step:""",
             return True
             
         except Exception as e:
-            return False 
+            return False
+    
+    async def optimize_prompt(self, problem_statement: str) -> ReasoningResult:
+        """Optimize a prompt for the given problem statement."""
+        try:
+            # Create context for prompt generation
+            context = PromptContext(
+                problem_statement=problem_statement,
+                problem_type="general",
+                reasoning_type=ReasoningType.HYBRID
+            )
+            
+            # Generate optimized prompt
+            prompt_result = self.generate_prompt(context)
+            
+            if prompt_result:
+                # Create reasoning result
+                steps = [
+                    ReasoningStep(
+                        description="Analyzed problem statement",
+                        reasoning=f"Problem: {problem_statement}",
+                        status=StepStatus.COMPLETED
+                    ),
+                    ReasoningStep(
+                        description="Generated optimized prompt",
+                        reasoning=f"Optimized prompt: {prompt_result.generated_prompt}",
+                        status=StepStatus.COMPLETED
+                    )
+                ]
+                
+                return ReasoningResult(
+                    problem_statement=problem_statement,
+                    steps=steps,
+                    final_answer=prompt_result.generated_prompt,
+                    confidence=prompt_result.performance_score,
+                    reasoning_type=ReasoningType.HYBRID,
+                    metadata={
+                        "template_used": prompt_result.template_used.template_id,
+                        "prompt_type": prompt_result.template_used.prompt_type.value
+                    }
+                )
+            else:
+                # Return basic result if no prompt generated
+                return ReasoningResult(
+                    problem_statement=problem_statement,
+                    final_answer=f"Basic prompt for: {problem_statement}",
+                    confidence=0.5,
+                    reasoning_type=ReasoningType.HYBRID
+                )
+                
+        except Exception as e:
+            # Return error result
+            return ReasoningResult(
+                problem_statement=problem_statement,
+                final_answer=f"Error optimizing prompt: {str(e)}",
+                confidence=0.0,
+                reasoning_type=ReasoningType.HYBRID
+            ) 

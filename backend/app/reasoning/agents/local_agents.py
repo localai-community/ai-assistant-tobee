@@ -8,6 +8,7 @@ within the multi-agent framework.
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, List
 
 from .base import LocalAgent, AgentTask, AgentResult
@@ -21,6 +22,13 @@ from ..strategies import (
     TreeOfThoughtsStrategy,
     PromptEngineeringFramework
 )
+# Optional ChatService import - will be None if MCP is not available
+try:
+    from ...services.chat import ChatService
+    CHAT_SERVICE_AVAILABLE = True
+except ImportError:
+    ChatService = None
+    CHAT_SERVICE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +39,61 @@ class MathematicalAgent(LocalAgent):
     def __init__(self, agent_id: str = "mathematical_agent"):
         super().__init__(agent_id, capabilities=["mathematical", "numerical", "algebraic", "calculus"])
         self.engine = MathematicalReasoningEngine()
+        # Initialize chat service for LLM integration if available
+        if CHAT_SERVICE_AVAILABLE:
+            ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+            self.chat_service = ChatService(ollama_url=ollama_url)
+        else:
+            self.chat_service = None
         logger.info(f"Initialized Mathematical Agent: {agent_id}")
     
     async def _process_local_task(self, task: AgentTask) -> Any:
-        """Process mathematical tasks using the mathematical reasoning engine."""
+        """Process mathematical tasks using the mathematical reasoning engine and LLM."""
         try:
-            # Use the mathematical reasoning engine
-            result = await self.engine.reason(task.problem)
-            return result
+            # First, use the mathematical reasoning engine to get structured reasoning
+            reasoning_result = await self.engine.reason(task.problem)
+            
+            # Create a prompt that includes the reasoning steps
+            steps_text = ""
+            if hasattr(reasoning_result, 'steps') and reasoning_result.steps:
+                steps_text = "\n".join([
+                    f"Step {i+1}: {step.description}\n{step.reasoning}"
+                    for i, step in enumerate(reasoning_result.steps)
+                ])
+            
+            # Create enhanced prompt for LLM
+            enhanced_prompt = f"""Based on the following mathematical reasoning analysis, provide a clear and comprehensive answer:
+
+Problem: {task.problem}
+
+Reasoning Steps:
+{steps_text}
+
+Final Answer: {reasoning_result.final_answer if hasattr(reasoning_result, 'final_answer') else 'To be determined'}
+
+Please provide a well-structured mathematical solution that incorporates the reasoning steps and final answer."""
+
+            # Generate response using the LLM if available
+            if self.chat_service is not None:
+                try:
+                    response = await self.chat_service.generate_response(
+                        message=enhanced_prompt,
+                        model="llama3:latest",
+                        temperature=0.1,
+                        max_tokens=1000
+                    )
+                    
+                    if response and hasattr(response, 'response'):
+                        # Store the LLM response in the reasoning result for later use
+                        reasoning_result.llm_response = response.response
+                    else:
+                        logger.warning(f"LLM response is empty or invalid: {response}")
+                except Exception as e:
+                    logger.error(f"LLM call failed: {e}")
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"Mathematical agent error: {e}")
             raise
@@ -69,8 +124,11 @@ class LogicalAgent(LocalAgent):
         """Process logical tasks using the logical reasoning engine."""
         try:
             # Use the logical reasoning engine
-            result = await self.engine.reason(task.problem)
-            return result
+            reasoning_result = await self.engine.reason(task.problem)
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"Logical agent error: {e}")
             raise
@@ -101,8 +159,11 @@ class CausalAgent(LocalAgent):
         """Process causal tasks using the causal reasoning engine."""
         try:
             # Use the causal reasoning engine
-            result = await self.engine.reason(task.problem)
-            return result
+            reasoning_result = await self.engine.reason(task.problem)
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"Causal agent error: {e}")
             raise
@@ -133,8 +194,11 @@ class CoTAgent(LocalAgent):
         """Process tasks using Chain-of-Thought reasoning."""
         try:
             # Use the Chain-of-Thought strategy
-            result = await self.strategy.reason(task.problem)
-            return result
+            reasoning_result = await self.strategy.reason(task.problem)
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"CoT agent error: {e}")
             raise
@@ -165,8 +229,11 @@ class ToTAgent(LocalAgent):
         """Process tasks using Tree-of-Thoughts reasoning."""
         try:
             # Use the Tree-of-Thoughts strategy
-            result = await self.strategy.reason(task.problem)
-            return result
+            reasoning_result = await self.strategy.reason(task.problem)
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"ToT agent error: {e}")
             raise
@@ -197,8 +264,11 @@ class PromptEngineeringAgent(LocalAgent):
         """Process tasks using prompt engineering framework."""
         try:
             # Use the prompt engineering framework
-            result = await self.framework.optimize_prompt(task.problem)
-            return result
+            reasoning_result = await self.framework.optimize_prompt(task.problem)
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
+                
         except Exception as e:
             logger.error(f"Prompt Engineering agent error: {e}")
             raise
@@ -233,29 +303,76 @@ class GeneralReasoningAgent(LocalAgent):
         self.tot_strategy = TreeOfThoughtsStrategy()
         self.prompt_framework = PromptEngineeringFramework()
         
+        # Initialize chat service for LLM integration if available
+        if CHAT_SERVICE_AVAILABLE:
+            ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+            self.chat_service = ChatService(ollama_url=ollama_url)
+        else:
+            self.chat_service = None
+        
         logger.info(f"Initialized General Reasoning Agent: {agent_id}")
     
     async def _process_local_task(self, task: AgentTask) -> Any:
-        """Process tasks using the most appropriate reasoning approach."""
+        """Process tasks using the most appropriate reasoning approach and LLM."""
         try:
             # Determine the best approach based on task type and problem content
             approach = self._select_best_approach(task)
             
+            # Get reasoning result from appropriate engine/strategy
             if approach == "mathematical":
-                result = await self.mathematical_engine.reason(task.problem)
+                reasoning_result = await self.mathematical_engine.reason(task.problem)
             elif approach == "logical":
-                result = await self.logical_engine.reason(task.problem)
+                reasoning_result = await self.logical_engine.reason(task.problem)
             elif approach == "causal":
-                result = await self.causal_engine.reason(task.problem)
+                reasoning_result = await self.causal_engine.reason(task.problem)
             elif approach == "cot":
-                result = await self.cot_strategy.reason(task.problem)
+                reasoning_result = await self.cot_strategy.reason(task.problem)
             elif approach == "tot":
-                result = await self.tot_strategy.reason(task.problem)
+                reasoning_result = await self.tot_strategy.reason(task.problem)
             else:
                 # Default to CoT for general problems
-                result = await self.cot_strategy.reason(task.problem)
+                reasoning_result = await self.cot_strategy.reason(task.problem)
             
-            return result
+            # Create a prompt that includes the reasoning steps
+            steps_text = ""
+            if hasattr(reasoning_result, 'steps') and reasoning_result.steps:
+                steps_text = "\n".join([
+                    f"Step {i+1}: {step.description}\n{step.reasoning}"
+                    for i, step in enumerate(reasoning_result.steps)
+                ])
+            
+            # Create enhanced prompt for LLM
+            enhanced_prompt = f"""Based on the following {approach} reasoning analysis, provide a clear and comprehensive answer:
+
+Problem: {task.problem}
+
+Reasoning Steps:
+{steps_text}
+
+Final Answer: {reasoning_result.final_answer if hasattr(reasoning_result, 'final_answer') else 'To be determined'}
+
+Please provide a well-structured solution that incorporates the reasoning steps and final answer."""
+
+            # Generate response using the LLM if available
+            if self.chat_service is not None:
+                try:
+                    response = await self.chat_service.generate_response(
+                        message=enhanced_prompt,
+                        model="llama3:latest",
+                        temperature=0.1,
+                        max_tokens=1000
+                    )
+                    
+                    if response and hasattr(response, 'response'):
+                        # Store the LLM response in the reasoning result for later use
+                        reasoning_result.llm_response = response.response
+                    else:
+                        logger.warning(f"LLM response is empty or invalid: {response}")
+                except Exception as e:
+                    logger.error(f"LLM call failed: {e}")
+            
+            # Always return the original reasoning_result object
+            return reasoning_result
             
         except Exception as e:
             logger.error(f"General reasoning agent error: {e}")

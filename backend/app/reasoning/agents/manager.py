@@ -45,12 +45,12 @@ class AgentRegistry:
         
         # Add local agents
         for agent in self.local_agents.values():
-            if agent.can_handle_task(AgentTask("", "", task_type)):
+            if agent.can_handle_task(AgentTask(task_id="", problem="", task_type=task_type)):
                 available_agents.append(agent)
         
         # Add A2A agents (only if available)
         for agent in self.a2a_agents.values():
-            if agent.can_handle_task(AgentTask("", "", task_type)) and agent.is_available:
+            if agent.can_handle_task(AgentTask(task_id="", problem="", task_type=task_type)) and agent.is_available:
                 available_agents.append(agent)
         
         return available_agents
@@ -115,8 +115,8 @@ class LocalAgentManager:
         for coro, agent_id in tasks_to_execute:
             try:
                 result = await coro
+                logger.info(f"Local agent {agent_id} completed task successfully: confidence={result.confidence}, result_type={type(result.result)}")
                 results.append(result)
-                logger.info(f"Local agent {agent_id} completed task successfully")
             except Exception as e:
                 logger.error(f"Local agent {agent_id} failed to process task: {e}")
                 # Create a failed result for tracking
@@ -289,16 +289,29 @@ class SimplifiedHybridManager:
             The best result based on confidence and quality
         """
         if not results:
+            logger.warning("No results provided to _get_best_result")
             return None
+        
+        # Debug: Log all results
+        logger.info(f"_get_best_result: Processing {len(results)} results")
+        for i, result in enumerate(results):
+            logger.info(f"  Result {i}: agent={result.agent_id}, confidence={result.confidence}, result_type={type(result.result)}")
         
         # Filter out failed results
         valid_results = [r for r in results if r.confidence > 0.0 and r.result is not None]
         
+        logger.info(f"_get_best_result: Found {len(valid_results)} valid results")
+        for i, result in enumerate(valid_results):
+            logger.info(f"  Valid Result {i}: agent={result.agent_id}, confidence={result.confidence}")
+        
         if not valid_results:
+            logger.warning("No valid results found in _get_best_result")
             return None
         
         # Return the result with highest confidence
-        return max(valid_results, key=lambda r: r.confidence)
+        best_result = max(valid_results, key=lambda r: r.confidence)
+        logger.info(f"_get_best_result: Selected best result: {best_result.agent_id} with confidence {best_result.confidence}")
+        return best_result
     
     def _create_final_result(self, results: List[AgentResult], approach: str) -> Dict[str, Any]:
         """
@@ -324,19 +337,47 @@ class SimplifiedHybridManager:
         # Get the best result
         best_result = self._get_best_result(results)
         
+        # Format the result for output
+        formatted_result = "No valid result obtained"
+        if best_result and best_result.result:
+            result_obj = best_result.result
+            
+            # Check for LLM response first (most preferred)
+            if hasattr(result_obj, 'llm_response') and result_obj.llm_response:
+                formatted_result = result_obj.llm_response
+            # Check for final answer
+            elif hasattr(result_obj, 'final_answer') and result_obj.final_answer:
+                formatted_result = str(result_obj.final_answer)
+            # Check for steps
+            elif hasattr(result_obj, 'steps') and result_obj.steps:
+                steps_text = "\n".join([f"Step {i+1}: {step}" for i, step in enumerate(result_obj.steps)])
+                formatted_result = f"Solution:\n{steps_text}"
+            # Check for optimized prompt (for prompt engineering agent)
+            elif hasattr(result_obj, 'optimized_prompt') and result_obj.optimized_prompt:
+                formatted_result = f"Optimized Prompt:\n{result_obj.optimized_prompt}"
+            # Check for enhanced prompt
+            elif hasattr(result_obj, 'enhanced_prompt') and result_obj.enhanced_prompt:
+                formatted_result = f"Enhanced Prompt:\n{result_obj.enhanced_prompt}"
+            # Fallback to string representation
+            else:
+                formatted_result = str(result_obj)
+        
         # Calculate aggregate metrics
         total_processing_time = sum(r.processing_time for r in results if r.processing_time)
         avg_confidence = sum(r.confidence for r in results if r.confidence) / len(results)
         
         # Create final result
         final_result = {
-            "result": best_result.result if best_result else "No valid result obtained",
+            "result": formatted_result,
+            "answer": formatted_result,  # Alias for compatibility
             "confidence": best_result.confidence if best_result else 0.0,
             "approach": approach,
-            "agents_used": [r.agent_id for r in results],
+            "agent_used": best_result.agent_id if best_result else "unknown",  # Primary agent used
+            "agents_used": [r.agent_id for r in results],  # All agents that participated
             "processing_time": total_processing_time,
             "total_agents": len(results),
             "average_confidence": avg_confidence,
+            "reasoning_steps": [],  # Placeholder for reasoning steps
             "metadata": {
                 "local_agents": len([r for r in results if r.metadata.get("agent_type") == "local"]),
                 "a2a_agents": len([r for r in results if r.metadata.get("agent_type") == "a2a"]),

@@ -13,6 +13,7 @@ from app.api.reasoning import router as reasoning_router
 from app.api.reasoning_chat import router as reasoning_chat_router
 from app.api.phase2_reasoning import router as phase2_reasoning_router
 from app.api.phase3_reasoning import router as phase3_reasoning_router
+from app.api.phase4_reasoning import router as phase4_reasoning_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -63,6 +64,7 @@ app.include_router(reasoning_router)
 app.include_router(reasoning_chat_router)
 app.include_router(phase2_reasoning_router)
 app.include_router(phase3_reasoning_router)
+app.include_router(phase4_reasoning_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():
@@ -95,7 +97,8 @@ async def api_status():
             "reasoning": "enabled",
             "reasoning_chat": "enabled",
             "phase2_reasoning": "enabled",
-            "phase3_reasoning": "enabled"
+            "phase3_reasoning": "enabled",
+            "phase4_reasoning": "enabled"
         }
     )
 
