@@ -1892,6 +1892,120 @@ def send_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conver
     except Exception as e:
         return {"response": f"Communication error: {str(e)}"}
 
+def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conversation_id: Optional[str] = None):
+    """Send message to backend with Phase 3 reasoning strategies using streaming."""
+    st.info("🧠 Starting Phase 3 advanced reasoning streaming...")
+    print(f"🔍 Phase 3 streaming started for message: {message[:50]}...")
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "use_phase3_reasoning": True,
+                "strategy_type": strategy_type,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            print(f"🔍 Sending request to: {BACKEND_URL}/api/v1/phase3-reasoning/stream")
+            print(f"🔍 Payload: {payload}")
+            
+            # Create assistant message container for streaming
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                strategy_used = "auto"
+                reasoning_type = "unknown"
+                steps_count = 0
+                confidence = 0.0
+                validation_summary = None
+                
+                # Stream the response
+                with client.stream(
+                    "POST",
+                    f"{BACKEND_URL}/api/v1/phase3-reasoning/stream",
+                    json=payload,
+                    timeout=300.0,  # Increased timeout for reasoning processing
+                    headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
+                ) as response:
+                    print(f"🔍 Response status: {response.status_code}")
+                    if response.status_code == 200:
+                        # Process Server-Sent Events
+                        for line in response.iter_lines():
+                            if line:
+                                print(f"🔍 Received line: {line[:100]}...")
+                                # httpx.iter_lines() returns strings, not bytes
+                                if line.startswith('data: '):
+                                    data_str = line[6:]  # Remove 'data: ' prefix
+                                    try:
+                                        data = json.loads(data_str)
+                                        print(f"🔍 Parsed data: {data}")
+                                        
+                                        if data.get("error"):
+                                            print(f"🔍 Error in data: {data.get('error')}")
+                                            return {"response": f"Error: {data.get('error', 'Unknown error')}"}
+                                        
+                                        # Handle different response types
+                                        if "content" in data:
+                                            chunk = data["content"]
+                                            full_response += chunk
+                                            message_placeholder.markdown(full_response + "▌")
+                                            print(f"🔍 Added chunk: {chunk[:50]}...")
+                                            
+                                            # Add artificial delay to see streaming effect (optional)
+                                            # Uncomment the next line to slow down streaming for testing
+                                            # time.sleep(0.2)  # 200ms delay
+                                        
+                                        # Update metadata
+                                        if "strategy_used" in data:
+                                            strategy_used = data["strategy_used"]
+                                        if "reasoning_type" in data:
+                                            reasoning_type = data["reasoning_type"]
+                                        if "steps_count" in data:
+                                            steps_count = data["steps_count"]
+                                        if "confidence" in data:
+                                            confidence = data["confidence"]
+                                        if "validation_summary" in data:
+                                            validation_summary = data["validation_summary"]
+                                        
+                                        # Check if this is the final message
+                                        if data.get("final"):
+                                            print(f"🔍 Final message received")
+                                            message_placeholder.markdown(full_response)
+                                            
+                                            # Add Phase 3 strategy info to the response
+                                            phase3_info = f"\n\n🧠 **Phase 3 Strategy Info:**\n"
+                                            phase3_info += f"• Strategy used: {strategy_used.replace('_', ' ').title()}\n"
+                                            phase3_info += f"• Reasoning type: {reasoning_type.title()}\n"
+                                            phase3_info += f"• Confidence: {confidence:.2f}\n"
+                                            phase3_info += f"• Steps generated: {steps_count}\n"
+                                            
+                                            if validation_summary:
+                                                phase3_info += f"• Validation: {validation_summary}\n"
+                                            
+                                            full_response += phase3_info
+                                            message_placeholder.markdown(full_response)
+                                            
+                                            return {"response": full_response, "conversation_id": conversation_id, "strategy_used": strategy_used, "reasoning_type": reasoning_type, "steps_count": steps_count, "confidence": confidence, "validation_summary": validation_summary}
+                                    except json.JSONDecodeError as e:
+                                        print(f"🔍 JSON decode error: {e}")
+                                        continue
+                    else:
+                        print(f"🔍 Error response: {response.status_code}")
+                        return {"response": f"Backend error: {response.status_code}"}
+                        
+    except Exception as e:
+        print(f"🔍 Exception in Phase 3 streaming: {e}")
+        return {"response": f"Communication error: {str(e)}"}
+
 def main():
     """Main application function."""
     init_session_state()
@@ -2596,13 +2710,22 @@ def main():
             # Send message to backend (with Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
             if st.session_state.use_phase3_reasoning:
                 # Use Phase 3 advanced reasoning strategies for complex problem solving
-                with st.spinner("🧠 Using Phase 3 advanced reasoning strategies..."):
-                    response_data = send_phase3_reasoning_chat(
+                if st.session_state.use_streaming:
+                    # Use streaming Phase 3 reasoning response
+                    response_data = send_streaming_phase3_reasoning_chat(
                         prompt, 
                         st.session_state.selected_phase3_strategy, 
-                        st.session_state.conversation_id, 
-                        use_streaming=False
+                        st.session_state.conversation_id
                     )
+                else:
+                    # Use regular Phase 3 reasoning response
+                    with st.spinner("🧠 Using Phase 3 advanced reasoning strategies..."):
+                        response_data = send_phase3_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase3_strategy, 
+                            st.session_state.conversation_id, 
+                            use_streaming=False
+                        )
             elif st.session_state.use_phase2_reasoning:
                 # Use Phase 2 reasoning engines for specialized problem solving
                 if st.session_state.use_streaming:
