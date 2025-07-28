@@ -75,13 +75,13 @@ tofu init
 ### Plan Deployment
 
 ```bash
-tofu plan -var="aws_region=us-east-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=dev"
+tofu plan -var="aws_region=eu-central-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=dev"
 ```
 
 ### Apply Infrastructure
 
 ```bash
-tofu apply -var="aws_region=us-east-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=prod" -auto-approve
+tofu apply -var="aws_region=eu-central-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=prod" -auto-approve
 ```
 
 ### Build and Push Docker Images
@@ -92,7 +92,7 @@ BACKEND_ECR_URL=$(tofu output -raw backend_ecr_repository_url)
 FRONTEND_ECR_URL=$(tofu output -raw frontend_ecr_repository_url)
 
 # Login to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin [account-id].dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin [account-id].dkr.ecr.eu-central-1.amazonaws.com
 
 # Build and push backend
 docker build -f Dockerfile.backend -t ${BACKEND_ECR_URL}:latest .
@@ -109,7 +109,7 @@ docker push ${FRONTEND_ECR_URL}:latest
 
 Edit `variables.tf` or pass variables via command line:
 
-- `aws_region`: AWS region for deployment (default: us-east-1)
+- `aws_region`: AWS region for deployment (default: eu-central-1)
 - `aws_profile`: AWS profile to use (default: default)
 - `project_name`: Project name for resource naming (default: ai-assistant)
 - `environment`: Environment name (default: dev)
@@ -184,7 +184,7 @@ export AWS_REGION=eu-west-1 && ./deploy.sh
 export AWS_REGION=ap-southeast-1 && ./deploy.sh
 
 # Deploy with different profiles and regions
-export AWS_PROFILE=dev && export AWS_REGION=us-east-1 && ./deploy.sh
+export AWS_PROFILE=dev && export AWS_REGION=eu-central-1 && ./deploy.sh
 export AWS_PROFILE=staging && export AWS_REGION=us-west-2 && ./deploy.sh
 export AWS_PROFILE=prod && export AWS_REGION=eu-west-1 && ./deploy.sh
 ```
@@ -194,7 +194,7 @@ export AWS_PROFILE=prod && export AWS_REGION=eu-west-1 && ./deploy.sh
 For production deployment:
 
 ```bash
-tofu apply -var="aws_region=us-east-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=prod" -var="backend_memory_size=4096" -auto-approve
+tofu apply -var="aws_region=eu-central-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=prod" -var="backend_memory_size=4096" -auto-approve
 ```
 
 ## Monitoring and Logs
@@ -236,7 +236,7 @@ Or manually:
 
 ```bash
 cd infrastructure
-tofu destroy -var="aws_region=us-east-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=dev" -auto-approve
+tofu destroy -var="aws_region=eu-central-1" -var="aws_profile=default" -var="project_name=ai-assistant" -var="environment=dev" -auto-approve
 ```
 
 ## Troubleshooting

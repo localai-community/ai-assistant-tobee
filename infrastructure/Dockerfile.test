@@ -1,0 +1,7 @@
+FROM public.ecr.aws/lambda/python:3.11
+
+# Copy the test handler
+COPY backend/test_handler.py .
+
+# Set the handler for Lambda
+CMD ["test_handler.handler"] 

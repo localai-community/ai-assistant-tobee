@@ -2,7 +2,7 @@
 resource "null_resource" "backend_image" {
   triggers = {
     dockerfile_hash = filemd5("${path.module}/Dockerfile.backend")
-    source_hash     = filemd5("${path.root}/backend/requirements.txt")
+    source_hash     = filemd5("${path.root}/../backend/requirements.txt")
   }
 
   provisioner "local-exec" {
@@ -22,7 +22,7 @@ resource "null_resource" "backend_image" {
 resource "null_resource" "frontend_image" {
   triggers = {
     dockerfile_hash = filemd5("${path.module}/Dockerfile.frontend")
-    source_hash     = filemd5("${path.root}/frontend/requirements.txt")
+    source_hash     = filemd5("${path.root}/../frontend/requirements.txt")
   }
 
   provisioner "local-exec" {

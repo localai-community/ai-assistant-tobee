@@ -26,7 +26,7 @@ else
     echo -e "${YELLOW}Warning: .env.example not found. Creating basic .env file...${NC}"
     cat > .env << 'EOF'
 # AWS Configuration
-AWS_REGION=us-east-1
+AWS_REGION=eu-central-1
 AWS_PROFILE=default
 
 # Project Configuration

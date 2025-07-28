@@ -36,7 +36,7 @@ configure_sso() {
         echo -e "${RED}Missing SSO configuration in .env file.${NC}"
         echo -e "${YELLOW}Please add the following variables to your .env file:${NC}"
         echo "SSO_START_URL=https://your-sso-portal.awsapps.com/start"
-        echo "SSO_REGION=us-east-1"
+        echo "SSO_REGION=eu-central-1"
         echo "SSO_ACCOUNT_ID=123456789012"
         echo "SSO_ROLE_NAME=YourRoleName"
         exit 1

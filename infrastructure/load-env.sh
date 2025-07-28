@@ -19,7 +19,7 @@ else
 fi
 
 # Set default values if not provided
-export AWS_REGION="${AWS_REGION:-us-east-1}"
+export AWS_REGION="${AWS_REGION:-eu-central-1}"
 export AWS_PROFILE="${AWS_PROFILE:-default}"
 export PROJECT_NAME="${PROJECT_NAME:-ai-assistant}"
 export ENVIRONMENT="${ENVIRONMENT:-dev}"
