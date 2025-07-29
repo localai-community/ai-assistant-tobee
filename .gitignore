@@ -194,12 +194,17 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
+# Cursor configuration
+# .cursorignore - IGNORE (Cursor-specific ignore files)
+# .cursorindexingignore - IGNORE (Cursor indexing ignore files)
+# .cursorrules - KEEP (shared project rules for AI assistance)
+# .cursor/instructions.md - KEEP (shared project instructions and workflows)
+# .cursor/ - IGNORE (local AI cache and temporary files)
+# Note: .cursor/instructions.md is tracked with git add -f (contains shared project instructions)
 .cursorignore
 .cursorindexingignore
+!.cursor/instructions.md
+.cursor/
 
 # Marimo
 marimo/_static/
@@ -221,3 +226,8 @@ logs/
 docs/*.pdf
 # docs/*.png  # Allow PNG diagrams for documentation
 # docs/*.svg  # Allow SVG diagrams for documentation
+
+
+
+# Git workflow helper (optional - can be committed if desired)
+# git_workflow.sh

@@ -1,16 +1,15 @@
 {
-    "python.defaultInterpreterPath": "./backend/venv/bin/python3",
-    "python.terminal.activateEnvironment": true,
-    "python.analysis.extraPaths": [
-        "./backend/app"
-    ],
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.python"
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
     },
-    "python.linting.enabled": true,
-    "python.linting.pylintEnabled": true,
-    "python.formatting.provider": "black",
-    "cSpell.words": [
-        "sympify"
-    ]
-} 
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true
+    },
+    "ai.chat.model": "gpt-4",
+    "ai.chat.maxTokens": 4000,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"]
+}

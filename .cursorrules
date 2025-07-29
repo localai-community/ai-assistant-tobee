@@ -1,0 +1,68 @@
+# Cursor AI Rules for AI Assistant Project
+
+## Code Style & Formatting
+- Always use Python virtual environments (venv) for terminal commands
+- Follow PEP 8 formatting standards
+- Use type hints where possible
+- Add docstrings to all functions and classes
+- Use descriptive variable and function names
+
+## Virtual Environment Management
+- Backend uses: ./backend/venv/bin/python3
+- Frontend uses: ./frontend/venv/bin/python3
+- Always activate the correct venv for the directory you're working in
+- Use relative paths for venv activation: source venv/bin/activate
+
+## Git Workflow Rules
+- Use `git add .` for staging all changes, or `git add -p` for interactive staging
+- Write clear, descriptive commit messages with format: "type: brief description"
+- Commit types: feat, fix, docs, style, refactor, test, chore
+- Always test changes before committing
+- Push changes immediately after committing
+- Use feature branches for new development
+- Keep commits atomic and focused on single changes
+
+## Step-by-Step Reasoning
+- When providing step-by-step solutions, use bold formatting for step titles: **Step 1:**
+- Add a blank line after each step title
+- Provide detailed breakdown of operations (e.g., separate left-side and right-side calculations)
+- Use 'Final Answer:' in bold for conclusions
+
+## Import Preferences
+- When importing mcp.types, use 'from mcp.types import ...' for common types
+- Import remaining types using 'import mcp.types as alias'
+
+## Development Workflow
+- Run backend server in foreground to see and fix errors before sending to background
+- Push Docker images should be handled by Terraform before updating AWS Lambda functions as part of the deployment pipeline
+- Always test changes before committing
+- Use the correct venv for each component (backend vs frontend)
+
+## Testing Guidelines
+- Create comprehensive test files with descriptive names
+- Include both unit and integration tests
+- Test all three categories: mathematical, logical, and causal problems
+- Evaluate agent selection accuracy, answer quality, and reasoning steps
+- Backend tests: cd backend && python -m pytest ../tests/
+- Frontend tests: cd frontend && python -m pytest tests/
+
+## Documentation
+- Add clear comments explaining complex logic
+- Include usage examples in docstrings
+- Document API endpoints with proper request/response examples
+- Keep README files updated with current functionality
+
+## Error Handling
+- Provide meaningful error messages
+- Include troubleshooting steps in error responses
+- Log errors with appropriate detail levels
+
+## Performance
+- Optimize for readability over cleverness
+- Consider performance implications of algorithms
+- Use appropriate data structures for the task
+
+## Security
+- Never hardcode API keys or sensitive information
+- Use environment variables for configuration
+- Validate all user inputs
