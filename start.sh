@@ -64,6 +64,39 @@ check_apple_silicon() {
     fi
 }
 
+# Function to check and kill processes using a specific port
+check_and_kill_port() {
+    local port=$1
+    local service_name=$2
+    
+    if lsof -ti:$port > /dev/null 2>&1; then
+        print_warning "Port $port is already in use by $service_name"
+        print_info "Killing processes using port $port..."
+        
+        # Get PIDs using the port
+        local pids=$(lsof -ti:$port)
+        
+        # Kill each process
+        for pid in $pids; do
+            print_info "Killing process $pid..."
+            kill -9 $pid 2>/dev/null || true
+        done
+        
+        # Wait a moment for processes to terminate
+        sleep 2
+        
+        # Verify port is free
+        if lsof -ti:$port > /dev/null 2>&1; then
+            print_error "Failed to free port $port"
+            return 1
+        else
+            print_status "Port $port is now free"
+        fi
+    else
+        print_status "Port $port is available"
+    fi
+}
+
 # Function to show usage information
 show_usage() {
     echo "Usage: $0 [OPTIONS] [COMMAND]"
@@ -278,6 +311,13 @@ run_gpu_setup() {
         fi
     fi
     
+    # Check and free required ports before starting
+    print_info "Checking port availability..."
+    check_and_kill_port 11434 "Ollama"
+    check_and_kill_port 8000 "Backend"
+    check_and_kill_port 8501 "Frontend"
+    echo ""
+    
     print_success "Running GPU setup..."
     echo ""
     
@@ -296,6 +336,13 @@ run_gpu_setup() {
 run_no_gpu_setup() {
     print_header
     print_info "Starting no-GPU setup (cross-platform)..."
+    echo ""
+    
+    # Check and free required ports before starting
+    print_info "Checking port availability..."
+    check_and_kill_port 11434 "Ollama"
+    check_and_kill_port 8000 "Backend"
+    check_and_kill_port 8501 "Frontend"
     echo ""
     
     print_success "Running no-GPU setup..."

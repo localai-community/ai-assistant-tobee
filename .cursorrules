@@ -38,6 +38,16 @@
 - Always test changes before committing
 - Use the correct venv for each component (backend vs frontend)
 
+## Server Management
+- Always use `./start.sh` for starting servers and services
+- Use `./start.sh quick` for auto-selecting the best setup for the system
+- Use `./start.sh gpu` for macOS M1/M2 GPU-accelerated setup
+- Use `./start.sh nogpu` for cross-platform no-GPU setup
+- Use `./start.sh stop` to stop all services
+- Use `./start.sh status` to check system information
+- Use `./start.sh debug` for diagnostics and troubleshooting
+- The start script handles virtual environment activation, server startup, and health checks automatically
+
 ## Testing Guidelines
 - Create comprehensive test files with descriptive names
 - Include both unit and integration tests
