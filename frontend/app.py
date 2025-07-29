@@ -1276,8 +1276,11 @@ def handle_sample_question(question):
                     if response_data.get("conversation_id"):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
-                    # Add assistant response to chat history
+                    # Add assistant response to chat history (preserve content even if stopped)
                     message_data = {"role": "assistant", "content": response_data["response"]}
+                    if response_data.get("stopped"):
+                        message_data["stopped"] = True
+                        print(f"🔍 DEBUG: Saving stopped RAG streaming response to chat history (first instance)")
                     
                     # Handle advanced RAG information
                     if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
@@ -2817,8 +2820,11 @@ def main():
                     if response_data.get("conversation_id"):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
-                    # Add assistant response to chat history
+                    # Add assistant response to chat history (preserve content even if stopped)
                     message_data = {"role": "assistant", "content": response_data["response"]}
+                    if response_data.get("stopped"):
+                        message_data["stopped"] = True
+                        print(f"🔍 DEBUG: Saving stopped basic streaming response to chat history")
                     st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
@@ -2835,49 +2841,34 @@ def main():
                     # Reset generating state on error
                     st.session_state.is_generating = False
             elif temp_override == "phase2" and st.session_state.use_streaming:
-                # For streaming Phase 2 reasoning, handle the generator response
+                # For streaming Phase 2 reasoning, the function handles its own display
                 print(f"🔍 DEBUG: Handling Phase 2 streaming response")
-                # Create a placeholder for the assistant message
-                with st.chat_message("assistant"):
-                    message_placeholder = st.empty()
-                    full_response = ""
-                    
-                    # Stream the response chunks
-                    for chunk in response_data:
-                        if isinstance(chunk, str):
-                            full_response += chunk
-                            message_placeholder.markdown(full_response + "▌")
-                        elif isinstance(chunk, dict):
-                            # This is the final response data
-                            if chunk.get("response", "").startswith("❌"):
-                                error_msg = chunk["response"]
-                                message_placeholder.error(error_msg)
-                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                                break
-                            else:
-                                # Update conversation ID if provided
-                                if chunk.get("conversation_id"):
-                                    st.session_state.conversation_id = chunk["conversation_id"]
-                                
-                                # Update the final message with Phase 2 info
-                                final_response = chunk.get("response", full_response)
-                                message_placeholder.markdown(final_response)
-                                
-                                # Add to chat history with Phase 2 metadata (preserve content even if stopped)
-                                message_data = {
-                                    "role": "assistant", 
-                                    "content": final_response,
-                                    "phase2_engine": True,
-                                    "engine_used": chunk.get("engine_used", "unknown"),
-                                    "reasoning_type": chunk.get("reasoning_type", "unknown"),
-                                    "confidence": chunk.get("confidence", 0.0),
-                                    "steps_count": chunk.get("steps_count"),
-                                    "validation_summary": chunk.get("validation_summary")
-                                }
-                                if chunk.get("stopped"):
-                                    message_data["stopped"] = True
-                                st.session_state.messages.append(message_data)
-                                break
+                
+                # response_data is a dict returned from the streaming function
+                if response_data:
+                    if response_data.get("response", "").startswith("❌"):
+                        error_msg = response_data["response"]
+                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    else:
+                        # Update conversation ID if provided
+                        if response_data.get("conversation_id"):
+                            st.session_state.conversation_id = response_data["conversation_id"]
+                        
+                        # Add to chat history with Phase 2 metadata (preserve content even if stopped)
+                        message_data = {
+                            "role": "assistant", 
+                            "content": response_data["response"],
+                            "phase2_engine": True,
+                            "engine_used": response_data.get("engine_used", "unknown"),
+                            "reasoning_type": response_data.get("reasoning_type", "unknown"),
+                            "confidence": response_data.get("confidence", 0.0),
+                            "steps_count": response_data.get("steps_count"),
+                            "validation_summary": response_data.get("validation_summary")
+                        }
+                        if response_data.get("stopped"):
+                            message_data["stopped"] = True
+                            print(f"🔍 DEBUG: Saving stopped Phase 2 response to chat history")
+                        st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
@@ -2893,49 +2884,34 @@ def main():
                     # Force rerun to update sidebar
                     st.rerun()
             elif temp_override == "phase3" and st.session_state.use_streaming:
-                # For streaming Phase 3 reasoning, handle the generator response
+                # For streaming Phase 3 reasoning, the function handles its own display
                 print(f"🔍 DEBUG: Handling Phase 3 streaming response")
-                # Create a placeholder for the assistant message
-                with st.chat_message("assistant"):
-                    message_placeholder = st.empty()
-                    full_response = ""
-                    
-                    # Stream the response chunks
-                    for chunk in response_data:
-                        if isinstance(chunk, str):
-                            full_response += chunk
-                            message_placeholder.markdown(full_response + "▌")
-                        elif isinstance(chunk, dict):
-                            # This is the final response data
-                            if chunk.get("response", "").startswith("❌"):
-                                error_msg = chunk["response"]
-                                message_placeholder.error(error_msg)
-                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                                break
-                            else:
-                                # Update conversation ID if provided
-                                if chunk.get("conversation_id"):
-                                    st.session_state.conversation_id = chunk["conversation_id"]
-                                
-                                # Update the final message with Phase 3 info
-                                final_response = chunk.get("response", full_response)
-                                message_placeholder.markdown(final_response)
-                                
-                                # Add to chat history with Phase 3 metadata (preserve content even if stopped)
-                                message_data = {
-                                    "role": "assistant", 
-                                    "content": final_response,
-                                    "phase3_strategy": True,
-                                    "strategy_used": chunk.get("strategy_used", "unknown"),
-                                    "reasoning_type": chunk.get("reasoning_type", "unknown"),
-                                    "confidence": chunk.get("confidence", 0.0),
-                                    "steps_count": chunk.get("steps_count"),
-                                    "validation_summary": chunk.get("validation_summary")
-                                }
-                                if chunk.get("stopped"):
-                                    message_data["stopped"] = True
-                                st.session_state.messages.append(message_data)
-                                break
+                
+                # response_data is a dict returned from the streaming function
+                if response_data:
+                    if response_data.get("response", "").startswith("❌"):
+                        error_msg = response_data["response"]
+                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    else:
+                        # Update conversation ID if provided
+                        if response_data.get("conversation_id"):
+                            st.session_state.conversation_id = response_data["conversation_id"]
+                        
+                        # Add to chat history with Phase 3 metadata (preserve content even if stopped)
+                        message_data = {
+                            "role": "assistant", 
+                            "content": response_data["response"],
+                            "phase3_strategy": True,
+                            "strategy_used": response_data.get("strategy_used", "unknown"),
+                            "reasoning_type": response_data.get("reasoning_type", "unknown"),
+                            "confidence": response_data.get("confidence", 0.0),
+                            "steps_count": response_data.get("steps_count"),
+                            "validation_summary": response_data.get("validation_summary")
+                        }
+                        if response_data.get("stopped"):
+                            message_data["stopped"] = True
+                            print(f"🔍 DEBUG: Saving stopped Phase 3 response to chat history")
+                        st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
@@ -3012,8 +2988,11 @@ def main():
                     if response_data.get("conversation_id"):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
-                    # Add assistant response to chat history
+                    # Add assistant response to chat history (preserve content even if stopped)
                     message_data = {"role": "assistant", "content": response_data["response"]}
+                    if response_data.get("stopped"):
+                        message_data["stopped"] = True
+                        print(f"🔍 DEBUG: Saving stopped RAG streaming response to chat history (second instance)")
                     
                     # Handle advanced RAG information
                     if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
