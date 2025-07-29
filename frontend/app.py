@@ -2571,13 +2571,12 @@ def main():
         prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
     with col2:
-        if st.session_state.is_generating:
-            if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
-                st.session_state.stop_generation = True
-                st.session_state.is_generating = False
-                st.rerun()
-        else:
-            st.button("🛑 Stop", key="stop_button_disabled", disabled=True, help="No generation in progress")
+        # Stop button - always show but enable/disable based on state
+        if st.button("🛑 Stop", key="stop_button", disabled=not st.session_state.is_generating, help="Stop the current generation" if st.session_state.is_generating else "No generation in progress"):
+            print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
+            st.session_state.stop_generation = True
+            st.session_state.is_generating = False
+            st.rerun()
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
@@ -2589,6 +2588,7 @@ def main():
         # Reset stop generation flag and set generating state
         st.session_state.stop_generation = False
         st.session_state.is_generating = True
+        print(f"🔍 DEBUG: Set is_generating = True, stop_generation = False")
         
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -2796,9 +2796,6 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
             elif temp_override == "phase2" and st.session_state.use_streaming:
                 # For streaming Phase 2 reasoning, handle the generator response
                 print(f"🔍 DEBUG: Handling Phase 2 streaming response")
@@ -2908,9 +2905,6 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
             elif st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
                 # For streaming Phase 2 reasoning, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
@@ -3038,9 +3032,6 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
                 else:
                     error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
@@ -3093,9 +3084,6 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
             else:
                 # Handle regular responses (non-streaming or non-RAG)
                 if response_data and not response_data["response"].startswith("❌"):
@@ -3209,9 +3197,6 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-                    
-                    # Force rerun to update sidebar
-                    st.rerun()
                 else:
                     error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
@@ -3220,6 +3205,6 @@ def main():
                     
                     # Reset generating state on error
                     st.session_state.is_generating = False
-
+    
 if __name__ == "__main__":
     main() 
