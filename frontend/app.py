@@ -661,6 +661,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
+                # Store in session state so stop button can access it
+                st.session_state.current_response = ""
                 
                 # Stream the response
                 with client.stream(
@@ -692,6 +694,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                         if "content" in data:
                                             chunk = data["content"]
                                             full_response += chunk
+                                            # Update session state so stop button can access current content
+                                            st.session_state.current_response = full_response
                                             message_placeholder.markdown(full_response + "▌")
                                             print(f"🔍 Added chunk: {chunk[:50]}...")
                                             
@@ -709,6 +713,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                                             # Debug: Log what we found
                                             print(f"🔍 RAG CONTEXT FOUND: {data.get('rag_context', '')}")
                                             print(f"🔍 HAS CONTEXT: {data.get('has_context', False)}")
+                                            # Clear current response since generation is complete
+                                            st.session_state.current_response = ""
                                             return {
                                                 "response": full_response,
                                                 "conversation_id": st.session_state.conversation_id,
@@ -725,6 +731,8 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                             return {"response": "No response generated. Please try again."}
                         else:
                             # If we have content but no rag_context line, return what we have
+                            # Clear current response in case of any exit path
+                            st.session_state.current_response = ""
                             return {
                                 "response": full_response,
                                 "conversation_id": st.session_state.conversation_id,
@@ -1671,6 +1679,8 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
+                # Store in session state so stop button can access it
+                st.session_state.current_response = ""
                 engine_used = "auto"
                 reasoning_type = "unknown"
                 steps_count = 0
@@ -1711,6 +1721,8 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                         if "content" in data:
                                             chunk = data["content"]
                                             full_response += chunk
+                                            # Update session state so stop button can access current content
+                                            st.session_state.current_response = full_response
                                             message_placeholder.markdown(full_response + "▌")
                                             print(f"🔍 Added chunk: {chunk[:50]}...")
                                             
@@ -1748,6 +1760,8 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                                             full_response += phase2_info
                                             message_placeholder.markdown(full_response)
                                             
+                                            # Clear current response since generation is complete
+                                            st.session_state.current_response = ""
                                             return {
                                                 "response": full_response,
                                                 "conversation_id": data.get("conversation_id") or conversation_id,
@@ -1785,6 +1799,8 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                             full_response += phase2_info
                             message_placeholder.markdown(full_response)
                             
+                            # Clear current response in case of any exit path
+                            st.session_state.current_response = ""
                             return {
                                 "response": full_response,
                                 "conversation_id": conversation_id,
@@ -1891,6 +1907,8 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
+                # Store in session state so stop button can access it
+                st.session_state.current_response = ""
                 strategy_used = "auto"
                 reasoning_type = "unknown"
                 steps_count = 0
@@ -1934,6 +1952,8 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                                         if "content" in data:
                                             chunk = data["content"]
                                             full_response += chunk
+                                            # Update session state so stop button can access current content
+                                            st.session_state.current_response = full_response
                                             message_placeholder.markdown(full_response + "▌")
                                             print(f"🔍 Added chunk: {chunk[:50]}...")
                                             
@@ -1958,6 +1978,8 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                                             print(f"🔍 Final message received")
                                             message_placeholder.markdown(full_response)
                                             
+                                            # Clear current response since generation is complete
+                                            st.session_state.current_response = ""
                                             return {"response": full_response, "conversation_id": conversation_id, "strategy_used": strategy_used, "reasoning_type": reasoning_type, "steps_count": steps_count, "confidence": confidence, "validation_summary": validation_summary}
                                     except json.JSONDecodeError as e:
                                         print(f"🔍 JSON decode error: {e}")
