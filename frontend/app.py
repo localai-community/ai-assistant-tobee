@@ -482,7 +482,7 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
             if conversation_id:
                 payload["conversation_id"] = conversation_id
             
-            # Use streaming endpoint with proper httpx streaming
+            # Use streaming endpoint
             with client.stream(
                 "POST",
                 f"{BACKEND_URL}/api/v1/reasoning-chat/stream",
@@ -492,26 +492,22 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
                 if response.status_code == 200:
                     # Handle streaming response
                     full_response = ""
-                    for chunk in response.iter_text():
-                        # Check for stop signal
-                        if st.session_state.stop_generation:
-                            yield {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
-                            return
-                        
-                        if chunk:
-                            # Handle different response formats
-                            if chunk.startswith('data: '):
+                    
+                    for line in response.iter_lines():
+                        if line:
+                            # Handle SSE format
+                            if line.startswith('data: '):
                                 try:
-                                    data = json.loads(chunk[6:])  # Remove 'data: ' prefix
+                                    data = json.loads(line[6:])  # Remove 'data: ' prefix
                                     content = data.get('content', '')
                                     full_response += content
                                     yield content
                                 except json.JSONDecodeError:
                                     continue
                             else:
-                                # Direct text response
-                                full_response += chunk
-                                yield chunk
+                                # Direct text response (fallback)
+                                full_response += line
+                                yield line
                     
                     # Return final response data
                     yield {
@@ -1513,14 +1509,12 @@ def display_chat_messages():
     """Display chat messages."""
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            # Display the message content
             content = message["content"]
             
-            # Add visual indicator if message was stopped by user
+            # Show visual indicator if message was stopped
             if message.get("stopped"):
-                content += "\n\n⏹️ *Generation stopped by user - content preserved*"
                 st.markdown(content)
-                st.info("💾 This response was interrupted but your content has been saved!")
+                st.info("⏹️ Generation stopped by user - content preserved!")
             else:
                 st.markdown(content)
 
@@ -1917,8 +1911,11 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                         for line in response.iter_lines():
                             # Check for stop signal
                             if st.session_state.stop_generation:
+                                print(f"🔍 DEBUG: Stop signal detected in Phase 3 streaming! full_response length: {len(full_response)}")
                                 message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
-                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                                stopped_response = {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True, "strategy_used": strategy_used, "reasoning_type": reasoning_type, "steps_count": steps_count, "confidence": confidence, "validation_summary": validation_summary}
+                                print(f"🔍 DEBUG: Returning stopped response: {stopped_response}")
+                                return stopped_response
                             
                             if line:
                                 print(f"🔍 Received line: {line[:100]}...")
@@ -2591,6 +2588,21 @@ def main():
             print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
             st.session_state.stop_generation = True
             st.session_state.is_generating = False
+            
+            # Save any accumulated content immediately
+            if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
+                print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
+                stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": stopped_content,
+                    "stopped": True
+                })
+                # Clear the current response
+                st.session_state.current_response = ""
+                print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
+                # Force UI refresh to show the saved content immediately
+                st.rerun()
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
@@ -2668,12 +2680,16 @@ def main():
             elif temp_override == "phase1":
                 # Force Phase 1 for sample question
                 print(f"🔍 DEBUG: FORCING Phase 1 reasoning for sample question")
+                print(f"🔍 DEBUG: streaming enabled: {st.session_state.use_streaming}")
                 if st.session_state.use_streaming:
                     # Use streaming reasoning response
+                    print(f"🔍 DEBUG: Calling send_streaming_reasoning_chat for Phase 1")
                     with st.spinner("🧠 Thinking step by step..."):
                         response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
+                    print(f"🔍 DEBUG: send_streaming_reasoning_chat returned: {type(response_data)}")
                 else:
                     # Use regular reasoning response
+                    print(f"🔍 DEBUG: Using non-streaming Phase 1")
                     with st.spinner("🧠 Thinking step by step..."):
                         response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
             elif st.session_state.use_phase3_reasoning:
@@ -2763,22 +2779,52 @@ def main():
             if temp_override == "phase1" and st.session_state.use_streaming:
                 # For streaming Phase 1 reasoning, handle the generator response
                 print(f"🔍 DEBUG: Handling Phase 1 streaming response")
+                print(f"🔍 DEBUG: response_data type: {type(response_data)}")
                 # Create a placeholder for the assistant message
                 with st.chat_message("assistant"):
                     message_placeholder = st.empty()
                     full_response = ""
+                    # Store in session state so stop button can access it
+                    st.session_state.current_response = ""
                     
                     # Stream the response chunks
+                    chunk_count = 0
                     for chunk in response_data:
+                        # Check for stop signal and save content immediately
+                        print(f"🔍 DEBUG: Checking stop signal - stop_generation: {st.session_state.stop_generation}")
+                        if st.session_state.stop_generation:
+                            print(f"🔍 DEBUG: ✅ STOP SIGNAL DETECTED! Saving current content...")
+                            if full_response:
+                                final_content = full_response + "\n\n*Generation stopped by user.*"
+                                message_placeholder.markdown(final_content)
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_content,
+                                    "stopped": True,
+                                    "reasoning_used": True
+                                }
+                                st.session_state.messages.append(message_data)
+                                print(f"🔍 DEBUG: ✅ SUCCESSFULLY SAVED stopped content to chat history")
+                            else:
+                                print(f"🔍 DEBUG: ⚠️ No content to save")
+                            break
+                        
+                        chunk_count += 1
+                        print(f"🔍 DEBUG: Processing chunk {chunk_count}: {type(chunk)} - {str(chunk)[:100]}...")
+                        
                         if isinstance(chunk, str):
                             full_response += chunk
+                            # Update session state so stop button can access current content
+                            st.session_state.current_response = full_response
                             message_placeholder.markdown(full_response + "▌")
                         elif isinstance(chunk, dict):
+                            print(f"🔍 DEBUG: Got dict chunk: {chunk}")
                             # This is the final response data
                             if chunk.get("response", "").startswith("❌"):
                                 error_msg = chunk["response"]
                                 message_placeholder.error(error_msg)
                                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                print(f"🔍 DEBUG: Saved Phase 1 error message")
                                 break
                             else:
                                 # Update conversation ID if provided
@@ -2789,7 +2835,7 @@ def main():
                                 final_response = chunk.get("response", full_response)
                                 message_placeholder.markdown(final_response)
                                 
-                                # Add to chat history (preserve content even if stopped)
+                                # Add to chat history
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
@@ -2800,7 +2846,13 @@ def main():
                                 if chunk.get("stopped"):
                                     message_data["stopped"] = True
                                 st.session_state.messages.append(message_data)
+                                print(f"🔍 DEBUG: Phase 1 message added to chat history")
+                                # Clear current response since generation is complete
+                                st.session_state.current_response = ""
                                 break
+                    print(f"🔍 DEBUG: Phase 1 streaming completed, processed {chunk_count} chunks")
+                    # Clear current response in case of any exit path
+                    st.session_state.current_response = ""
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
@@ -2886,13 +2938,18 @@ def main():
             elif temp_override == "phase3" and st.session_state.use_streaming:
                 # For streaming Phase 3 reasoning, the function handles its own display
                 print(f"🔍 DEBUG: Handling Phase 3 streaming response")
+                print(f"🔍 DEBUG: response_data = {response_data}")
+                print(f"🔍 DEBUG: response_data type = {type(response_data)}")
                 
                 # response_data is a dict returned from the streaming function
                 if response_data:
+                    print(f"🔍 DEBUG: response_data exists, checking content...")
                     if response_data.get("response", "").startswith("❌"):
                         error_msg = response_data["response"]
                         st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                        print(f"🔍 DEBUG: Saved error message to chat history")
                     else:
+                        print(f"🔍 DEBUG: Processing normal response...")
                         # Update conversation ID if provided
                         if response_data.get("conversation_id"):
                             st.session_state.conversation_id = response_data["conversation_id"]
@@ -2908,10 +2965,16 @@ def main():
                             "steps_count": response_data.get("steps_count"),
                             "validation_summary": response_data.get("validation_summary")
                         }
+                        print(f"🔍 DEBUG: Checking if stopped: {response_data.get('stopped')}")
                         if response_data.get("stopped"):
                             message_data["stopped"] = True
                             print(f"🔍 DEBUG: Saving stopped Phase 3 response to chat history")
+                        else:
+                            print(f"🔍 DEBUG: Saving normal Phase 3 response to chat history")
                         st.session_state.messages.append(message_data)
+                        print(f"🔍 DEBUG: Message added to chat history")
+                else:
+                    print(f"🔍 DEBUG: response_data is None or empty!")
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
