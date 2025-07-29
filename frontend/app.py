@@ -762,6 +762,7 @@ def load_conversation_messages(conversation_id: str) -> List[Dict]:
 
 def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
     """Send message to backend and get streaming response with real-time display."""
+    print(f"🔍 DEBUG: Starting basic streaming chat function")
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
@@ -795,6 +796,7 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                         for line in response.iter_lines():
                             # Check for stop signal
                             if st.session_state.stop_generation:
+                                print(f"🔍 DEBUG: Stop signal detected in basic streaming chat!")
                                 message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
                                 return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
                             
@@ -2571,12 +2573,12 @@ def main():
         prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
     with col2:
-        # Stop button - always show but enable/disable based on state
-        if st.button("🛑 Stop", key="stop_button", disabled=not st.session_state.is_generating, help="Stop the current generation" if st.session_state.is_generating else "No generation in progress"):
+        # Stop button - always active for testing
+        print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
+        if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
             print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
             st.session_state.stop_generation = True
             st.session_state.is_generating = False
-            st.rerun()
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
@@ -2795,6 +2797,31 @@ def main():
                         del st.session_state.temp_phase_override
                     
                     # Reset generating state
+                    st.session_state.is_generating = False
+            elif st.session_state.use_streaming and not st.session_state.use_reasoning_chat and not st.session_state.use_rag:
+                # Handle basic streaming chat response
+                print(f"🔍 DEBUG: Handling basic streaming chat response")
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Add assistant response to chat history
+                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    st.session_state.messages.append(message_data)
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from backend. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+                    
+                    # Reset generating state on error
                     st.session_state.is_generating = False
             elif temp_override == "phase2" and st.session_state.use_streaming:
                 # For streaming Phase 2 reasoning, handle the generator response

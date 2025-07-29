@@ -37,6 +37,9 @@
 - Push Docker images should be handled by Terraform before updating AWS Lambda functions as part of the deployment pipeline
 - Always test changes before committing
 - Use the correct venv for each component (backend vs frontend)
+- **Incremental Testing**: Test changes in one section first before applying to other sections
+- **No Pre-commit**: Do not commit changes before user testing - wait for user approval
+- **Section-by-Section**: Apply logic to one phase/section, let user test, then apply to other phases if successful
 
 ## Server Management
 - Always use `./start.sh` for starting servers and services
