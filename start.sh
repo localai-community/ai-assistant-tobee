@@ -71,6 +71,7 @@ show_usage() {
     echo "Commands:"
     echo "  gpu          Start GPU setup (macOS M1/M2 only)"
     echo "  nogpu        Start no-GPU setup (cross-platform)"
+    echo "  quick        Auto-select best setup for your system"
     echo "  stop         Stop all services"
     echo "  status       Show system information"
     echo "  debug        Run diagnostics"
@@ -85,6 +86,7 @@ show_usage() {
     echo ""
     echo "Examples:"
     echo "  $0                    # Interactive menu"
+    echo "  $0 quick              # Auto-select best setup"
     echo "  $0 gpu                # Start GPU setup"
     echo "  $0 nogpu -y           # Start no-GPU setup with auto-confirm"
     echo "  $0 stop               # Stop all services"
@@ -103,6 +105,10 @@ parse_arguments() {
                 ;;
             nogpu)
                 COMMAND="nogpu"
+                shift
+                ;;
+            quick)
+                COMMAND="quick"
                 shift
                 ;;
             stop)
@@ -351,6 +357,18 @@ main() {
             nogpu)
                 run_no_gpu_setup
                 ;;
+            quick)
+                print_header
+                print_info "Auto-selecting best setup for your system..."
+                echo ""
+                if check_macos && check_apple_silicon; then
+                    print_success "Detected macOS M1/M2 - using GPU setup"
+                    run_gpu_setup
+                else
+                    print_info "Using cross-platform no-GPU setup"
+                    run_no_gpu_setup
+                fi
+                ;;
             stop)
                 stop_services
                 ;;
@@ -376,7 +394,21 @@ main() {
     while true; do
         show_menu
         
-        read -p "Enter your choice (1-6): " -n 1 -r
+        # Set default choice based on system compatibility
+        DEFAULT_CHOICE=""
+        if check_macos && check_apple_silicon; then
+            DEFAULT_CHOICE="1"
+            read -p "Enter your choice (1-6) [default: 1]: " -n 1 -r
+        else
+            DEFAULT_CHOICE="2"
+            read -p "Enter your choice (1-6) [default: 2]: " -n 1 -r
+        fi
+        
+        # Use default if no input provided
+        if [[ -z "$REPLY" ]]; then
+            REPLY="$DEFAULT_CHOICE"
+        fi
+        
         echo ""
         echo ""
         
