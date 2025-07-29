@@ -115,6 +115,8 @@ def init_session_state():
         st.session_state.sample_question = None
     if "chat_input_key" not in st.session_state:
         st.session_state.chat_input_key = 0
+    if "temp_phase_override" not in st.session_state:
+        st.session_state.temp_phase_override = None
     # Add Phase 2 reasoning engine state variables
     if "use_phase2_reasoning" not in st.session_state:
         st.session_state.use_phase2_reasoning = True
@@ -146,7 +148,7 @@ def init_session_state():
     
     # Phase 3 Advanced Reasoning Strategies
     if "use_phase3_reasoning" not in st.session_state:
-        st.session_state.use_phase3_reasoning = False
+        st.session_state.use_phase3_reasoning = True
     if "selected_phase3_strategy" not in st.session_state:
         st.session_state.selected_phase3_strategy = "auto"
     if "phase3_health" not in st.session_state:
@@ -847,7 +849,7 @@ def send_to_backend(message: str, conversation_id: Optional[str] = None, use_str
 
 def display_welcome_message():
     """Display welcome message and status information."""
-    st.markdown('<h1 class="main-header">🤖 LocalAI Community</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">LocalAI - Ask Tobee</h1>', unsafe_allow_html=True)
     
     # Status indicators
     col1, col2, col3, col4 = st.columns(4)
@@ -876,94 +878,8 @@ def display_welcome_message():
         else:
             st.info("📚 No Documents Loaded")
     
-    # Welcome message
-    if not st.session_state.messages:
-        welcome_msg = """
-        **Welcome to LocalAI Community!**
-        
-        I'm your local-first AI assistant with MCP and RAG capabilities.
-        
-        **Features:**
-        • Direct Ollama integration
-        • Document processing (PDF, DOCX, TXT, MD)
-        • RAG (Retrieval-Augmented Generation)
-        • 🚀 Advanced RAG with multi-strategy retrieval
-        • MCP (Model Context Protocol) tools
-        
-        **Getting Started:**
-        1. Upload documents using the sidebar
-        2. Enable RAG mode for document-based responses
-        3. 🚀 Try Advanced RAG for better retrieval results
-        4. Ask questions about your documents
-        5. Use MCP tools for file operations
-        
-        How can I help you today?
-        """
-        
-        st.markdown(welcome_msg)
-        
-        if st.session_state.available_models:
-            st.info(f"**Available Models:** {', '.join(st.session_state.available_models)}")
-        else:
-            st.warning("**⚠️ No models available** - Please make sure Ollama is running and models are installed.")
-        
-        # Sample questions for testing reasoning
-        st.markdown("---")
-        st.markdown("### 🧠 **Sample Questions to Test Reasoning**")
-        st.markdown("Try these questions with reasoning enabled for step-by-step solutions:")
-        
-        # Create columns for different question types
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("**🔢 Mathematical Problems:**")
-            sample_math_questions = [
-                "Solve 2x + 3 = 7",
-                "Find the derivative of f(x) = x³ + 2x² - 5x + 3",
-                "Calculate the area of a circle with radius 5",
-                "Solve the quadratic equation x² - 4x + 3 = 0"
-            ]
-            for i, question in enumerate(sample_math_questions, 1):
-                # Use dynamic key to prevent button state issues
-                button_key = f"math_{i}_{st.session_state.chat_input_key}"
-                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
-                    st.session_state.sample_question = question
-                    st.session_state.chat_input_key += 1  # Increment to force button refresh
-                    st.rerun()
-        
-        with col2:
-            st.markdown("**🧮 Logical Problems:**")
-            sample_logic_questions = [
-                "If all roses are flowers and some flowers are red, what can we conclude?",
-                "A train leaves at 2 PM and arrives at 4 PM. How long was the journey?",
-                "If 3 workers can complete a task in 6 hours, how long would 2 workers take?",
-                "What is the next number in the sequence: 2, 4, 8, 16, ...?"
-            ]
-            for i, question in enumerate(sample_logic_questions, 1):
-                # Use dynamic key to prevent button state issues
-                button_key = f"logic_{i}_{st.session_state.chat_input_key}"
-                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
-                    st.session_state.sample_question = question
-                    st.session_state.chat_input_key += 1  # Increment to force button refresh
-                    st.rerun()
-        
-        with col3:
-            st.markdown("**📝 General Problems:**")
-            sample_general_questions = [
-                "Explain how photosynthesis works step by step",
-                "What are the steps to make a sandwich?",
-                "How does a computer process information?",
-                "Explain the water cycle in detail"
-            ]
-            for i, question in enumerate(sample_general_questions, 1):
-                # Use dynamic key to prevent button state issues
-                button_key = f"general_{i}_{st.session_state.chat_input_key}"
-                if st.button(f"{i}. {question}", key=button_key, use_container_width=True):
-                    st.session_state.sample_question = question
-                    st.session_state.chat_input_key += 1  # Increment to force button refresh
-                    st.rerun()
-        
-        st.markdown("💡 **Tip:** Enable reasoning mode in the sidebar for step-by-step solutions!")
+
+
 
 def extract_rag_context_from_content(content: str) -> str:
     """Extract RAG context from response content by looking for document references."""
@@ -2033,7 +1949,7 @@ def main():
         """, unsafe_allow_html=True)
         
         # Reasoning System Section (Collapsible)
-        with st.expander("🧠 Reasoning System", expanded=False):
+        with st.expander("🧠 Phase 1: Reasoning System", expanded=False):
             # Reasoning Chat Toggle (Always visible within the expander)
             use_reasoning_chat = st.checkbox(
                 "Enable Phase 1: Basic Step-by-Step Reasoning",
@@ -2062,9 +1978,34 @@ def main():
                         st.error(f"Error: {reasoning_health['error']}")
             else:
                 st.warning("Backend not available for reasoning system")
+            
+            # Sample Questions
+            if use_reasoning_chat:
+                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
+                
+                # General analytical questions for Phase 1
+                phase1_sample_questions = [
+                    "Explain how photosynthesis works step by step",
+                    "What are the steps to make a sandwich?",
+                    "How does a computer process information?",
+                    "Explain the water cycle in detail",
+                    "What is the process of making coffee?",
+                    "How do plants grow from seeds?"
+                ]
+                
+                for i, question in enumerate(phase1_sample_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"phase1_general_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase1"
+                        print(f"🔍 DEBUG: Phase 1 button clicked, set temp_phase_override to: {st.session_state.temp_phase_override}")
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                st.divider()
+                st.info("💡 Phase 1 reasoning provides basic step-by-step solutions for general analytical questions.")
         
         # Phase 2 Reasoning Engines Section (Collapsible)
-        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=True):
+        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=False):
             st.markdown('<div class="section-header">Engine Selection</div>', unsafe_allow_html=True)
             
             # Phase 2 Reasoning Toggle
@@ -2157,6 +2098,8 @@ def main():
                 for i, question in enumerate(st.session_state.phase2_sample_questions["mathematical"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase2_math_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase2"
+                        print(f"🔍 DEBUG: Phase 2 math button clicked, set temp_phase_override to: {st.session_state.temp_phase_override}")
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2165,6 +2108,7 @@ def main():
                 for i, question in enumerate(st.session_state.phase2_sample_questions["logical"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase2_logic_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase2"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2173,6 +2117,7 @@ def main():
                 for i, question in enumerate(st.session_state.phase2_sample_questions["causal"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase2_causal_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase2"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2275,6 +2220,7 @@ def main():
                 for i, question in enumerate(st.session_state.phase3_sample_questions["chain_of_thought"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase3_cot_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase3"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2283,6 +2229,7 @@ def main():
                 for i, question in enumerate(st.session_state.phase3_sample_questions["tree_of_thoughts"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase3_tot_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase3"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2291,6 +2238,7 @@ def main():
                 for i, question in enumerate(st.session_state.phase3_sample_questions["prompt_engineering"]):
                     if st.button(f"📝 {question[:40]}...", key=f"phase3_pe_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
+                        st.session_state.temp_phase_override = "phase3"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
@@ -2561,111 +2509,7 @@ def main():
     # Main chat interface
     display_welcome_message()
     
-    # Phase 2 Testing Section (Always visible when backend is available)
-    if st.session_state.backend_health:
-        # Check if Phase 2 engines are available
-        phase2_status = get_phase2_engine_status()
-        
-        if phase2_status.get("status") == "available":
-            st.markdown("---")
-            st.markdown("## 🚀 **Phase 2: Advanced Reasoning Engines Testing**")
-            st.markdown("Test the specialized reasoning engines for mathematical, logical, and causal problems.")
-            
-            # Engine Status Summary
-            engines = phase2_status.get("engines", {})
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                math_status = engines.get("mathematical", {})
-                if math_status.get("status") == "available":
-                    st.success("✅ Mathematical Engine")
-                else:
-                    st.warning("⚠️ Mathematical Engine")
-            
-            with col2:
-                logic_status = engines.get("logical", {})
-                if logic_status.get("status") == "available":
-                    st.success("✅ Logical Engine")
-                else:
-                    st.warning("⚠️ Logical Engine")
-            
-            with col3:
-                causal_status = engines.get("causal", {})
-                if causal_status.get("status") == "available":
-                    st.success("✅ Causal Engine")
-                else:
-                    st.warning("⚠️ Causal Engine")
-            
-            # Phase 2 Testing Controls
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # Enable Phase 2 reasoning for testing
-                use_phase2_for_testing = st.checkbox(
-                    "🚀 Enable Phase 2 Reasoning for Testing",
-                    value=st.session_state.use_phase2_reasoning,
-                    help="Enable specialized reasoning engines for testing"
-                )
-                st.session_state.use_phase2_reasoning = use_phase2_for_testing
-            
-            with col2:
-                # Engine selection for testing
-                if use_phase2_for_testing:
-                    test_engine = st.selectbox(
-                        "Select Engine for Testing",
-                        options=[
-                            ("auto", "🔄 Auto-detect"),
-                            ("mathematical", "🔢 Mathematical"),
-                            ("logical", "🧮 Logical"),
-                            ("causal", "🔗 Causal")
-                        ],
-                        format_func=lambda x: x[1],
-                        index=0,
-                        key="phase2_test_engine"
-                    )
-                    st.session_state.selected_phase2_engine = test_engine[0]
-            
-            # Phase 2 Sample Questions
-            if use_phase2_for_testing:
-                st.markdown("### 📝 **Phase 2 Sample Questions**")
-                st.markdown("Click any question to test the Phase 2 reasoning engines:")
-                
-                # Create tabs for different problem types
-                tab1, tab2, tab3 = st.tabs(["🔢 Mathematical", "🧮 Logical", "🔗 Causal"])
-                
-                with tab1:
-                    st.markdown("**Mathematical Problems:**")
-                    for i, question in enumerate(st.session_state.phase2_sample_questions["mathematical"]):
-                        if st.button(f"📝 {question}", key=f"phase2_test_math_{i}_{st.session_state.chat_input_key}", use_container_width=True):
-                            st.session_state.sample_question = question
-                            st.session_state.chat_input_key += 1
-                            st.rerun()
-                
-                with tab2:
-                    st.markdown("**Logical Problems:**")
-                    for i, question in enumerate(st.session_state.phase2_sample_questions["logical"]):
-                        if st.button(f"📝 {question}", key=f"phase2_test_logic_{i}_{st.session_state.chat_input_key}", use_container_width=True):
-                            st.session_state.sample_question = question
-                            st.session_state.chat_input_key += 1
-                            st.rerun()
-                
-                with tab3:
-                    st.markdown("**Causal Problems:**")
-                    for i, question in enumerate(st.session_state.phase2_sample_questions["causal"]):
-                        if st.button(f"📝 {question}", key=f"phase2_test_causal_{i}_{st.session_state.chat_input_key}", use_container_width=True):
-                            st.session_state.sample_question = question
-                            st.session_state.chat_input_key += 1
-                            st.rerun()
-                
-                st.info("💡 **Phase 2 engines provide specialized reasoning with step-by-step solutions and confidence scoring.**")
-            else:
-                st.info("💡 **Enable Phase 2 reasoning above to test the specialized engines.**")
-        else:
-            st.markdown("---")
-            st.markdown("## 🚀 **Phase 2: Advanced Reasoning Engines**")
-            st.warning("⚠️ Phase 2 reasoning engines are not available.")
-            if phase2_status.get("error"):
-                st.error(f"Error: {phase2_status['error']}")
+
     
     # Display chat messages
     display_chat_messages()
@@ -2694,8 +2538,65 @@ def main():
             with st.chat_message("assistant"):
                 st.error(error_msg)
         else:
+            # Check for temporary phase override from sample question buttons
+            temp_override = st.session_state.get("temp_phase_override")
+            
+            # Debug: Print the override status
+            if temp_override:
+                print(f"🔍 DEBUG: Using temp_phase_override: {temp_override}")
+                print(f"🔍 DEBUG: Current settings - Phase3: {st.session_state.use_phase3_reasoning}, Phase2: {st.session_state.use_phase2_reasoning}, Phase1: {st.session_state.use_reasoning_chat}")
+            
             # Send message to backend (with Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
-            if st.session_state.use_phase3_reasoning:
+            if temp_override == "phase3":
+                # Force Phase 3 for sample question
+                print(f"🔍 DEBUG: FORCING Phase 3 reasoning for sample question")
+                if st.session_state.use_streaming:
+                    # Use streaming Phase 3 reasoning response
+                    response_data = send_streaming_phase3_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_phase3_strategy, 
+                        st.session_state.conversation_id
+                    )
+                else:
+                    # Use regular Phase 3 reasoning response
+                    with st.spinner("🧠 Using Phase 3 advanced reasoning strategies..."):
+                        response_data = send_phase3_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase3_strategy, 
+                            st.session_state.conversation_id, 
+                            use_streaming=False
+                        )
+            elif temp_override == "phase2":
+                # Force Phase 2 for sample question
+                print(f"🔍 DEBUG: FORCING Phase 2 reasoning for sample question")
+                if st.session_state.use_streaming:
+                    # Use streaming Phase 2 reasoning response
+                    response_data = send_streaming_phase2_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_phase2_engine, 
+                        st.session_state.conversation_id
+                    )
+                else:
+                    # Use regular Phase 2 reasoning response
+                    with st.spinner("🚀 Using Phase 2 reasoning engine..."):
+                        response_data = send_phase2_reasoning_chat(
+                            prompt, 
+                            st.session_state.selected_phase2_engine, 
+                            st.session_state.conversation_id, 
+                            use_streaming=False
+                        )
+            elif temp_override == "phase1":
+                # Force Phase 1 for sample question
+                print(f"🔍 DEBUG: FORCING Phase 1 reasoning for sample question")
+                if st.session_state.use_streaming:
+                    # Use streaming reasoning response
+                    with st.spinner("🧠 Thinking step by step..."):
+                        response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
+                else:
+                    # Use regular reasoning response
+                    with st.spinner("🧠 Thinking step by step..."):
+                        response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
+            elif st.session_state.use_phase3_reasoning:
                 # Use Phase 3 advanced reasoning strategies for complex problem solving
                 if st.session_state.use_streaming:
                     # Use streaming Phase 3 reasoning response
@@ -2779,7 +2680,163 @@ def main():
                             response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
             
             # Handle streaming responses differently since they're already displayed
-            if st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+            if temp_override == "phase1" and st.session_state.use_streaming:
+                # For streaming Phase 1 reasoning, handle the generator response
+                print(f"🔍 DEBUG: Handling Phase 1 streaming response")
+                # Create a placeholder for the assistant message
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in response_data:
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "reasoning_used": chunk.get("reasoning_used", False),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Clear temporary phase override after processing
+                    if "temp_phase_override" in st.session_state:
+                        print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
+                        del st.session_state.temp_phase_override
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+            elif temp_override == "phase2" and st.session_state.use_streaming:
+                # For streaming Phase 2 reasoning, handle the generator response
+                print(f"🔍 DEBUG: Handling Phase 2 streaming response")
+                # Create a placeholder for the assistant message
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in response_data:
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message with Phase 2 info
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history with Phase 2 metadata
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "phase2_engine": True,
+                                    "engine_used": chunk.get("engine_used", "unknown"),
+                                    "reasoning_type": chunk.get("reasoning_type", "unknown"),
+                                    "confidence": chunk.get("confidence", 0.0),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Clear temporary phase override after processing
+                    if "temp_phase_override" in st.session_state:
+                        print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
+                        del st.session_state.temp_phase_override
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+            elif temp_override == "phase3" and st.session_state.use_streaming:
+                # For streaming Phase 3 reasoning, handle the generator response
+                print(f"🔍 DEBUG: Handling Phase 3 streaming response")
+                # Create a placeholder for the assistant message
+                with st.chat_message("assistant"):
+                    message_placeholder = st.empty()
+                    full_response = ""
+                    
+                    # Stream the response chunks
+                    for chunk in response_data:
+                        if isinstance(chunk, str):
+                            full_response += chunk
+                            message_placeholder.markdown(full_response + "▌")
+                        elif isinstance(chunk, dict):
+                            # This is the final response data
+                            if chunk.get("response", "").startswith("❌"):
+                                error_msg = chunk["response"]
+                                message_placeholder.error(error_msg)
+                                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                                break
+                            else:
+                                # Update conversation ID if provided
+                                if chunk.get("conversation_id"):
+                                    st.session_state.conversation_id = chunk["conversation_id"]
+                                
+                                # Update the final message with Phase 3 info
+                                final_response = chunk.get("response", full_response)
+                                message_placeholder.markdown(final_response)
+                                
+                                # Add to chat history with Phase 3 metadata
+                                message_data = {
+                                    "role": "assistant", 
+                                    "content": final_response,
+                                    "phase3_strategy": True,
+                                    "strategy_used": chunk.get("strategy_used", "unknown"),
+                                    "reasoning_type": chunk.get("reasoning_type", "unknown"),
+                                    "confidence": chunk.get("confidence", 0.0),
+                                    "steps_count": chunk.get("steps_count"),
+                                    "validation_summary": chunk.get("validation_summary")
+                                }
+                                st.session_state.messages.append(message_data)
+                                break
+                    
+                    # Refresh conversation list to include the new conversation
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Clear temporary phase override after processing
+                    if "temp_phase_override" in st.session_state:
+                        print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
+                        del st.session_state.temp_phase_override
+                    
+                    # Force rerun to update sidebar
+                    st.rerun()
+            elif st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
                 # For streaming Phase 2 reasoning, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided

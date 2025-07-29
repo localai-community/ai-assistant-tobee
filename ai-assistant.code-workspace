@@ -5,7 +5,7 @@
             "path": "./backend"
         },
         {
-            "name": "Frontend", 
+            "name": "Frontend",
             "path": "./frontend"
         },
         {
@@ -24,10 +24,12 @@
             "**/.pytest_cache": true,
             "**/venv/": true
         },
-        "ai.chat.model": "gpt-4",
+        "ai.chat.model": "auto",
         "ai.chat.maxTokens": 4000,
         "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": ["tests"]
+        "python.testing.pytestArgs": [
+            "tests"
+        ]
     },
     "extensions": {
         "recommendations": [
