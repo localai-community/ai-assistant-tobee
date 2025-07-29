@@ -37,9 +37,13 @@ pkill -f "uvicorn.*app.main:app" 2>/dev/null || true
 print_info "Stopping frontend..."
 pkill -f "streamlit.*app.py" 2>/dev/null || true
 
-# Stop Ollama
-print_info "Stopping Ollama..."
-pkill ollama 2>/dev/null || true
+# Check Ollama status (don't stop it)
+print_info "Checking Ollama status..."
+if pgrep -x "ollama" > /dev/null; then
+    print_info "Ollama is still running (user-managed)"
+else
+    print_info "Ollama is not running"
+fi
 
 # Clean up PID files
 rm -f /tmp/ollama.pid /tmp/backend.pid /tmp/frontend.pid

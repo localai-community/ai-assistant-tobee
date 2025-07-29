@@ -107,23 +107,19 @@ else
     print_status "Ollama already installed: $(ollama --version)"
 fi
 
-# Step 2: Start Ollama with GPU support
-print_header "Step 2: Starting Ollama with GPU acceleration"
+# Step 2: Check Ollama status
+print_header "Step 2: Checking Ollama status"
 
-# Check and free port 11434 (Ollama)
-check_and_kill_port 11434 "Ollama"
-
-# Stop any existing Ollama processes
+# Check if Ollama is already running
 if pgrep -x "ollama" > /dev/null; then
-    print_info "Stopping existing Ollama processes..."
-    pkill ollama || true
-    sleep 2
+    print_info "Ollama is already running"
+    OLLAMA_PID=$(pgrep -x "ollama")
+    print_info "Using existing Ollama instance (PID: $OLLAMA_PID)"
+else
+    print_error "Ollama is not running"
+    print_info "Please start Ollama manually: ollama serve"
+    exit 1
 fi
-
-# Start Ollama
-print_info "Starting Ollama with GPU support..."
-ollama serve &
-OLLAMA_PID=$!
 
 # Wait for Ollama to be ready
 print_info "Waiting for Ollama to be ready..."

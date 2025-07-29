@@ -11,6 +11,10 @@ AUTO_CONFIRM=false
 VERBOSE=false
 SKIP_CHECKS=false
 
+
+
+
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -46,6 +50,68 @@ print_success() {
     echo -e "${PURPLE}🎉 $1${NC}"
 }
 
+
+
+# Function to check if services are already running and restart them
+check_services_running() {
+    local backend_running=false
+    local frontend_running=false
+    
+    # Check if backend is running
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+        backend_running=true
+    fi
+    
+    # Check if frontend is running
+    if curl -s http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+        frontend_running=true
+    fi
+    
+    if [[ "$backend_running" == "true" || "$frontend_running" == "true" ]]; then
+        print_info "Services are already running, restarting them..."
+        echo ""
+        if [[ "$backend_running" == "true" ]]; then
+            print_info "   • Backend: http://localhost:8000 (stopping)"
+        fi
+        if [[ "$frontend_running" == "true" ]]; then
+            print_info "   • Frontend: http://localhost:8501 (stopping)"
+        fi
+        echo ""
+        
+        # Stop existing services
+        print_info "Stopping existing services..."
+        ./scripts/stop-gpu-simple.sh 2>/dev/null || true
+        pkill -f "run-with-gpu-simple.sh" 2>/dev/null || true
+        pkill -f "run-no-gpu.sh" 2>/dev/null || true
+        
+        # Wait for services to stop
+        sleep 3
+        
+        print_success "Existing services stopped, ready to restart"
+        echo ""
+    fi
+    
+    return 0
+}
+
+# Function to cleanup background processes on exit
+cleanup_background_processes() {
+    echo ""
+    print_warning "Stopping all services..."
+    
+    # Stop all services cleanly
+    ./scripts/stop-gpu-simple.sh 2>/dev/null || true
+    
+    # Kill any remaining setup processes
+    pkill -f "run-with-gpu-simple.sh" 2>/dev/null || true
+    pkill -f "run-no-gpu.sh" 2>/dev/null || true
+    
+    print_success "All services stopped!"
+    exit 0
+}
+
+
+
 # Function to check if we're on macOS
 check_macos() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -64,6 +130,47 @@ check_apple_silicon() {
     fi
 }
 
+# Function to check if Ollama is running
+check_ollama_running() {
+    if pgrep -x "ollama" > /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to get Ollama status
+get_ollama_status() {
+    if check_ollama_running; then
+        local ollama_pid=$(pgrep -x "ollama")
+        local ollama_port=$(lsof -ti:11434 2>/dev/null | head -1)
+        if [[ -n "$ollama_port" ]]; then
+            # Check if Ollama is responding to API calls
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+                echo "running and healthy (PID: $ollama_pid, Port: 11434)"
+            else
+                echo "running but not responding (PID: $ollama_pid, Port: 11434)"
+            fi
+        else
+            echo "running (PID: $ollama_pid, Port: unknown)"
+        fi
+    else
+        echo "not running"
+    fi
+}
+
+# Function to check Ollama status without starting it
+ensure_ollama_running() {
+    if ! check_ollama_running; then
+        print_error "Ollama is not running"
+        print_info "Please start Ollama manually: ollama serve"
+        return 1
+    else
+        print_info "Using existing Ollama instance"
+        return 0
+    fi
+}
+
 # Function to check and kill processes using a specific port
 check_and_kill_port() {
     local port=$1
@@ -71,15 +178,32 @@ check_and_kill_port() {
     
     if lsof -ti:$port > /dev/null 2>&1; then
         print_warning "Port $port is already in use by $service_name"
-        print_info "Killing processes using port $port..."
         
         # Get PIDs using the port
         local pids=$(lsof -ti:$port)
         
-        # Kill each process
+        # Check if this is Ollama and if it should be preserved
+        if [[ "$service_name" == "Ollama" ]]; then
+            print_info "Ollama is running on port $port"
+            print_info "Keeping existing Ollama instance (user-managed)"
+            return 0
+        fi
+        
+        print_info "Killing processes using port $port..."
+        
+        # Kill each process gracefully first, then forcefully if needed
         for pid in $pids; do
-            print_info "Killing process $pid..."
-            kill -9 $pid 2>/dev/null || true
+            print_info "Stopping process $pid..."
+            kill $pid 2>/dev/null || true
+            
+            # Wait a moment for graceful shutdown
+            sleep 1
+            
+            # Check if process is still running
+            if kill -0 $pid 2>/dev/null; then
+                print_info "Process $pid still running, forcing termination..."
+                kill -9 $pid 2>/dev/null || true
+            fi
         done
         
         # Wait a moment for processes to terminate
@@ -90,10 +214,10 @@ check_and_kill_port() {
             print_error "Failed to free port $port"
             return 1
         else
-            print_status "Port $port is now free"
+            print_success "Port $port is now free"
         fi
     else
-        print_status "Port $port is available"
+        print_success "Port $port is available"
     fi
 }
 
@@ -273,10 +397,11 @@ show_system_info() {
     echo "Ollama Status:"
     if command -v ollama &> /dev/null; then
         print_success "   • Ollama is installed: $(ollama --version)"
-        if pgrep -x "ollama" > /dev/null; then
-            print_success "   • Ollama is running"
+        local ollama_status=$(get_ollama_status)
+        if [[ "$ollama_status" == "not running" ]]; then
+            print_warning "   • Ollama is $ollama_status"
         else
-            print_warning "   • Ollama is not running"
+            print_success "   • Ollama is $ollama_status"
         fi
     else
         print_warning "   • Ollama is not installed"
@@ -311,21 +436,51 @@ run_gpu_setup() {
         fi
     fi
     
+    # Check if services are already running and restart them
+    print_info "Checking if services are already running..."
+    check_services_running
+    
     # Check and free required ports before starting
     print_info "Checking port availability..."
-    check_and_kill_port 11434 "Ollama"
+    # Don't kill Ollama port - let user manage it
     check_and_kill_port 8000 "Backend"
     check_and_kill_port 8501 "Frontend"
     echo ""
     
+    # Check if Ollama is running for GPU setup
+    print_info "Checking Ollama status..."
+    if ! ensure_ollama_running; then
+        print_error "Ollama is not running. Please start it manually: ollama serve"
+        return 1
+    fi
+    
     print_success "Running GPU setup..."
     echo ""
     
-    # Run the simplified GPU setup script (avoids Docker dependency issues)
+    # Run the simplified GPU setup script
+    print_info "Starting GPU setup..."
     if ./scripts/run-with-gpu-simple.sh; then
         print_success "GPU setup completed successfully!"
         echo ""
         print_info "Access your GPU-accelerated AI assistant at: http://localhost:8501"
+        echo ""
+        print_info "Services are running in the background"
+        print_info "Press Ctrl+C to stop all services"
+        echo ""
+        
+        # Keep the script running to maintain services
+        while true; do
+            sleep 10
+            # Check if services are still running
+            if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
+                print_warning "Backend service stopped"
+                break
+            fi
+            if ! curl -s http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+                print_warning "Frontend service stopped"
+                break
+            fi
+        done
     else
         print_error "GPU setup failed"
         return 1
@@ -338,21 +493,47 @@ run_no_gpu_setup() {
     print_info "Starting no-GPU setup (cross-platform)..."
     echo ""
     
+    # Check if services are already running and restart them
+    print_info "Checking if services are already running..."
+    check_services_running
+    
     # Check and free required ports before starting
     print_info "Checking port availability..."
-    check_and_kill_port 11434 "Ollama"
+    # Don't kill Ollama port - let user manage it
     check_and_kill_port 8000 "Backend"
     check_and_kill_port 8501 "Frontend"
     echo ""
+    
+    # For no-GPU setup, we can use existing Ollama if available
+    print_info "Checking if host Ollama is available..."
     
     print_success "Running no-GPU setup..."
     echo ""
     
     # Run the no-GPU setup script
+    print_info "Starting no-GPU setup..."
     if ./scripts/run-no-gpu.sh; then
         print_success "No-GPU setup completed successfully!"
         echo ""
         print_info "Access your AI assistant at: http://localhost:8501"
+        echo ""
+        print_info "Services are running in the background"
+        print_info "Press Ctrl+C to stop all services"
+        echo ""
+        
+        # Keep the script running to maintain services
+        while true; do
+            sleep 10
+            # Check if services are still running
+            if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
+                print_warning "Backend service stopped"
+                break
+            fi
+            if ! curl -s http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+                print_warning "Frontend service stopped"
+                break
+            fi
+        done
     else
         print_error "No-GPU setup failed"
         return 1
@@ -374,10 +555,13 @@ stop_services() {
     docker-compose -f docker/docker-compose.yml down 2>/dev/null || true
     docker-compose -f docker/docker-compose.host-ollama.yml down 2>/dev/null || true
     
-    # Stop Ollama if running
-    if pgrep -x "ollama" > /dev/null; then
-        print_info "Stopping Ollama..."
-        pkill ollama 2>/dev/null || true
+    # Don't stop Ollama - let user manage it manually
+    if check_ollama_running; then
+        local ollama_status=$(get_ollama_status)
+        print_info "Ollama is currently $ollama_status"
+        print_info "Keeping Ollama running (managed by user)"
+    else
+        print_info "Ollama is not running"
     fi
     
     print_success "All services stopped!"
@@ -386,8 +570,13 @@ stop_services() {
 
 # Main script logic
 main() {
+    # Set up cleanup trap for Ctrl+C
+    trap 'cleanup_background_processes' SIGINT SIGTERM
+    
     # Parse command line arguments
     parse_arguments "$@"
+    
+
     
     # If a specific command was provided, execute it directly
     if [[ -n "$COMMAND" ]]; then
@@ -494,11 +683,8 @@ main() {
         esac
         
         if [[ $REPLY == 1 || $REPLY == 2 ]]; then
-            echo ""
-            print_success "Setup completed! You can now use your AI assistant."
-            echo ""
-            print_info "To stop services later, run: ./start.sh stop"
-            echo ""
+            # The setup functions now handle their own monitoring
+            # No need to break out of the loop as they will exit when done
             break
         fi
         
