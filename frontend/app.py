@@ -1510,7 +1510,16 @@ def display_chat_messages():
     """Display chat messages."""
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Display the message content
+            content = message["content"]
+            
+            # Add visual indicator if message was stopped by user
+            if message.get("stopped"):
+                content += "\n\n⏹️ *Generation stopped by user - content preserved*"
+                st.markdown(content)
+                st.info("💾 This response was interrupted but your content has been saved!")
+            else:
+                st.markdown(content)
 
 def get_phase2_engine_status() -> Dict:
     """Get Phase 2 reasoning engine status."""
@@ -2777,7 +2786,7 @@ def main():
                                 final_response = chunk.get("response", full_response)
                                 message_placeholder.markdown(final_response)
                                 
-                                # Add to chat history
+                                # Add to chat history (preserve content even if stopped)
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
@@ -2785,6 +2794,8 @@ def main():
                                     "steps_count": chunk.get("steps_count"),
                                     "validation_summary": chunk.get("validation_summary")
                                 }
+                                if chunk.get("stopped"):
+                                    message_data["stopped"] = True
                                 st.session_state.messages.append(message_data)
                                 break
                     
@@ -2852,7 +2863,7 @@ def main():
                                 final_response = chunk.get("response", full_response)
                                 message_placeholder.markdown(final_response)
                                 
-                                # Add to chat history with Phase 2 metadata
+                                # Add to chat history with Phase 2 metadata (preserve content even if stopped)
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
@@ -2863,6 +2874,8 @@ def main():
                                     "steps_count": chunk.get("steps_count"),
                                     "validation_summary": chunk.get("validation_summary")
                                 }
+                                if chunk.get("stopped"):
+                                    message_data["stopped"] = True
                                 st.session_state.messages.append(message_data)
                                 break
                     
@@ -2908,7 +2921,7 @@ def main():
                                 final_response = chunk.get("response", full_response)
                                 message_placeholder.markdown(final_response)
                                 
-                                # Add to chat history with Phase 3 metadata
+                                # Add to chat history with Phase 3 metadata (preserve content even if stopped)
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
@@ -2919,6 +2932,8 @@ def main():
                                     "steps_count": chunk.get("steps_count"),
                                     "validation_summary": chunk.get("validation_summary")
                                 }
+                                if chunk.get("stopped"):
+                                    message_data["stopped"] = True
                                 st.session_state.messages.append(message_data)
                                 break
                     
@@ -3095,7 +3110,7 @@ def main():
                                 final_response = chunk.get("response", full_response)
                                 message_placeholder.markdown(final_response)
                                 
-                                # Add to chat history
+                                # Add to chat history (preserve content even if stopped)
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
@@ -3103,6 +3118,8 @@ def main():
                                     "steps_count": chunk.get("steps_count"),
                                     "validation_summary": chunk.get("validation_summary")
                                 }
+                                if chunk.get("stopped"):
+                                    message_data["stopped"] = True
                                 st.session_state.messages.append(message_data)
                                 break
                     
@@ -3118,8 +3135,10 @@ def main():
                     if response_data.get("conversation_id"):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
-                    # Add assistant response to chat history
+                    # Add assistant response to chat history (preserve content even if stopped)
                     message_data = {"role": "assistant", "content": response_data["response"]}
+                    if response_data.get("stopped"):
+                        message_data["stopped"] = True
                     
                     # Handle advanced RAG information for regular responses
                     if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
