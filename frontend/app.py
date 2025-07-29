@@ -74,6 +74,26 @@ def get_css():
             background-color: #0066cc;
             color: white;
         }
+        .stop-button {
+            background-color: #dc3545;
+            border: 1px solid #dc3545;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .stop-button:hover {
+            background-color: #c82333;
+            border-color: #c82333;
+        }
+        .stop-button:disabled {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
     """
 
@@ -117,6 +137,11 @@ def init_session_state():
         st.session_state.chat_input_key = 0
     if "temp_phase_override" not in st.session_state:
         st.session_state.temp_phase_override = None
+    # Add stop button state variable
+    if "stop_generation" not in st.session_state:
+        st.session_state.stop_generation = False
+    if "is_generating" not in st.session_state:
+        st.session_state.is_generating = False
     # Add Phase 2 reasoning engine state variables
     if "use_phase2_reasoning" not in st.session_state:
         st.session_state.use_phase2_reasoning = True
@@ -468,6 +493,11 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
                     # Handle streaming response
                     full_response = ""
                     for chunk in response.iter_text():
+                        # Check for stop signal
+                        if st.session_state.stop_generation:
+                            yield {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                            return
+                        
                         if chunk:
                             # Handle different response formats
                             if chunk.startswith('data: '):
@@ -647,6 +677,11 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                     if response.status_code == 200:
                         # Process Server-Sent Events
                         for line in response.iter_lines():
+                            # Check for stop signal
+                            if st.session_state.stop_generation:
+                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
+                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                            
                             if line:
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
@@ -758,6 +793,11 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                     if response.status_code == 200:
                         # Process Server-Sent Events
                         for line in response.iter_lines():
+                            # Check for stop signal
+                            if st.session_state.stop_generation:
+                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
+                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                            
                             if line:
                                 # httpx.iter_lines() returns strings, not bytes
                                 if line.startswith('data: '):
@@ -1641,6 +1681,11 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                     if response.status_code == 200:
                         # Process Server-Sent Events
                         for line in response.iter_lines():
+                            # Check for stop signal
+                            if st.session_state.stop_generation:
+                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
+                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                            
                             if line:
                                 print(f"🔍 Received line: {line[:100]}...")
                                 # httpx.iter_lines() returns strings, not bytes
@@ -1856,6 +1901,11 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                     if response.status_code == 200:
                         # Process Server-Sent Events
                         for line in response.iter_lines():
+                            # Check for stop signal
+                            if st.session_state.stop_generation:
+                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
+                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
+                            
                             if line:
                                 print(f"🔍 Received line: {line[:100]}...")
                                 # httpx.iter_lines() returns strings, not bytes
@@ -2514,8 +2564,20 @@ def main():
     # Display chat messages
     display_chat_messages()
     
-    # Chat input
-    prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
+    # Chat input and stop button row
+    col1, col2 = st.columns([4, 1])
+    
+    with col1:
+        prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
+    
+    with col2:
+        if st.session_state.is_generating:
+            if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
+                st.session_state.stop_generation = True
+                st.session_state.is_generating = False
+                st.rerun()
+        else:
+            st.button("🛑 Stop", key="stop_button_disabled", disabled=True, help="No generation in progress")
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
@@ -2524,6 +2586,10 @@ def main():
         st.session_state.chat_input_key += 1  # Force chat input refresh
     
     if prompt:
+        # Reset stop generation flag and set generating state
+        st.session_state.stop_generation = False
+        st.session_state.is_generating = True
+        
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -2728,6 +2794,9 @@ def main():
                         print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
                         del st.session_state.temp_phase_override
                     
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                    
                     # Force rerun to update sidebar
                     st.rerun()
             elif temp_override == "phase2" and st.session_state.use_streaming:
@@ -2781,6 +2850,9 @@ def main():
                         print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
                         del st.session_state.temp_phase_override
                     
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                    
                     # Force rerun to update sidebar
                     st.rerun()
             elif temp_override == "phase3" and st.session_state.use_streaming:
@@ -2833,6 +2905,9 @@ def main():
                     if "temp_phase_override" in st.session_state:
                         print(f"🔍 DEBUG: Clearing temp_phase_override: {st.session_state.temp_phase_override}")
                         del st.session_state.temp_phase_override
+                    
+                    # Reset generating state
+                    st.session_state.is_generating = False
                     
                     # Force rerun to update sidebar
                     st.rerun()
@@ -2891,6 +2966,9 @@ def main():
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
+                    
+                    # Reset generating state on error
+                    st.session_state.is_generating = False
             elif st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
@@ -2958,6 +3036,9 @@ def main():
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
                     
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                    
                     # Force rerun to update sidebar
                     st.rerun()
                 else:
@@ -2965,6 +3046,9 @@ def main():
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
+                    
+                    # Reset generating state on error
+                    st.session_state.is_generating = False
             elif st.session_state.use_reasoning_chat and st.session_state.use_streaming:
                 # Handle streaming reasoning responses
                 # Create a placeholder for the assistant message
@@ -3006,6 +3090,9 @@ def main():
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
+                    
+                    # Reset generating state
+                    st.session_state.is_generating = False
                     
                     # Force rerun to update sidebar
                     st.rerun()
@@ -3120,6 +3207,9 @@ def main():
                         with st.chat_message("assistant"):
                             st.markdown(response_data["response"])
                     
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                    
                     # Force rerun to update sidebar
                     st.rerun()
                 else:
@@ -3127,6 +3217,9 @@ def main():
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
+                    
+                    # Reset generating state on error
+                    st.session_state.is_generating = False
 
 if __name__ == "__main__":
     main() 
