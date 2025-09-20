@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/advanced-rag", tags=["advanced-rag"])
 
 # Initialize services
 advanced_rag_retriever = AdvancedRAGRetriever()
-chat_service = ChatService()
+# chat_service will be created per request with database access
 
 def get_full_conversation_history(conversation_id: str, db: Session) -> List[Dict[str, Any]]:
     """Get conversation history from database with performance optimization."""

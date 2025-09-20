@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from .repository import ConversationRepository, MessageRepository
 from ..models.schemas import ConversationCreate, MessageCreate
 from ..mcp import MCPManager
+from .context_awareness import ContextAwarenessService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,20 +36,33 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, description="Model temperature (0.0-1.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     conversation_id: Optional[str] = Field(default=None, description="Conversation ID for context")
+    user_id: Optional[str] = Field(default="leia", description="User ID for personalized context")
     # RAG parameters
     k: Optional[int] = Field(default=None, description="Number of documents to retrieve for RAG")
     filter_dict: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filter for RAG")
+    # Context awareness parameters
+    enable_context_awareness: bool = Field(default=True, description="Enable context awareness features")
+    include_memory: bool = Field(default=False, description="Include long-term memory in context")
+    context_strategy: str = Field(default="conversation_only", description="Context strategy: auto, conversation_only, memory_only, hybrid")
 
 class ChatResponse(BaseModel):
     """Response model for chat API."""
     response: str = Field(..., description="AI response")
     model: str = Field(..., description="Model used")
     conversation_id: str = Field(..., description="Conversation ID")
+    user_id: Optional[str] = Field(default=None, description="User ID used for context")
     timestamp: datetime = Field(default_factory=datetime.now, description="Response timestamp")
     tokens_used: Optional[int] = Field(default=None, description="Tokens used in response")
     # RAG context
     rag_context: Optional[str] = Field(default=None, description="RAG context used")
     has_context: Optional[bool] = Field(default=None, description="Whether RAG context was used")
+    # Context awareness information
+    context_awareness_enabled: bool = Field(default=False, description="Whether context awareness was used")
+    context_strategy_used: Optional[str] = Field(default=None, description="Context strategy that was applied")
+    context_entities: Optional[List[str]] = Field(default=None, description="Key entities from context")
+    context_topics: Optional[List[str]] = Field(default=None, description="Topics from context")
+    memory_chunks_used: Optional[int] = Field(default=None, description="Number of memory chunks retrieved")
+    user_preferences_applied: Optional[Dict[str, Any]] = Field(default=None, description="User preferences that influenced response")
 
 class Conversation(BaseModel):
     """Represents a conversation session."""
@@ -64,7 +78,12 @@ class ChatService:
     def __init__(self, ollama_url: str = "http://localhost:11434", db: Optional[Session] = None, mcp_config_path: Optional[str] = None):
         self.ollama_url = ollama_url
         self.db = db
-        self.http_client = httpx.AsyncClient(timeout=300.0)  # Increased timeout for RAG processing (5 minutes)
+        # Performance optimization: Use connection pooling and faster timeouts
+        self.http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0),  # Faster connection timeout
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            http2=False  # Disable HTTP/2 to avoid dependency issues
+        )
         
         # Initialize repositories if database is available
         if self.db:
@@ -73,6 +92,10 @@ class ChatService:
         else:
             self.conversation_repo = None
             self.message_repo = None
+        
+        # Initialize context awareness service lazily
+        self.context_service = None
+        self._context_service_initialized = False
         
         # Store MCP config path for later initialization
         self.mcp_config_path = mcp_config_path
@@ -85,6 +108,12 @@ class ChatService:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.http_client.aclose()
         # Don't shutdown the global MCP manager here
+    
+    def _ensure_context_service_initialized(self):
+        """Ensure context awareness service is initialized lazily."""
+        if not self._context_service_initialized:
+            self.context_service = ContextAwarenessService(db=self.db)
+            self._context_service_initialized = True
     
     async def _ensure_mcp_initialized(self):
         """Ensure MCP manager is initialized."""
@@ -282,21 +311,27 @@ class ChatService:
         return tool_calls
     
     async def check_ollama_health(self) -> bool:
-        """Check if Ollama is running and healthy."""
+        """Check if Ollama is running and healthy with fast timeout."""
         try:
-            response = await self.http_client.get(f"{self.ollama_url}/api/tags")
+            # Use a faster timeout for health checks
+            response = await self.http_client.get(f"{self.ollama_url}/api/tags", timeout=2.0)
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Ollama health check failed: {e}")
             return False
     
     async def get_available_models(self) -> List[str]:
-        """Get list of available Ollama models."""
+        """Get list of available Ollama models with llama3:latest prioritized."""
         try:
             response = await self.http_client.get(f"{self.ollama_url}/api/tags")
             if response.status_code == 200:
                 data = response.json()
-                return [model["name"] for model in data.get("models", [])]
+                models = [model["name"] for model in data.get("models", [])]
+                # Prioritize llama3:latest as the first model
+                if "llama3:latest" in models:
+                    models.remove("llama3:latest")
+                    models.insert(0, "llama3:latest")
+                return models
             return []
         except Exception as e:
             logger.error(f"Failed to get available models: {e}")
@@ -309,7 +344,11 @@ class ChatService:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         enable_mcp: bool = True,
+        enable_context_awareness: bool = True,
+        include_memory: bool = True,
+        context_strategy: str = "auto",
         k: Optional[int] = None,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> ChatResponse:
@@ -344,6 +383,40 @@ class ChatService:
             )
             self.message_repo.create_message(user_message_data)
         
+        
+        # Initialize context awareness variables
+        context_awareness_enabled = False
+        context_strategy_used = None
+        context_entities = None
+        context_topics = None
+        memory_chunks_used = None
+        user_preferences_applied = None
+        
+        # Apply context awareness if enabled
+        enhanced_message = message
+        if enable_context_awareness and conversation_id:
+            try:
+                self._ensure_context_service_initialized()
+                enhanced_message, context_metadata = self.context_service.build_context_aware_query(
+                    current_message=message,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    include_memory=include_memory
+                )
+                
+                context_awareness_enabled = True
+                context_strategy_used = context_strategy
+                context_entities = context_metadata.get("entities", [])
+                context_topics = context_metadata.get("topics", [])
+                memory_chunks_used = context_metadata.get("memory_chunks", 0)
+                user_preferences_applied = context_metadata.get("user_preferences", {})
+                
+                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
+                
+            except Exception as e:
+                logger.error(f"Error applying context awareness: {e}")
+                # Continue with original message if context awareness fails
+        
         # Get conversation messages for Ollama
         messages = []
         if self.message_repo:
@@ -361,6 +434,12 @@ class ChatService:
                         "role": msg.role,
                         "content": msg.content
                     })
+        
+        # Add current user message with context enhancement
+        messages.append({
+            "role": "user",
+            "content": enhanced_message
+        })
         
         # Prepare request payload
         payload = {
@@ -462,13 +541,33 @@ class ChatService:
                 if self.conversation_repo:
                     self.conversation_repo.update_conversation(conversation_id)
                 
+                
+                # Update context awareness after message generation
+                if enable_context_awareness and conversation_id:
+                    try:
+                        self._ensure_context_service_initialized()
+                        self.context_service.update_context_after_message(
+                            conversation_id=conversation_id,
+                            message={"role": "assistant", "content": ai_response},
+                            user_id=user_id
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating context after message: {e}")
+                
                 return ChatResponse(
                     response=ai_response,
                     model=model,
                     conversation_id=conversation_id,
+                    user_id=user_id,
                     tokens_used=data.get("eval_count"),
                     rag_context=rag_context,
-                    has_context=has_context
+                    has_context=has_context,
+                    context_awareness_enabled=context_awareness_enabled,
+                    context_strategy_used=context_strategy_used,
+                    context_entities=context_entities,
+                    context_topics=context_topics,
+                    memory_chunks_used=memory_chunks_used,
+                    user_preferences_applied=user_preferences_applied
                 )
             else:
                 error_msg = f"Ollama API error: {response.status_code}"
@@ -486,7 +585,12 @@ class ChatService:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         conversation_id: Optional[str] = None,
-        enable_mcp: bool = True
+        enable_mcp: bool = True,
+        # Context awareness parameters
+        enable_context_awareness: bool = True,
+        include_memory: bool = False,
+        context_strategy: str = "conversation_only",
+        user_id: Optional[str] = "leia"
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from Ollama."""
         
@@ -509,6 +613,22 @@ class ChatService:
             # Fallback to in-memory if no database
             conversation_id = f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
             conversation = Conversation(id=conversation_id, model=model)
+        
+        # Apply context awareness if enabled
+        enhanced_message = message
+        if enable_context_awareness and conversation_id:
+            try:
+                self._ensure_context_service_initialized()
+                enhanced_message, context_metadata = self.context_service.build_context_aware_query(
+                    current_message=message,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    include_memory=include_memory
+                )
+                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
+            except Exception as e:
+                logger.error(f"Error applying context awareness: {e}")
+                enhanced_message = message
         
         # Check for MCP tool calls in the message
         tool_results = []
@@ -541,6 +661,9 @@ class ChatService:
                 content=message
             )
             self.message_repo.create_message(user_message_data)
+            logger.info(f"Stored user message in database for conversation {conversation_id}")
+        else:
+            logger.warning("No message repository available for user message storage")
         
         # Get conversation messages for Ollama
         messages = []
@@ -559,6 +682,12 @@ class ChatService:
                         "role": msg.role,
                         "content": msg.content
                     })
+        
+        # Add current user message with context enhancement
+        messages.append({
+            "role": "user",
+            "content": enhanced_message
+        })
         
         # Prepare request payload
         payload = {
@@ -627,6 +756,18 @@ class ChatService:
                     )
                     self.message_repo.create_message(ai_message_data)
                 
+                # Update context awareness after message generation
+                if enable_context_awareness and conversation_id and full_response:
+                    try:
+                        self._ensure_context_service_initialized()
+                        self.context_service.update_context_after_message(
+                            conversation_id=conversation_id,
+                            message={"role": "assistant", "content": full_response},
+                            user_id=user_id
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating context after streaming message: {e}")
+                
                 # Update conversation timestamp
                 if self.conversation_repo:
                     self.conversation_repo.update_conversation(conversation_id)
@@ -675,11 +816,7 @@ async def get_mcp_manager(mcp_config_path: Optional[str] = None):
     
     return _mcp_manager_instance
 
-# Global chat service instance
-# Create global chat service instance
-import os
-ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-chat_service = ChatService(ollama_url=ollama_url)
+# Global chat service instance removed - each request creates its own instance with database access
 
 async def shutdown_mcp_manager():
     """Shutdown the global MCP manager."""

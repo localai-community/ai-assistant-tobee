@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 import os
 
@@ -9,6 +10,13 @@ class Settings(BaseSettings):
     app_name: str = "LocalAI Community"
     app_version: str = "1.0.0"
     debug: bool = False
+    
+    @field_validator('debug', mode='before')
+    @classmethod
+    def parse_debug(cls, v):
+        if isinstance(v, str):
+            return v.lower() in ('true', '1', 'yes', 'on')
+        return v
     
     # Server
     host: str = "0.0.0.0"

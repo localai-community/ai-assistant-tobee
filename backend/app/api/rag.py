@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
 
 # Initialize services
 rag_retriever = RAGRetriever()
-chat_service = ChatService()
+# chat_service will be created per request with database access
 
 # Ensure upload directory exists
 UPLOAD_DIR = Path("storage/uploads")

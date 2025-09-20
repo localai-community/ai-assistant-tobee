@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import json
 import logging
 import os
+from functools import lru_cache
 
 from ..services.chat import ChatService, ChatRequest, ChatResponse, Conversation
 from ..core.database import get_db
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+
+# Cache for frequently accessed data
+_models_cache = {}
+_models_cache_time = 0
+CACHE_TTL = 60  # 1 minute cache
 
 @router.post("/", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
@@ -52,6 +58,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             conversation_id=request.conversation_id,
+            user_id=request.user_id,
+            enable_context_awareness=request.enable_context_awareness,
+            include_memory=request.include_memory,
+            context_strategy=request.context_strategy,
             k=request.k,
             filter_dict=request.filter_dict
         )
@@ -86,15 +96,39 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 detail="Ollama service is not available. Please make sure Ollama is running."
             )
         
+        # Get or create conversation ID
+        conversation_id = request.conversation_id
+        if not conversation_id and chat_service.conversation_repo:
+            # Create new conversation in database
+            from app.models.schemas import ConversationCreate
+            from datetime import datetime
+            conversation_data = ConversationCreate(
+                title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                model=request.model
+            )
+            conversation = chat_service.conversation_repo.create_conversation(conversation_data)
+            conversation_id = conversation.id
+        
         async def generate_stream():
+            first_chunk = True
             async for chunk in chat_service.generate_streaming_response(
                 message=request.message,
                 model=request.model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
-                conversation_id=request.conversation_id
+                conversation_id=conversation_id,
+                enable_context_awareness=request.enable_context_awareness,
+                include_memory=request.include_memory,
+                context_strategy=request.context_strategy,
+                user_id=request.user_id
             ):
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+                if first_chunk:
+                    # Send metadata in the first chunk
+                    yield f"data: {json.dumps({'content': chunk, 'conversation_id': conversation_id, 'type': 'metadata'})}\n\n"
+                    first_chunk = False
+                else:
+                    # Send content chunks
+                    yield f"data: {json.dumps({'content': chunk, 'type': 'content'})}\n\n"
         
         return StreamingResponse(
             generate_stream(),
@@ -113,7 +147,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
 @router.get("/models", response_model=List[str])
 async def get_models(db: Session = Depends(get_db)):
     """
-    Get list of available Ollama models.
+    Get list of available Ollama models with caching for performance.
     
     Args:
         db: Database session
@@ -121,13 +155,31 @@ async def get_models(db: Session = Depends(get_db)):
     Returns:
         List[str]: Available model names
     """
+    import time
+    
+    global _models_cache_time, _models_cache
+    
+    # Check cache first
+    current_time = time.time()
+    if current_time - _models_cache_time < CACHE_TTL and _models_cache:
+        return _models_cache.get("models", [])
+    
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         chat_service = ChatService(ollama_url=ollama_url, db=db)
         models = await chat_service.get_available_models()
+        
+        # Update cache
+        _models_cache["models"] = models
+        _models_cache_time = current_time
+        
         return models
     except Exception as e:
         logger.error(f"Failed to get models: {e}")
+        # Return cached models if available, even if expired
+        if _models_cache.get("models"):
+            logger.warning("Returning cached models due to error")
+            return _models_cache["models"]
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
@@ -337,4 +389,127 @@ async def mcp_health_check(db: Session = Depends(get_db)):
             "tools_count": 0,
             "overall_healthy": False,
             "error": str(e)
-        } 
+        }
+
+# Context Awareness Endpoints
+@router.get("/context/{conversation_id}")
+async def get_conversation_context(conversation_id: str, user_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Get comprehensive context information for a conversation.
+    
+    Args:
+        conversation_id: Unique conversation identifier
+        user_id: Optional user ID for personalized context
+        db: Database session
+        
+    Returns:
+        dict: Conversation context information
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        context = chat_service.context_service.get_conversation_context(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            include_memory=True
+        )
+        
+        return {
+            "conversation_id": context.conversation_id,
+            "user_id": context.user_id,
+            "topics": context.topics,
+            "entities": [
+                {
+                    "text": entity.text,
+                    "type": entity.entity_type,
+                    "importance": entity.importance_score,
+                    "mentions": entity.mention_count
+                }
+                for entity in context.key_entities
+            ],
+            "user_preferences": context.user_preferences,
+            "conversation_style": context.conversation_style,
+            "summary": context.summary_text,
+            "created_at": context.created_at.isoformat(),
+            "updated_at": context.updated_at.isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversation context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/context/user/{user_id}")
+async def get_user_context(user_id: str, include_cross_conversation: bool = True, db: Session = Depends(get_db)):
+    """
+    Get comprehensive user context across all conversations.
+    
+    Args:
+        user_id: Unique user identifier
+        include_cross_conversation: Include context from all user's conversations
+        db: Database session
+        
+    Returns:
+        dict: User context information
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        user_context = chat_service.context_service.get_user_context(
+            user_id=user_id,
+            include_cross_conversation=include_cross_conversation
+        )
+        
+        return user_context
+        
+    except Exception as e:
+        logger.error(f"Failed to get user context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/context/{conversation_id}/memory")
+async def store_conversation_memory(conversation_id: str, db: Session = Depends(get_db)):
+    """
+    Store conversation as memory chunks for long-term retrieval.
+    
+    Args:
+        conversation_id: Unique conversation identifier
+        db: Database session
+        
+    Returns:
+        dict: Memory storage status
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        # Get conversation messages
+        conversation = chat_service.get_conversation(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Convert to message dicts
+        messages = []
+        if chat_service.message_repo:
+            db_messages = chat_service.message_repo.get_messages(conversation_id)
+            messages = [
+                {"role": msg.role, "content": msg.content, "created_at": msg.created_at}
+                for msg in db_messages
+            ]
+        
+        # Store as memory
+        success = chat_service.context_service.store_conversation_memory(
+            conversation_id=conversation_id,
+            messages=messages
+        )
+        
+        return {
+            "success": success,
+            "message": "Conversation memory stored successfully" if success else "Failed to store conversation memory",
+            "conversation_id": conversation_id,
+            "message_count": len(messages)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to store conversation memory: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 

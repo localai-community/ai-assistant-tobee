@@ -13,12 +13,24 @@ from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
 import time
+import threading
+from functools import lru_cache
 
 # Load environment variables
 load_dotenv()
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+# Performance optimization: Create a global HTTP client with connection pooling
+@st.cache_resource
+def get_http_client():
+    """Get a cached HTTP client with connection pooling for better performance."""
+    return httpx.Client(
+        timeout=httpx.Timeout(5.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        http2=False  # Disable HTTP/2 to avoid dependency issues
+    )
 
 # Page configuration
 # Note: Streamlit has built-in dark mode support - users can toggle it in the hamburger menu
@@ -94,6 +106,75 @@ def get_css():
             border-color: #6c757d;
             cursor: not-allowed;
         }
+        
+        /* Fixed chatbox at bottom */
+        .stChatInput {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 21rem !important; /* Account for sidebar width */
+            right: 0 !important;
+            z-index: 999 !important;
+            background-color: transparent !important;
+            border: none !important;
+            padding: 1rem !important;
+            box-shadow: none !important;
+        }
+        
+        /* For mobile/smaller screens, adjust positioning */
+        @media (max-width: 768px) {
+            .stChatInput {
+                left: 0 !important;
+            }
+        }
+        
+        /* Add bottom padding to main content to prevent overlap */
+        .main .block-container {
+            padding-bottom: 120px !important;
+        }
+        
+        /* Ensure chat messages have proper spacing */
+        .stChatMessage {
+            margin-bottom: 1rem !important;
+        }
+        
+        /* Style for stop button container */
+        .stop-button-container {
+            position: fixed !important;
+            bottom: 1rem !important;
+            right: 1rem !important;
+            z-index: 1000 !important;
+        }
+        
+        /* For mobile/smaller screens, adjust stop button positioning */
+        @media (max-width: 768px) {
+            .stop-button-container {
+                right: 1rem !important;
+            }
+        }
+        
+        /* Style for stop button */
+        .stop-button-container button {
+            background-color: #dc3545 !important;
+            border: 1px solid #dc3545 !important;
+            color: white !important;
+            padding: 8px 16px !important;
+            border-radius: 6px !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            font-size: 0.9em !important;
+            font-weight: bold !important;
+        }
+        
+        .stop-button-container button:hover {
+            background-color: #c82333 !important;
+            border-color: #c82333 !important;
+        }
+        
+        .stop-button-container button:disabled {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+            cursor: not-allowed !important;
+        }
     </style>
     """
 
@@ -117,8 +198,8 @@ def init_session_state():
         st.session_state.use_rag = False
     if "use_advanced_rag" not in st.session_state:
         st.session_state.use_advanced_rag = False
-    if "use_phase2_reasoning" not in st.session_state:
-        st.session_state.use_phase2_reasoning = True
+    # Force disable phase 2 reasoning by default
+    st.session_state.use_phase2_reasoning = False
     if "selected_phase2_engine" not in st.session_state:
         st.session_state.selected_phase2_engine = "auto"
     if "mcp_tools" not in st.session_state:
@@ -129,22 +210,33 @@ def init_session_state():
         st.session_state.use_streaming = True
     if "advanced_rag_strategies" not in st.session_state:
         st.session_state.advanced_rag_strategies = []
-    if "use_reasoning_chat" not in st.session_state:
-        st.session_state.use_reasoning_chat = True
+    # Force disable reasoning chat by default
+    st.session_state.use_reasoning_chat = False
     if "sample_question" not in st.session_state:
         st.session_state.sample_question = None
     if "chat_input_key" not in st.session_state:
         st.session_state.chat_input_key = 0
     if "temp_phase_override" not in st.session_state:
         st.session_state.temp_phase_override = None
+    # Context Awareness Features
+    if "enable_context_awareness" not in st.session_state:
+        st.session_state.enable_context_awareness = True
+    if "include_memory" not in st.session_state:
+        st.session_state.include_memory = False  # Disable long-term memory by default
+    if "context_strategy" not in st.session_state:
+        st.session_state.context_strategy = "conversation_only"  # Use conversation_only by default
+    if "context_info" not in st.session_state:
+        st.session_state.context_info = {}
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = "leia"  # Set default user ID
     # Add stop button state variable
     if "stop_generation" not in st.session_state:
         st.session_state.stop_generation = False
     if "is_generating" not in st.session_state:
         st.session_state.is_generating = False
     # Add Phase 2 reasoning engine state variables
-    if "use_phase2_reasoning" not in st.session_state:
-        st.session_state.use_phase2_reasoning = True
+    # Force disable reasoning by default to prevent interference with context awareness
+    st.session_state.use_phase2_reasoning = False
     if "selected_phase2_engine" not in st.session_state:
         st.session_state.selected_phase2_engine = "auto"
     if "phase2_engine_status" not in st.session_state:
@@ -172,8 +264,8 @@ def init_session_state():
         }
     
     # Phase 3 Advanced Reasoning Strategies
-    if "use_phase3_reasoning" not in st.session_state:
-        st.session_state.use_phase3_reasoning = True
+    # Force disable phase 3 reasoning by default
+    st.session_state.use_phase3_reasoning = False
     if "selected_phase3_strategy" not in st.session_state:
         st.session_state.selected_phase3_strategy = "auto"
     if "phase3_health" not in st.session_state:
@@ -201,33 +293,41 @@ def init_session_state():
         }
 
 
+@st.cache_data(ttl=30)  # Cache for 30 seconds
 def check_backend_health() -> bool:
     """Check if the backend is healthy."""
     try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/health", timeout=5.0)
-            return response.status_code == 200
+        client = get_http_client()
+        response = client.get(f"{BACKEND_URL}/health")
+        return response.status_code == 200
     except:
         return False
 
+@st.cache_data(ttl=60)  # Cache for 1 minute
 def get_available_models() -> List[str]:
-    """Get available models from backend."""
+    """Get available models from backend with llama3:latest prioritized."""
     try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/chat/models", timeout=5.0)
-            if response.status_code == 200:
-                return response.json()
+        client = get_http_client()
+        response = client.get(f"{BACKEND_URL}/api/v1/chat/models")
+        if response.status_code == 200:
+            models = response.json()
+            # Prioritize llama3:latest as the first model
+            if "llama3:latest" in models:
+                models.remove("llama3:latest")
+                models.insert(0, "llama3:latest")
+            return models
     except:
         pass
     return []
 
+@st.cache_data(ttl=30)  # Cache for 30 seconds
 def get_conversations() -> List[Dict]:
     """Get conversations from backend."""
     try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/chat/conversations", timeout=5.0)
-            if response.status_code == 200:
-                return response.json()
+        client = get_http_client()
+        response = client.get(f"{BACKEND_URL}/api/v1/chat/conversations")
+        if response.status_code == 200:
+            return response.json()
     except:
         pass
     return []
@@ -776,11 +876,17 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                 "message": message,
                 "model": model,
                 "temperature": 0.7,
-                "stream": True
+                "stream": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
                 payload["conversation_id"] = conversation_id
+            
+            if st.session_state.user_id:
+                payload["user_id"] = st.session_state.user_id
             
             # Create assistant message container for streaming
             with st.chat_message("assistant"):
@@ -810,6 +916,14 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                                     try:
                                         data = json.loads(line[6:])  # Remove 'data: ' prefix
                                         chunk = data.get('content', '')
+                                        chunk_type = data.get('type', 'content')
+                                        
+                                        if chunk_type == 'metadata':
+                                            # Extract conversation ID from metadata chunk
+                                            if 'conversation_id' in data:
+                                                conversation_id = data['conversation_id']
+                                                print(f"🔍 DEBUG: Received conversation_id from stream: {conversation_id}")
+                                        
                                         full_response += chunk
                                         
                                         # Update the message placeholder with accumulated response
@@ -865,11 +979,17 @@ def send_to_backend(message: str, conversation_id: Optional[str] = None, use_str
                 "message": message,
                 "model": model,
                 "temperature": 0.7,
-                "stream": False
+                "stream": False,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
                 payload["conversation_id"] = conversation_id
+            
+            if st.session_state.user_id:
+                payload["user_id"] = st.session_state.user_id
             
             response = client.post(
                 f"{BACKEND_URL}/api/v1/chat/",
@@ -1184,7 +1304,13 @@ def handle_sample_question(question):
                                         "role": "assistant", 
                                         "content": final_response,
                                         "rag_context": chunk.get("rag_context", ""),
-                                        "has_context": chunk.get("has_context", False)
+                                        "has_context": chunk.get("has_context", False),
+                                        "context_awareness_enabled": chunk.get("context_awareness_enabled", False),
+                                        "context_strategy_used": chunk.get("context_strategy_used"),
+                                        "context_entities": chunk.get("context_entities", []),
+                                        "context_topics": chunk.get("context_topics", []),
+                                        "memory_chunks_used": chunk.get("memory_chunks_used", 0),
+                                        "user_preferences_applied": chunk.get("user_preferences_applied", {})
                                     }
                                     st.session_state.messages.append(message_data)
                                     break
@@ -1514,7 +1640,7 @@ def handle_sample_question(question):
                         st.error(error_msg)
 
 def display_chat_messages():
-    """Display chat messages."""
+    """Display chat messages with context awareness information."""
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             content = message["content"]
@@ -1525,6 +1651,37 @@ def display_chat_messages():
                 st.info("⏹️ Generation stopped by user - content preserved!")
             else:
                 st.markdown(content)
+                
+                # Display context awareness information for assistant messages
+                if message["role"] == "assistant" and message.get("context_awareness_enabled"):
+                    with st.expander("🧠 Context Information"):
+                        context_info = []
+                        
+                        if message.get("context_strategy_used"):
+                            context_info.append(f"**Strategy:** {message['context_strategy_used']}")
+                        
+                        if message.get("context_entities"):
+                            entities = message["context_entities"][:5]  # Show top 5
+                            if entities:
+                                context_info.append(f"**Key Entities:** {', '.join(entities)}")
+                        
+                        if message.get("context_topics"):
+                            topics = message["context_topics"][:3]  # Show top 3
+                            if topics:
+                                context_info.append(f"**Topics:** {', '.join(topics)}")
+                        
+                        if message.get("memory_chunks_used", 0) > 0:
+                            context_info.append(f"**Memory Chunks Used:** {message['memory_chunks_used']}")
+                        
+                        if message.get("user_preferences_applied"):
+                            prefs = message["user_preferences_applied"]
+                            if prefs:
+                                context_info.append(f"**User Preferences Applied:** {str(prefs)}")
+                        
+                        if context_info:
+                            st.markdown("\n".join(context_info))
+                        else:
+                            st.write("No specific context information available")
 
 def get_phase2_engine_status() -> Dict:
     """Get Phase 2 reasoning engine status."""
@@ -1999,12 +2156,30 @@ def main():
     # Apply simple CSS
     st.markdown(get_css(), unsafe_allow_html=True)
     
-    # Check backend health and get models
-    st.session_state.backend_health = check_backend_health()
-    if st.session_state.backend_health:
-        st.session_state.available_models = get_available_models()
-        st.session_state.conversations = get_conversations()
-        st.session_state.rag_stats = get_rag_stats()
+    # Performance optimization: Load data asynchronously to improve startup time
+    if not st.session_state.auto_loaded:
+        with st.spinner("🚀 Initializing..."):
+            # Check backend health and get models in parallel
+            st.session_state.backend_health = check_backend_health()
+            if st.session_state.backend_health:
+                # Load essential data first
+                st.session_state.available_models = get_available_models()
+                st.session_state.conversations = get_conversations()
+                
+                # Load secondary data in background
+                try:
+                    st.session_state.rag_stats = get_rag_stats()
+                except:
+                    st.session_state.rag_stats = {}
+                    
+        st.session_state.auto_loaded = True
+    else:
+        # Use cached data for faster subsequent loads
+        if st.session_state.backend_health:
+            if not st.session_state.available_models:
+                st.session_state.available_models = get_available_models()
+            if not st.session_state.conversations:
+                st.session_state.conversations = get_conversations()
         
         # Debug output
         print(f"🔍 Main function - RAG Stats loaded: {st.session_state.rag_stats}")
@@ -2387,6 +2562,53 @@ def main():
             else:
                 st.warning("Backend not available for document upload")
             
+            st.markdown('<div class="section-header">Context Awareness</div>', unsafe_allow_html=True)
+            
+            # Context Awareness Toggle
+            enable_context_awareness = st.checkbox(
+                "🧠 Enable Context Awareness",
+                value=st.session_state.enable_context_awareness,
+                help="Enable advanced context awareness features including conversation memory and user preferences"
+            )
+            st.session_state.enable_context_awareness = enable_context_awareness
+            
+            if enable_context_awareness:
+                # User ID Input
+                user_id = st.text_input(
+                    "👤 User ID (Optional)",
+                    value=st.session_state.user_id or "",
+                    help="Enter a user ID for personalized context across conversations"
+                )
+                st.session_state.user_id = user_id if user_id else None
+                
+                # Context Strategy Selection
+                context_strategy = st.selectbox(
+                    "🎯 Context Strategy",
+                    options=["auto", "conversation_only", "memory_only", "hybrid"],
+                    index=["auto", "conversation_only", "memory_only", "hybrid"].index(st.session_state.context_strategy),
+                    help="Choose how context should be retrieved and used"
+                )
+                st.session_state.context_strategy = context_strategy
+                
+                # Include Memory Toggle
+                include_memory = st.checkbox(
+                    "💾 Include Long-term Memory",
+                    value=st.session_state.include_memory,
+                    help="Include relevant information from past conversations"
+                )
+                st.session_state.include_memory = include_memory
+                
+                # Context Information Display
+                if st.session_state.context_info:
+                    with st.expander("📊 Context Information"):
+                        context = st.session_state.context_info
+                        if context.get("topics"):
+                            st.write("**Topics:**", ", ".join(context["topics"][:5]))
+                        if context.get("entities"):
+                            st.write("**Key Entities:**", ", ".join([e["text"] for e in context["entities"][:5]]))
+                        if context.get("user_preferences"):
+                            st.write("**User Preferences:**", str(context["user_preferences"]))
+            
             st.markdown('<div class="section-header">RAG Mode</div>', unsafe_allow_html=True)
             use_rag = st.checkbox(
                 "Enable RAG for responses",
@@ -2597,34 +2819,30 @@ def main():
     # Display chat messages
     display_chat_messages()
     
-    # Chat input and stop button row
-    col1, col2 = st.columns([4, 1])
+    # Chat input (now fixed at bottom via CSS)
+    prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
-    with col1:
-        prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
-    
-    with col2:
-        # Stop button - always active for testing
-        print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
-        if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
-            print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
-            st.session_state.stop_generation = True
-            st.session_state.is_generating = False
-            
-            # Save any accumulated content immediately
-            if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
-                print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
-                stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": stopped_content,
-                    "stopped": True
-                })
-                # Clear the current response
-                st.session_state.current_response = ""
-                print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
-                # Force UI refresh to show the saved content immediately
-                st.rerun()
+    # Stop button (fixed position via CSS)
+    print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
+    if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
+        print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
+        st.session_state.stop_generation = True
+        st.session_state.is_generating = False
+        
+        # Save any accumulated content immediately
+        if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
+            print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
+            stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": stopped_content,
+                "stopped": True
+            })
+            # Clear the current response
+            st.session_state.current_response = ""
+            print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
+            # Force UI refresh to show the saved content immediately
+            st.rerun()
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
