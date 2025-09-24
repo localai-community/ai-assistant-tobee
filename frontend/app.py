@@ -186,6 +186,8 @@ def init_session_state():
         st.session_state.conversation_id = None
     if "available_models" not in st.session_state:
         st.session_state.available_models = []
+    if "selected_model" not in st.session_state:
+        st.session_state.selected_model = None
     if "backend_health" not in st.session_state:
         st.session_state.backend_health = False
     if "conversations" not in st.session_state:
@@ -302,6 +304,15 @@ def check_backend_health() -> bool:
         return response.status_code == 200
     except:
         return False
+
+def get_selected_model() -> str:
+    """Get the currently selected model or fallback to first available."""
+    if st.session_state.selected_model:
+        return st.session_state.selected_model
+    elif st.session_state.available_models:
+        return st.session_state.available_models[0]
+    else:
+        return "llama3:latest"
 
 @st.cache_data(ttl=60)  # Cache for 1 minute
 def get_available_models() -> List[str]:
@@ -520,7 +531,7 @@ def send_reasoning_chat(message: str, conversation_id: Optional[str] = None, use
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -567,7 +578,7 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -658,7 +669,7 @@ def send_advanced_rag_chat(message: str, conversation_id: Optional[str] = None) 
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -703,7 +714,7 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -745,7 +756,7 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -870,7 +881,7 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -973,7 +984,7 @@ def send_to_backend(message: str, conversation_id: Optional[str] = None, use_str
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -1762,7 +1773,7 @@ def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversa
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -1813,7 +1824,7 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -1990,7 +2001,7 @@ def send_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conver
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -2041,7 +2052,7 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
     try:
         with httpx.Client() as client:
             # Use the first available model or fallback to llama3:latest
-            model = st.session_state.available_models[0] if st.session_state.available_models else "llama3:latest"
+            model = get_selected_model()
             
             payload = {
                 "message": message,
@@ -2166,6 +2177,10 @@ def main():
                 st.session_state.available_models = get_available_models()
                 st.session_state.conversations = get_conversations()
                 
+                # Set default selected model if none selected
+                if not st.session_state.selected_model and st.session_state.available_models:
+                    st.session_state.selected_model = st.session_state.available_models[0]
+                
                 # Load secondary data in background
                 try:
                     st.session_state.rag_stats = get_rag_stats()
@@ -2189,9 +2204,19 @@ def main():
     with st.sidebar:
         # Force refresh button for debugging
         if st.button("🔄 Force Refresh All Data"):
+            # Store current selected model
+            current_model = st.session_state.selected_model
+            
             st.session_state.rag_stats = get_rag_stats()
             st.session_state.conversations = get_conversations()
             st.session_state.available_models = get_available_models()
+            
+            # Restore selected model if it still exists, otherwise use first available
+            if current_model and current_model in st.session_state.available_models:
+                st.session_state.selected_model = current_model
+            elif st.session_state.available_models:
+                st.session_state.selected_model = st.session_state.available_models[0]
+            
             st.success("✅ All data refreshed!")
             st.rerun()
         
@@ -2205,6 +2230,43 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Model Selection at the top
+        st.markdown("---")
+        st.markdown("### 🤖 Model Selection")
+        
+        if st.session_state.available_models:
+            # Set default model if none selected
+            if not st.session_state.selected_model:
+                st.session_state.selected_model = st.session_state.available_models[0]
+            
+            # Find the index of the currently selected model
+            try:
+                current_index = st.session_state.available_models.index(st.session_state.selected_model)
+            except ValueError:
+                current_index = 0
+                st.session_state.selected_model = st.session_state.available_models[0]
+            
+            selected_model = st.selectbox(
+                "Choose your AI model:",
+                st.session_state.available_models,
+                index=current_index,
+                help="Select from your locally downloaded Ollama models"
+            )
+            
+            # Update session state if model changed
+            if selected_model != st.session_state.selected_model:
+                st.session_state.selected_model = selected_model
+                st.success(f"✅ Switched to {selected_model}")
+                st.rerun()
+            
+            # Display model info
+            st.info(f"**Active Model:** {selected_model}")
+        else:
+            st.warning("⚠️ No models available")
+            st.info("Make sure Ollama is running and models are downloaded")
+        
+        st.markdown("---")
         
         # Reasoning System Section (Collapsible)
         with st.expander("🧠 Phase 1: Reasoning System", expanded=False):
@@ -2769,19 +2831,8 @@ def main():
         
         # Settings Section (Collapsible)
         with st.expander("⚙️ Settings", expanded=False):
-            # Model selection
-            if st.session_state.available_models:
-                st.markdown('<div class="section-header">Model Configuration</div>', unsafe_allow_html=True)
-                selected_model = st.selectbox(
-                    "Select Model",
-                    st.session_state.available_models,
-                    index=0
-                )
-                
-                # Temperature slider
-                temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
-            else:
-                st.warning("No models available")
+            # Temperature slider
+            temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
             
             # Chat settings
             st.markdown('<div class="section-header">Chat Settings</div>', unsafe_allow_html=True)
