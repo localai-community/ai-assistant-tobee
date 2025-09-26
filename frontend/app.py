@@ -137,20 +137,51 @@ def get_css():
             margin-bottom: 1rem !important;
         }
         
-        /* Style for stop button container */
-        .stop-button-container {
+        /* Style for button container - compact and right-aligned */
+        .button-container {
             position: fixed !important;
             bottom: 1rem !important;
             right: 1rem !important;
             z-index: 1000 !important;
+            width: auto !important;
+            max-width: 300px !important;
+        }
+        
+        /* Style for button columns to be compact */
+        .button-container .stColumns {
+            gap: 0.3rem !important;
+        }
+        
+        .button-container .stColumn {
+            padding: 0 !important;
+        }
+        
+        /* Style buttons within the container to be compact */
+        .button-container button {
+            width: 100% !important;
+            padding: 6px 10px !important;
+            font-size: 0.8em !important;
+            margin: 0 !important;
+            min-width: auto !important;
+        }
+        
+        /* Make the spacer column invisible */
+        .button-container .stColumn:last-child {
+            display: none !important;
+        }
+        
+        /* Style for stop button container */
+        .stop-button-container {
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
         }
         
         /* Style for upload button container */
         .upload-button-container {
-            position: fixed !important;
-            bottom: 4rem !important;
-            right: 1rem !important;
-            z-index: 1000 !important;
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
         }
         
         /* Style for upload button */
@@ -2946,13 +2977,6 @@ def main():
     # Chat input (now fixed at bottom via CSS)
     prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
-    # Floating Upload Button (fixed position via CSS)
-    with st.container():
-        st.markdown('<div class="upload-button-container">', unsafe_allow_html=True)
-        if st.button("📄 Upload", key="upload_button", help="Upload a document"):
-            st.session_state.show_uploader = True
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     
     # Hidden file uploader that appears when upload button is clicked
     if st.session_state.get("show_uploader", False):
@@ -3004,29 +3028,43 @@ def main():
                 st.session_state.show_uploader = False
                 st.rerun()
     
-    # Stop button (fixed position via CSS)
+    # Floating Buttons Container (fixed position via CSS)
     print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
     with st.container():
-        st.markdown('<div class="stop-button-container">', unsafe_allow_html=True)
-        if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
-            print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
-            st.session_state.stop_generation = True
-            st.session_state.is_generating = False
-            
-            # Save any accumulated content immediately
-            if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
-                print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
-                stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": stopped_content,
-                    "stopped": True
-                })
-                # Clear the current response
-                st.session_state.current_response = ""
-                print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
-                # Force UI refresh to show the saved content immediately
+        st.markdown('<div class="button-container">', unsafe_allow_html=True)
+        
+        # Use columns with custom ratios to keep buttons compact and close together
+        col1, col2, col3 = st.columns([1, 1, 8])  # Small buttons, large spacer
+        
+        with col1:
+            if st.button("📄 Upload", key="upload_button", help="Upload a document"):
+                st.session_state.show_uploader = True
                 st.rerun()
+        
+        with col2:
+            if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
+                print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
+                st.session_state.stop_generation = True
+                st.session_state.is_generating = False
+                
+                # Save any accumulated content immediately
+                if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
+                    print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
+                    stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": stopped_content,
+                        "stopped": True
+                    })
+                    # Clear the current response
+                    st.session_state.current_response = ""
+                    print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
+                    # Force UI refresh to show the saved content immediately
+                    st.rerun()
+        
+        with col3:
+            st.empty()  # Empty column to push buttons to the right
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
