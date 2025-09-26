@@ -67,4 +67,46 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
     
     def __repr__(self):
-        return f"<Message(id={self.id}, role='{self.role}', conversation_id='{self.conversation_id}')>" 
+        return f"<Message(id={self.id}, role='{self.role}', conversation_id='{self.conversation_id}')>"
+
+class ChatDocument(Base):
+    """Chat document model for conversation-scoped document storage."""
+    __tablename__ = "chat_documents"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    conversation_id = Column(String(36), ForeignKey("conversations.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    filename = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    file_path = Column(String(500), nullable=False)
+    upload_timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    summary_text = Column(Text, nullable=True)
+    summary_type = Column(String(50), nullable=True)
+    processing_status = Column(String(50), default="uploaded", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    conversation = relationship("Conversation", backref="documents")
+    user = relationship("User", backref="documents")
+    
+    def __repr__(self):
+        return f"<ChatDocument(id={self.id}, filename='{self.filename}', conversation_id='{self.conversation_id}')>"
+
+class DocumentChunk(Base):
+    """Document chunk model for storing document segments with embeddings."""
+    __tablename__ = "document_chunks"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    document_id = Column(String(36), ForeignKey("chat_documents.id"), nullable=False, index=True)
+    chunk_text = Column(Text, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    embedding_id = Column(String(100), nullable=True)  # Reference to vector store
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    document = relationship("ChatDocument", backref="chunks")
+    
+    def __repr__(self):
+        return f"<DocumentChunk(id={self.id}, document_id='{self.document_id}', chunk_index={self.chunk_index})>" 

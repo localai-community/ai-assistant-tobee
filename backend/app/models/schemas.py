@@ -78,4 +78,57 @@ class Conversation(ConversationBase):
     messages: List[Message] = []
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+class ChatDocumentBase(BaseModel):
+    """Base chat document schema."""
+    filename: str = Field(..., max_length=255)
+    file_type: str = Field(..., max_length=50)
+    file_size: int
+    file_path: str = Field(..., max_length=500)
+
+class ChatDocumentCreate(ChatDocumentBase):
+    """Schema for creating a chat document."""
+    conversation_id: str
+    user_id: Optional[str] = None
+
+class ChatDocumentUpdate(BaseModel):
+    """Schema for updating a chat document."""
+    summary_text: Optional[str] = None
+    summary_type: Optional[str] = Field(None, max_length=50)
+    processing_status: Optional[str] = Field(None, max_length=50)
+
+class ChatDocument(ChatDocumentBase):
+    """Schema for chat document responses."""
+    id: str
+    conversation_id: str
+    user_id: Optional[str] = None
+    upload_timestamp: datetime
+    summary_text: Optional[str] = None
+    summary_type: Optional[str] = None
+    processing_status: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class DocumentChunkBase(BaseModel):
+    """Base document chunk schema."""
+    chunk_text: str
+    chunk_index: int
+
+class DocumentChunkCreate(DocumentChunkBase):
+    """Schema for creating a document chunk."""
+    document_id: str
+    embedding_id: Optional[str] = None
+
+class DocumentChunk(DocumentChunkBase):
+    """Schema for document chunk responses."""
+    id: str
+    document_id: str
+    embedding_id: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
