@@ -17,8 +17,12 @@ from pydantic import BaseModel
 
 from ..services.rag.retriever import RAGRetriever
 from ..services.chat import ChatService
+from ..services.repository import ChatDocumentRepository, DocumentChunkRepository
+from ..services.document_summary import DocumentSummaryService
+from ..services.document_manager import DocumentManager
 from ..core.database import get_db
 from ..core.models import ErrorResponse
+from ..models.schemas import ChatDocumentCreate, ChatDocumentUpdate
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -131,13 +135,17 @@ async def rag_stream_chat(request: RAGStreamRequest, db: Session = Depends(get_d
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    conversation_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Upload and process a document for RAG.
+    Upload and process a document for RAG with conversation-scoped storage.
     
     Args:
         file: Document file to upload
+        conversation_id: Optional conversation ID for chat-scoped storage
+        user_id: Optional user ID for document ownership
         db: Database session
         
     Returns:
@@ -145,7 +153,7 @@ async def upload_document(
     """
     try:
         # Validate file type
-        allowed_extensions = {'.pdf', '.docx', '.txt', '.md'}
+        allowed_extensions = {'.pdf', '.docx', '.txt', '.md', '.doc'}
         file_extension = Path(file.filename).suffix.lower()
         
         if file_extension not in allowed_extensions:
@@ -154,24 +162,57 @@ async def upload_document(
                 detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
             )
         
+        # Create unique filename to avoid conflicts
+        import uuid
+        unique_filename = f"{uuid.uuid4()}_{file.filename}"
+        file_path = UPLOAD_DIR / unique_filename
+        
         # Save file to upload directory
-        file_path = UPLOAD_DIR / file.filename
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        # Initialize repositories
+        document_repo = ChatDocumentRepository(db)
+        chunk_repo = DocumentChunkRepository(db)
+        
+        # Create chat document record
+        document_data = ChatDocumentCreate(
+            filename=file.filename,
+            file_type=file_extension,
+            file_size=file.size,
+            file_path=str(file_path),
+            conversation_id=conversation_id or "global",
+            user_id=user_id
+        )
+        
+        chat_document = document_repo.create_document(document_data)
         
         # Process document with RAG
         result = rag_retriever.add_document(str(file_path))
         
         if result["success"]:
+            # Update document status
+            document_repo.update_document(chat_document.id, {
+                "processing_status": "processed"
+            })
+            
             return {
                 "success": True,
+                "document_id": chat_document.id,
                 "filename": file.filename,
                 "file_size": file.size,
+                "conversation_id": conversation_id,
+                "user_id": user_id,
                 "chunks_created": result.get("chunks_created", 0),
                 "stats": result.get("stats", {}),
                 "message": f"Document '{file.filename}' processed successfully"
             }
         else:
+            # Update document status to failed
+            document_repo.update_document(chat_document.id, {
+                "processing_status": "failed"
+            })
+            
             # Clean up file if processing failed
             if file_path.exists():
                 file_path.unlink()
@@ -185,6 +226,389 @@ async def upload_document(
         raise
     except Exception as e:
         logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/{conversation_id}")
+async def get_conversation_documents(
+    conversation_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all documents for a specific conversation.
+    
+    Args:
+        conversation_id: Conversation ID
+        db: Database session
+        
+    Returns:
+        List of documents in the conversation
+    """
+    try:
+        document_repo = ChatDocumentRepository(db)
+        documents = document_repo.get_conversation_documents(conversation_id)
+        
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "documents": [
+                {
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "file_type": doc.file_type,
+                    "file_size": doc.file_size,
+                    "upload_timestamp": doc.upload_timestamp,
+                    "summary_text": doc.summary_text,
+                    "summary_type": doc.summary_type,
+                    "processing_status": doc.processing_status
+                }
+                for doc in documents
+            ],
+            "count": len(documents)
+        }
+    except Exception as e:
+        logger.error(f"Error getting conversation documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a document from the system.
+    
+    Args:
+        document_id: Document ID to delete
+        db: Database session
+        
+    Returns:
+        Success confirmation
+    """
+    try:
+        document_repo = ChatDocumentRepository(db)
+        chunk_repo = DocumentChunkRepository(db)
+        
+        # Get document info before deletion
+        document = document_repo.get_document(document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Delete document chunks first
+        chunk_repo.delete_document_chunks(document_id)
+        
+        # Delete the document
+        success = document_repo.delete_document(document_id)
+        
+        if success:
+            # Clean up file
+            file_path = Path(document.file_path)
+            if file_path.exists():
+                file_path.unlink()
+            
+            return {
+                "success": True,
+                "message": f"Document '{document.filename}' deleted successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete document")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/summarize/{document_id}")
+async def summarize_document(
+    document_id: str,
+    summary_type: str = "brief",
+    conversation_context: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a summary for a document.
+    
+    Args:
+        document_id: Document ID to summarize
+        summary_type: Type of summary (brief, detailed, key_points, executive)
+        conversation_context: Optional conversation context
+        db: Database session
+        
+    Returns:
+        Document summary
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        summary_service = DocumentSummaryService(ollama_url, db)
+        
+        result = await summary_service.generate_summary(
+            document_id, 
+            summary_type, 
+            conversation_context
+        )
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "document_id": document_id,
+                "summary": result["summary"],
+                "summary_type": summary_type,
+                "cached": result.get("cached", False)
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error summarizing document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/summarize/{document_id}/multi")
+async def summarize_document_multi(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate multiple types of summaries for a document.
+    
+    Args:
+        document_id: Document ID to summarize
+        db: Database session
+        
+    Returns:
+        Multiple summary types
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        summary_service = DocumentSummaryService(ollama_url, db)
+        
+        result = await summary_service.generate_multi_level_summary(document_id)
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "document_id": document_id,
+                "summaries": result["summaries"]
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating multi-level summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/document/{document_id}/summary")
+async def get_document_summary(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get existing summary for a document.
+    
+    Args:
+        document_id: Document ID
+        db: Database session
+        
+    Returns:
+        Document summary if available
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        summary_service = DocumentSummaryService(ollama_url, db)
+        
+        result = await summary_service.get_document_summary(document_id)
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "document_id": document_id,
+                "summary": result["summary"],
+                "summary_type": result["summary_type"],
+                "created_at": result["created_at"]
+            }
+        else:
+            raise HTTPException(status_code=404, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/analytics/{user_id}")
+async def get_document_analytics(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get document usage analytics for a user.
+    
+    Args:
+        user_id: User ID
+        db: Database session
+        
+    Returns:
+        Document analytics
+    """
+    try:
+        document_manager = DocumentManager(db)
+        analytics = document_manager.get_document_analytics(user_id)
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "analytics": analytics
+        }
+    except Exception as e:
+        logger.error(f"Error getting document analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/health")
+async def get_document_health(db: Session = Depends(get_db)):
+    """
+    Get document system health status.
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        Document system health
+    """
+    try:
+        document_manager = DocumentManager(db)
+        health = document_manager.get_document_health()
+        
+        return {
+            "success": True,
+            "health": health
+        }
+    except Exception as e:
+        logger.error(f"Error getting document health: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/documents/cleanup/{conversation_id}")
+async def cleanup_conversation_documents(
+    conversation_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Clean up all documents for a conversation.
+    
+    Args:
+        conversation_id: Conversation ID
+        db: Database session
+        
+    Returns:
+        Cleanup results
+    """
+    try:
+        document_manager = DocumentManager(db)
+        cleanup_stats = document_manager.cleanup_conversation_documents(conversation_id)
+        
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "cleanup_stats": cleanup_stats
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up conversation documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/documents/archive/{document_id}")
+async def archive_document(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Archive a document for long-term storage.
+    
+    Args:
+        document_id: Document ID
+        db: Database session
+        
+    Returns:
+        Archive result
+    """
+    try:
+        document_manager = DocumentManager(db)
+        success = document_manager.archive_document(document_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Document {document_id} archived successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error archiving document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/documents/restore/{document_id}")
+async def restore_document(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Restore an archived document.
+    
+    Args:
+        document_id: Document ID
+        db: Database session
+        
+    Returns:
+        Restore result
+    """
+    try:
+        document_manager = DocumentManager(db)
+        success = document_manager.restore_document(document_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Document {document_id} restored successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error restoring document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/documents/cleanup-old")
+async def cleanup_old_documents(
+    days_old: int = 30,
+    db: Session = Depends(get_db)
+):
+    """
+    Clean up documents older than specified days.
+    
+    Args:
+        days_old: Number of days old (default: 30)
+        db: Database session
+        
+    Returns:
+        Cleanup results
+    """
+    try:
+        document_manager = DocumentManager(db)
+        cleanup_stats = document_manager.cleanup_old_documents(days_old)
+        
+        return {
+            "success": True,
+            "days_old": days_old,
+            "cleanup_stats": cleanup_stats
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up old documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload-directory")

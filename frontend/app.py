@@ -145,6 +145,37 @@ def get_css():
             z-index: 1000 !important;
         }
         
+        /* Style for upload button container */
+        .upload-button-container {
+            position: fixed !important;
+            bottom: 4rem !important;
+            right: 1rem !important;
+            z-index: 1000 !important;
+        }
+        
+        /* Style for upload button */
+        .upload-button-container button {
+            background-color: #4CAF50 !important;
+            border: 1px solid #4CAF50 !important;
+            color: white !important;
+            padding: 8px 16px !important;
+            border-radius: 6px !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            font-size: 0.9em !important;
+            font-weight: bold !important;
+        }
+        
+        .upload-button-container button:hover {
+            background-color: #45a049 !important;
+            border-color: #45a049 !important;
+        }
+        
+        /* Hidden file uploader */
+        .hidden-file-uploader {
+            display: none !important;
+        }
+        
         /* For mobile/smaller screens, adjust stop button positioning */
         @media (max-width: 768px) {
             .stop-button-container {
@@ -650,19 +681,60 @@ def call_mcp_tool(tool_name: str, arguments: Dict) -> Dict:
     except Exception as e:
         return {"success": False, "error": f"Tool call error: {str(e)}"}
 
-def upload_document_for_rag(uploaded_file) -> Dict:
-    """Upload a document for RAG processing."""
+def upload_document_for_rag(uploaded_file, conversation_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict:
+    """Upload a document for RAG processing with conversation-scoped storage."""
     try:
         with httpx.Client() as client:
             files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-            response = client.post(f"{BACKEND_URL}/api/v1/rag/upload", files=files, timeout=60.0)
+            data = {}
+            
+            # Add conversation and user context if available
+            if conversation_id:
+                data["conversation_id"] = conversation_id
+            if user_id:
+                data["user_id"] = user_id
+            
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/rag/upload", 
+                files=files, 
+                data=data,
+                timeout=60.0
+            )
             if response.status_code == 200:
-                data = response.json()
-                return {"success": True, "data": data}
+                result = response.json()
+                return {"success": True, "data": result}
             else:
                 return {"success": False, "error": f"Upload failed: {response.status_code} - {response.text}"}
     except Exception as e:
         return {"success": False, "error": f"Upload error: {str(e)}"}
+
+def generate_document_summary(document_id: str, summary_type: str = "brief") -> Dict:
+    """Generate a summary for a document."""
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/rag/summarize/{document_id}",
+                params={"summary_type": summary_type},
+                timeout=60.0
+            )
+            if response.status_code == 200:
+                return {"success": True, "data": response.json()}
+            else:
+                return {"success": False, "error": f"Summary failed: {response.status_code} - {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Summary error: {str(e)}"}
+
+def get_conversation_documents(conversation_id: str) -> Dict:
+    """Get all documents for a conversation."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/rag/documents/{conversation_id}")
+            if response.status_code == 200:
+                return {"success": True, "data": response.json()}
+            else:
+                return {"success": False, "error": f"Failed to get documents: {response.status_code} - {response.text}"}
+    except Exception as e:
+        return {"success": False, "error": f"Error getting documents: {str(e)}"}
 
 def send_advanced_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
     """Send message to backend with advanced RAG enhancement."""
@@ -2567,42 +2639,43 @@ def main():
             else:
                 st.info("💡 Enable Phase 3 strategies for advanced reasoning capabilities")
         
-        # RAG Section (Collapsible)
-        with st.expander("📚 RAG System", expanded=False):
-            st.markdown('<div class="section-header">Document Upload</div>', unsafe_allow_html=True)
+        # RAG Section (Collapsible) - Simplified for document viewing only
+        with st.expander("📚 Conversation Documents", expanded=False):
+            st.markdown('<div class="section-header">Uploaded Documents</div>', unsafe_allow_html=True)
+            st.info("💡 Use the 📄 Upload button in the main chat area to upload documents")
             
             if st.session_state.backend_health:
-                uploaded_file = st.file_uploader(
-                    "Upload a document for RAG",
-                    type=['pdf', 'docx', 'txt', 'md'],
-                    help="Upload PDF, DOCX, TXT, or MD files to enable RAG functionality"
-                )
-                
-                if uploaded_file is not None:
-                    if st.button("📤 Process Document"):
-                        with st.spinner("Processing document..."):
-                            result = upload_document_for_rag(uploaded_file)
-                            
-                            if result.get("success"):
-                                data = result.get("data", {})
-                                st.success(f"✅ {data.get('message', 'Document processed successfully')}")
-                                st.info(f"📊 Created {data.get('chunks_created', 0)} chunks")
-                                
-                                # Wait a moment for the backend to update, then refresh stats
-                                import time
-                                time.sleep(1)
-                                
-                                # Refresh RAG stats
-                                new_stats = get_rag_stats()
-                                st.session_state.rag_stats = new_stats
-                                
-                                # Show updated stats immediately
-                                if new_stats.get("total_documents", 0) > 0:
-                                    st.success(f"📚 Updated: {new_stats['total_documents']} documents in RAG system")
-                                
-                                st.rerun()
+                # Show conversation documents if we have a current conversation
+                if st.session_state.get("current_conversation_id"):
+                    if st.button("🔄 Refresh Documents"):
+                        st.session_state.conversation_documents = None
+                        st.rerun()
+                    
+                    # Get conversation documents
+                    if not hasattr(st.session_state, 'conversation_documents') or st.session_state.conversation_documents is None:
+                        with st.spinner("Loading conversation documents..."):
+                            docs_result = get_conversation_documents(st.session_state.current_conversation_id)
+                            if docs_result.get("success"):
+                                st.session_state.conversation_documents = docs_result.get("data", {})
                             else:
-                                st.error(f"❌ {result.get('error', 'Unknown error')}")
+                                st.session_state.conversation_documents = {"documents": []}
+                    
+                    # Display conversation documents
+                    if st.session_state.conversation_documents.get("documents"):
+                        for doc in st.session_state.conversation_documents["documents"]:
+                            with st.expander(f"📄 {doc['filename']} ({doc['file_type']})"):
+                                st.write(f"**Size:** {doc['file_size']} bytes")
+                                st.write(f"**Uploaded:** {doc['upload_timestamp']}")
+                                st.write(f"**Status:** {doc['processing_status']}")
+                                
+                                if doc.get('summary_text'):
+                                    st.write(f"**Summary:** {doc['summary_text']}")
+                                else:
+                                    st.info("💡 Ask 'summarize this document' in chat to generate a summary")
+                    else:
+                        st.info("No documents uploaded to this conversation yet.")
+                else:
+                    st.info("Start a conversation to see uploaded documents here.")
                 
                 # RAG Statistics
                 if st.session_state.rag_stats:
@@ -2873,33 +2946,105 @@ def main():
     # Chat input (now fixed at bottom via CSS)
     prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
+    # Floating Upload Button (fixed position via CSS)
+    with st.container():
+        st.markdown('<div class="upload-button-container">', unsafe_allow_html=True)
+        if st.button("📄 Upload", key="upload_button", help="Upload a document"):
+            st.session_state.show_uploader = True
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Hidden file uploader that appears when upload button is clicked
+    if st.session_state.get("show_uploader", False):
+        with st.container():
+            st.markdown("### 📄 Upload Document")
+            uploaded_file = st.file_uploader(
+                "Choose a document",
+                type=['pdf', 'docx', 'txt', 'md', 'doc'],
+                help="Upload PDF, DOCX, TXT, MD, or DOC files",
+                key="main_uploader"
+            )
+            
+            if uploaded_file is not None:
+                # Automatic processing - no separate button needed
+                with st.spinner("🔄 Processing document..."):
+                    # Get current conversation ID and user ID
+                    conversation_id = st.session_state.get("current_conversation_id")
+                    user_id = st.session_state.get("user_id", "default_user")
+                    
+                    result = upload_document_for_rag(
+                        uploaded_file, 
+                        conversation_id=conversation_id,
+                        user_id=user_id
+                    )
+                    
+                    if result.get("success"):
+                        data = result.get("data", {})
+                        document_id = data.get("document_id")
+                        filename = uploaded_file.name
+                        
+                        # Add upload confirmation to chat
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": f"📄 **Document Uploaded:** {filename}\n\n✅ Document processed successfully! Created {data.get('chunks_created', 0)} chunks.\n\nYou can now ask questions about this document or request a summary."
+                        })
+                        
+                        # Store document info for potential summary
+                        st.session_state.last_uploaded_document_id = document_id
+                        st.session_state.last_uploaded_filename = filename
+                        
+                        # Hide uploader
+                        st.session_state.show_uploader = False
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Upload failed: {result.get('error', 'Unknown error')}")
+            
+            # Cancel button
+            if st.button("❌ Cancel", key="cancel_upload"):
+                st.session_state.show_uploader = False
+                st.rerun()
+    
     # Stop button (fixed position via CSS)
     print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
-    if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
-        print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
-        st.session_state.stop_generation = True
-        st.session_state.is_generating = False
-        
-        # Save any accumulated content immediately
-        if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
-            print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
-            stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
-            st.session_state.messages.append({
-                "role": "assistant", 
-                "content": stopped_content,
-                "stopped": True
-            })
-            # Clear the current response
-            st.session_state.current_response = ""
-            print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
-            # Force UI refresh to show the saved content immediately
-            st.rerun()
+    with st.container():
+        st.markdown('<div class="stop-button-container">', unsafe_allow_html=True)
+        if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
+            print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
+            st.session_state.stop_generation = True
+            st.session_state.is_generating = False
+            
+            # Save any accumulated content immediately
+            if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
+                print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
+                stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": stopped_content,
+                    "stopped": True
+                })
+                # Clear the current response
+                st.session_state.current_response = ""
+                print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
+                # Force UI refresh to show the saved content immediately
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
     if st.session_state.sample_question:
         prompt = st.session_state.sample_question
         st.session_state.sample_question = None  # Clear the sample question
         st.session_state.chat_input_key += 1  # Force chat input refresh
+    
+    # Handle document summary to add to chat
+    if hasattr(st.session_state, 'summary_to_add') and st.session_state.summary_to_add:
+        # Add summary as assistant message
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": st.session_state.summary_to_add
+        })
+        # Clear the summary to add
+        st.session_state.summary_to_add = None
+        st.rerun()
     
     if prompt:
         # Reset stop generation flag and set generating state
@@ -2913,6 +3058,53 @@ def main():
         # Display user message
         with st.chat_message("user"):
             st.markdown(prompt)
+        
+        # Check if this is a summary request for an uploaded document
+        summary_keywords = ["summarize", "summary", "summarise", "brief", "overview", "what is this document about", "main points"]
+        is_summary_request = any(keyword in prompt.lower() for keyword in summary_keywords)
+        has_uploaded_document = hasattr(st.session_state, 'last_uploaded_document_id') and st.session_state.last_uploaded_document_id
+        
+        if is_summary_request and has_uploaded_document:
+            # Handle document summary request
+            print(f"🔍 DEBUG: Detected summary request for document: {st.session_state.last_uploaded_document_id}")
+            
+            # Add assistant message placeholder for streaming
+            st.session_state.messages.append({"role": "assistant", "content": ""})
+            
+            # Create streaming response for summary
+            with st.chat_message("assistant"):
+                summary_container = st.empty()
+                
+                # Generate and stream summary
+                with st.spinner("📝 Generating document summary..."):
+                    summary_result = generate_document_summary(
+                        st.session_state.last_uploaded_document_id,
+                        "brief"
+                    )
+                    
+                    if summary_result.get("success"):
+                        summary_data = summary_result.get("data", {})
+                        summary_text = summary_data.get("summary", "")
+                        
+                        # Stream the summary to chat
+                        full_summary = f"📄 **Document Summary ({st.session_state.last_uploaded_filename}):**\n\n{summary_text}"
+                        
+                        # Simulate streaming by updating the container
+                        summary_container.markdown(full_summary)
+                        
+                        # Update the message in session state
+                        st.session_state.messages[-1]["content"] = full_summary
+                        
+                        print(f"🔍 DEBUG: ✅ Summary generated and streamed to chat")
+                    else:
+                        error_msg = f"❌ Failed to generate summary: {summary_result.get('error', 'Unknown error')}"
+                        summary_container.error(error_msg)
+                        st.session_state.messages[-1]["content"] = error_msg
+                
+                # Reset generating state
+                st.session_state.is_generating = False
+                st.rerun()
+                return
         
         # Check backend health before sending
         if not st.session_state.backend_health:

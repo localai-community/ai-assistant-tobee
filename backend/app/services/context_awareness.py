@@ -14,9 +14,9 @@ import numpy as np
 from pathlib import Path
 
 from sqlalchemy.orm import Session
-from ..models.database import Conversation, Message, User
+from ..models.database import Conversation, Message, User, ChatDocument
 from ..models.schemas import ConversationCreate, MessageCreate
-from .repository import ConversationRepository, MessageRepository
+from .repository import ConversationRepository, MessageRepository, ChatDocumentRepository
 from .rag.vector_store import VectorStore
 from .rag.advanced_retriever import AdvancedRAGRetriever
 
@@ -56,6 +56,19 @@ class MemoryChunk:
     created_at: datetime
     relevance_score: float = 0.0
 
+@dataclass
+class DocumentContext:
+    """Represents a document in conversation context."""
+    document_id: str
+    filename: str
+    file_type: str
+    summary: Optional[str] = None
+    upload_time: datetime = field(default_factory=datetime.now)
+    relevance_score: float = 0.0
+    last_accessed: datetime = field(default_factory=datetime.now)
+    access_count: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
 class ContextAwarenessService:
     """
     Advanced context awareness service that manages:
@@ -84,10 +97,12 @@ class ContextAwarenessService:
         if self.db:
             self.conversation_repo = ConversationRepository(self.db)
             self.message_repo = MessageRepository(self.db)
+            self.document_repo = ChatDocumentRepository(self.db)
             logger.info("Context Awareness Service initialized with database")
         else:
             self.conversation_repo = None
             self.message_repo = None
+            self.document_repo = None
             logger.info("Context Awareness Service initialized without database")
         
         # Initialize advanced retriever for context-aware retrieval
@@ -638,3 +653,138 @@ class ContextAwarenessService:
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
+    
+    # Document Context Management Methods
+    
+    def get_conversation_documents(self, conversation_id: str) -> List[DocumentContext]:
+        """Get all documents associated with a conversation."""
+        try:
+            if not self.document_repo:
+                return []
+            
+            documents = self.document_repo.get_conversation_documents(conversation_id)
+            
+            return [
+                DocumentContext(
+                    document_id=doc.id,
+                    filename=doc.filename,
+                    file_type=doc.file_type,
+                    summary=doc.summary_text,
+                    upload_time=doc.upload_timestamp,
+                    relevance_score=0.0,
+                    last_accessed=doc.updated_at,
+                    access_count=0,
+                    metadata={
+                        "file_size": doc.file_size,
+                        "processing_status": doc.processing_status,
+                        "summary_type": doc.summary_type
+                    }
+                )
+                for doc in documents
+            ]
+            
+        except Exception as e:
+            logger.error(f"Error getting conversation documents: {e}")
+            return []
+    
+    def update_document_relevance(self, document_id: str, query: str) -> float:
+        """Update document relevance based on query similarity."""
+        try:
+            if not self.document_repo:
+                return 0.0
+            
+            document = self.document_repo.get_document(document_id)
+            if not document:
+                return 0.0
+            
+            # Simple relevance scoring based on filename and summary
+            relevance_score = 0.0
+            query_lower = query.lower()
+            
+            # Check filename similarity
+            if query_lower in document.filename.lower():
+                relevance_score += 0.3
+            
+            # Check summary similarity
+            if document.summary_text and query_lower in document.summary_text.lower():
+                relevance_score += 0.7
+            
+            # Check for general document-related keywords
+            document_keywords = ["document", "file", "paper", "report", "text", "content", "about", "summarize", "summary", "what", "this"]
+            if any(keyword in query_lower for keyword in document_keywords):
+                relevance_score += 0.5  # Base relevance for document-related queries
+            
+            # Update access count and last accessed time
+            self.document_repo.update_document(document_id, {
+                "updated_at": datetime.now()
+            })
+            
+            return min(relevance_score, 1.0)
+            
+        except Exception as e:
+            logger.error(f"Error updating document relevance: {e}")
+            return 0.0
+    
+    def get_document_context_for_query(self, conversation_id: str, query: str) -> List[DocumentContext]:
+        """Get relevant documents for a specific query in a conversation."""
+        try:
+            documents = self.get_conversation_documents(conversation_id)
+            logger.info(f"Found {len(documents)} documents for conversation {conversation_id}")
+            
+            if not documents:
+                logger.info(f"No documents found for conversation {conversation_id}")
+                return []
+            
+            # Calculate relevance scores for each document
+            for doc in documents:
+                doc.relevance_score = self.update_document_relevance(doc.document_id, query)
+                doc.access_count += 1
+                doc.last_accessed = datetime.now()
+            
+            # Sort by relevance score and return top documents
+            relevant_docs = sorted(documents, key=lambda x: x.relevance_score, reverse=True)
+            
+            # For document-related queries, be more inclusive
+            # Return all documents if any have relevance > 0, otherwise return all documents
+            if any(doc.relevance_score > 0 for doc in relevant_docs):
+                return [doc for doc in relevant_docs if doc.relevance_score > 0]
+            else:
+                # If no specific relevance, return all documents for general queries
+                return relevant_docs
+            
+        except Exception as e:
+            logger.error(f"Error getting document context for query: {e}")
+            return []
+    
+    def get_document_summary_context(self, conversation_id: str) -> str:
+        """Get a summary of all documents in the conversation for context."""
+        try:
+            documents = self.get_conversation_documents(conversation_id)
+            
+            if not documents:
+                return ""
+            
+            context_parts = []
+            for doc in documents:
+                if doc.summary:
+                    context_parts.append(f"Document: {doc.filename}\nSummary: {doc.summary}")
+                else:
+                    context_parts.append(f"Document: {doc.filename} (no summary available)")
+            
+            return "\n\n".join(context_parts)
+            
+        except Exception as e:
+            logger.error(f"Error getting document summary context: {e}")
+            return ""
+    
+    def cleanup_conversation_documents(self, conversation_id: str) -> int:
+        """Clean up all documents for a conversation."""
+        try:
+            if not self.document_repo:
+                return 0
+            
+            return self.document_repo.cleanup_conversation_documents(conversation_id)
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up conversation documents: {e}")
+            return 0

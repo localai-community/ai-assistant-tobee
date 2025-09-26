@@ -365,7 +365,8 @@ class ChatService:
             # Create new conversation in database
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                model=model
+                model=model,
+                user_id=user_id
             )
             conversation = self.conversation_repo.create_conversation(conversation_data)
             conversation_id = conversation.id
@@ -394,15 +395,30 @@ class ChatService:
         
         # Apply context awareness if enabled
         enhanced_message = message
+        document_context = None
         if enable_context_awareness and conversation_id:
             try:
                 self._ensure_context_service_initialized()
+                
+                # Get document context for the conversation
+                document_context = self.context_service.get_document_context_for_query(
+                    conversation_id, message
+                )
+                logger.info(f"Retrieved {len(document_context)} documents for conversation {conversation_id}")
+                
                 enhanced_message, context_metadata = self.context_service.build_context_aware_query(
                     current_message=message,
                     conversation_id=conversation_id,
                     user_id=user_id,
                     include_memory=include_memory
                 )
+                
+                # Enhance message with document context if available
+                if document_context:
+                    document_context_text = self._create_document_aware_prompt(
+                        enhanced_message, document_context
+                    )
+                    enhanced_message = document_context_text
                 
                 context_awareness_enabled = True
                 context_strategy_used = context_strategy
@@ -412,6 +428,8 @@ class ChatService:
                 user_preferences_applied = context_metadata.get("user_preferences", {})
                 
                 logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
+                if document_context:
+                    logger.info(f"Included {len(document_context)} relevant documents in context")
                 
             except Exception as e:
                 logger.error(f"Error applying context awareness: {e}")
@@ -605,7 +623,8 @@ class ChatService:
             # Create new conversation in database
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                model=model
+                model=model,
+                user_id=user_id
             )
             conversation = self.conversation_repo.create_conversation(conversation_data)
             conversation_id = conversation.id
@@ -799,6 +818,44 @@ class ChatService:
         if self.conversation_repo:
             return self.conversation_repo.clear_conversations()
         return 0
+    
+    def _create_document_aware_prompt(
+        self, 
+        user_message: str, 
+        document_context: List
+    ) -> str:
+        """Create prompt that includes document context."""
+        try:
+            from ..services.context_awareness import DocumentContext
+            
+            if not document_context:
+                return user_message
+            
+            # Build document context text
+            documents_text = []
+            for doc in document_context:
+                if isinstance(doc, DocumentContext):
+                    if doc.summary:
+                        documents_text.append(f"Document: {doc.filename}\nSummary: {doc.summary}")
+                    else:
+                        documents_text.append(f"Document: {doc.filename} (no summary available)")
+            
+            if documents_text:
+                document_context_text = "\n\n".join(documents_text)
+                
+                return f"""You are an AI assistant with access to the following documents in this conversation:
+
+{document_context_text}
+
+User Question: {user_message}
+
+Please answer the user's question using information from the documents when relevant, and cite the source document when you do so. If the question is not related to the documents, provide a general answer based on your knowledge."""
+            else:
+                return user_message
+                
+        except Exception as e:
+            logger.error(f"Error creating document-aware prompt: {e}")
+            return user_message
 
 # Global MCP manager instance to prevent duplicate initialization
 _mcp_manager_instance = None
