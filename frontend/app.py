@@ -137,20 +137,51 @@ def get_css():
             margin-bottom: 1rem !important;
         }
         
-        /* Style for stop button container */
-        .stop-button-container {
+        /* Style for button container - compact and right-aligned */
+        .button-container {
             position: fixed !important;
             bottom: 1rem !important;
             right: 1rem !important;
             z-index: 1000 !important;
+            width: auto !important;
+            max-width: 300px !important;
+        }
+        
+        /* Style for button columns to be compact */
+        .button-container .stColumns {
+            gap: 0.3rem !important;
+        }
+        
+        .button-container .stColumn {
+            padding: 0 !important;
+        }
+        
+        /* Style buttons within the container to be compact */
+        .button-container button {
+            width: 100% !important;
+            padding: 6px 10px !important;
+            font-size: 0.8em !important;
+            margin: 0 !important;
+            min-width: auto !important;
+        }
+        
+        /* Make the spacer column invisible */
+        .button-container .stColumn:last-child {
+            display: none !important;
+        }
+        
+        /* Style for stop button container */
+        .stop-button-container {
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
         }
         
         /* Style for upload button container */
         .upload-button-container {
-            position: fixed !important;
-            bottom: 4rem !important;
-            right: 1rem !important;
-            z-index: 1000 !important;
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
         }
         
         /* Style for upload button */
@@ -571,7 +602,10 @@ def send_reasoning_chat(message: str, conversation_id: Optional[str] = None, use
                 "use_reasoning": True,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -618,7 +652,10 @@ def send_streaming_reasoning_chat(message: str, conversation_id: Optional[str] =
                 "use_reasoning": True,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -708,21 +745,48 @@ def upload_document_for_rag(uploaded_file, conversation_id: Optional[str] = None
     except Exception as e:
         return {"success": False, "error": f"Upload error: {str(e)}"}
 
-def generate_document_summary(document_id: str, summary_type: str = "brief") -> Dict:
-    """Generate a summary for a document."""
+def generate_upload_response(filename: str, conversation_id: Optional[str]) -> Optional[str]:
+    """Generate automatic LLM response for uploaded document."""
     try:
+        # Create a message that will trigger document context inclusion
+        message = f"Please analyze the document I just uploaded ({filename}) and provide a brief overview of its contents. What are the main topics or key points covered in this document?"
+        
+        # Use the backend chat API with context awareness enabled
+        payload = {
+            "message": message,
+            "model": get_selected_model(),
+            "temperature": 0.7,
+            "stream": False,
+            "enable_context_awareness": True,
+            "include_memory": False,
+            "context_strategy": "auto"
+        }
+        
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        
+        # Get user_id safely
+        user_id = getattr(st.session_state, 'user_id', None)
+        if user_id:
+            payload["user_id"] = user_id
+        
         with httpx.Client() as client:
             response = client.post(
-                f"{BACKEND_URL}/api/v1/rag/summarize/{document_id}",
-                params={"summary_type": summary_type},
-                timeout=60.0
+                f"{BACKEND_URL}/api/v1/chat/",
+                json=payload,
+                timeout=120.0
             )
+            
             if response.status_code == 200:
-                return {"success": True, "data": response.json()}
+                data = response.json()
+                return data.get("response", "")
             else:
-                return {"success": False, "error": f"Summary failed: {response.status_code} - {response.text}"}
+                print(f"🔍 DEBUG: Upload response generation failed: {response.status_code}")
+                return None
+                
     except Exception as e:
-        return {"success": False, "error": f"Summary error: {str(e)}"}
+        print(f"🔍 DEBUG: Error generating upload response: {e}")
+        return None
 
 def get_conversation_documents(conversation_id: str) -> Dict:
     """Get all documents for a conversation."""
@@ -749,7 +813,10 @@ def send_advanced_rag_chat(message: str, conversation_id: Optional[str] = None) 
                 "temperature": 0.7,
                 "k": 4,
                 "use_advanced_strategies": True,
-                "conversation_history": st.session_state.messages if st.session_state.messages else []
+                "conversation_history": st.session_state.messages if st.session_state.messages else [],
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -792,7 +859,10 @@ def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Option
                 "message": message,
                 "model": model,
                 "temperature": 0.7,
-                "k": 4
+                "k": 4,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -834,7 +904,10 @@ def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None)
                 "message": message,
                 "model": model,
                 "temperature": 0.7,
-                "k": 4
+                "k": 4,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -1855,7 +1928,10 @@ def send_phase2_reasoning_chat(message: str, engine_type: str = "auto", conversa
                 "engine_type": engine_type,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -1906,7 +1982,10 @@ def send_streaming_phase2_reasoning_chat(message: str, engine_type: str = "auto"
                 "engine_type": engine_type,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -2083,7 +2162,10 @@ def send_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conver
                 "strategy_type": strategy_type,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -2134,7 +2216,10 @@ def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "aut
                 "strategy_type": strategy_type,
                 "show_steps": True,
                 "output_format": "markdown",
-                "include_validation": True
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
             }
             
             if conversation_id:
@@ -2646,7 +2731,7 @@ def main():
             
             if st.session_state.backend_health:
                 # Show conversation documents if we have a current conversation
-                if st.session_state.get("current_conversation_id"):
+                if getattr(st.session_state, 'conversation_id', None):
                     if st.button("🔄 Refresh Documents"):
                         st.session_state.conversation_documents = None
                         st.rerun()
@@ -2654,7 +2739,7 @@ def main():
                     # Get conversation documents
                     if not hasattr(st.session_state, 'conversation_documents') or st.session_state.conversation_documents is None:
                         with st.spinner("Loading conversation documents..."):
-                            docs_result = get_conversation_documents(st.session_state.current_conversation_id)
+                            docs_result = get_conversation_documents(getattr(st.session_state, 'conversation_id', None))
                             if docs_result.get("success"):
                                 st.session_state.conversation_documents = docs_result.get("data", {})
                             else:
@@ -2946,13 +3031,6 @@ def main():
     # Chat input (now fixed at bottom via CSS)
     prompt = st.chat_input("Ask me anything...", key=f"chat_input_{st.session_state.chat_input_key}")
     
-    # Floating Upload Button (fixed position via CSS)
-    with st.container():
-        st.markdown('<div class="upload-button-container">', unsafe_allow_html=True)
-        if st.button("📄 Upload", key="upload_button", help="Upload a document"):
-            st.session_state.show_uploader = True
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     
     # Hidden file uploader that appears when upload button is clicked
     if st.session_state.get("show_uploader", False):
@@ -2969,8 +3047,19 @@ def main():
                 # Automatic processing - no separate button needed
                 with st.spinner("🔄 Processing document..."):
                     # Get current conversation ID and user ID
-                    conversation_id = st.session_state.get("current_conversation_id")
+                    conversation_id = getattr(st.session_state, 'conversation_id', None)
                     user_id = st.session_state.get("user_id", "default_user")
+                    
+                    # Create a new conversation if none exists
+                    if not conversation_id:
+                        import uuid
+                        conversation_id = str(uuid.uuid4())
+                        st.session_state.conversation_id = conversation_id
+                        print(f"🔍 DEBUG: Created new conversation for document upload: {conversation_id}")
+                        
+                        # Initialize empty messages list for the new conversation
+                        if "messages" not in st.session_state or not st.session_state.messages:
+                            st.session_state.messages = []
                     
                     result = upload_document_for_rag(
                         uploaded_file, 
@@ -2983,18 +3072,45 @@ def main():
                         document_id = data.get("document_id")
                         filename = uploaded_file.name
                         
-                        # Add upload confirmation to chat
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": f"📄 **Document Uploaded:** {filename}\n\n✅ Document processed successfully! Created {data.get('chunks_created', 0)} chunks.\n\nYou can now ask questions about this document or request a summary."
-                        })
-                        
                         # Store document info for potential summary
                         st.session_state.last_uploaded_document_id = document_id
                         st.session_state.last_uploaded_filename = filename
                         
+                        # Add user message about the upload
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": f"📄 I just uploaded a document: {filename}"
+                        })
+                        
+                        # Add assistant message placeholder for streaming
+                        st.session_state.messages.append({"role": "assistant", "content": ""})
+                        
                         # Hide uploader
                         st.session_state.show_uploader = False
+                        
+                        # Generate automatic LLM response with document summary
+                        with st.chat_message("assistant"):
+                            response_container = st.empty()
+                            
+                            # Generate automatic response about the uploaded document
+                            with st.spinner("📝 Analyzing uploaded document..."):
+                                # Get conversation ID safely
+                                conversation_id = getattr(st.session_state, 'conversation_id', None)
+                                auto_response = generate_upload_response(filename, conversation_id)
+                                
+                                if auto_response:
+                                    # Stream the response to chat
+                                    response_container.markdown(auto_response)
+                                    
+                                    # Update the message in session state
+                                    st.session_state.messages[-1]["content"] = auto_response
+                                    
+                                    print(f"🔍 DEBUG: ✅ Auto-response generated for uploaded document")
+                                else:
+                                    fallback_msg = f"📄 **Document Uploaded:** {filename}\n\n✅ Document processed successfully! Created {data.get('chunks_created', 0)} chunks.\n\nYou can now ask questions about this document or request a summary."
+                                    response_container.markdown(fallback_msg)
+                                    st.session_state.messages[-1]["content"] = fallback_msg
+                        
                         st.rerun()
                     else:
                         st.error(f"❌ Upload failed: {result.get('error', 'Unknown error')}")
@@ -3004,29 +3120,43 @@ def main():
                 st.session_state.show_uploader = False
                 st.rerun()
     
-    # Stop button (fixed position via CSS)
+    # Floating Buttons Container (fixed position via CSS)
     print(f"🔍 DEBUG: Stop button state - is_generating: {st.session_state.is_generating}, stop_generation: {st.session_state.stop_generation}")
     with st.container():
-        st.markdown('<div class="stop-button-container">', unsafe_allow_html=True)
-        if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
-            print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
-            st.session_state.stop_generation = True
-            st.session_state.is_generating = False
-            
-            # Save any accumulated content immediately
-            if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
-                print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
-                stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": stopped_content,
-                    "stopped": True
-                })
-                # Clear the current response
-                st.session_state.current_response = ""
-                print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
-                # Force UI refresh to show the saved content immediately
+        st.markdown('<div class="button-container">', unsafe_allow_html=True)
+        
+        # Use columns with custom ratios to keep buttons compact and close together
+        col1, col2, col3 = st.columns([1, 1, 8])  # Small buttons, large spacer
+        
+        with col1:
+            if st.button("📄 Upload", key="upload_button", help="Upload a document"):
+                st.session_state.show_uploader = True
                 st.rerun()
+        
+        with col2:
+            if st.button("🛑 Stop", key="stop_button", help="Stop the current generation"):
+                print(f"🔍 DEBUG: Stop button clicked! Setting stop_generation = True")
+                st.session_state.stop_generation = True
+                st.session_state.is_generating = False
+                
+                # Save any accumulated content immediately
+                if hasattr(st.session_state, 'current_response') and st.session_state.current_response:
+                    print(f"🔍 DEBUG: Saving accumulated content from stop button: {len(st.session_state.current_response)} chars")
+                    stopped_content = st.session_state.current_response + "\n\n*Generation stopped by user.*"
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": stopped_content,
+                        "stopped": True
+                    })
+                    # Clear the current response
+                    st.session_state.current_response = ""
+                    print(f"🔍 DEBUG: ✅ SAVED stopped content to chat history from stop button")
+                    # Force UI refresh to show the saved content immediately
+                    st.rerun()
+        
+        with col3:
+            st.empty()  # Empty column to push buttons to the right
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Handle sample question if selected (moved here to be part of the main chat flow)
@@ -3059,52 +3189,8 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
         
-        # Check if this is a summary request for an uploaded document
-        summary_keywords = ["summarize", "summary", "summarise", "brief", "overview", "what is this document about", "main points"]
-        is_summary_request = any(keyword in prompt.lower() for keyword in summary_keywords)
-        has_uploaded_document = hasattr(st.session_state, 'last_uploaded_document_id') and st.session_state.last_uploaded_document_id
-        
-        if is_summary_request and has_uploaded_document:
-            # Handle document summary request
-            print(f"🔍 DEBUG: Detected summary request for document: {st.session_state.last_uploaded_document_id}")
-            
-            # Add assistant message placeholder for streaming
-            st.session_state.messages.append({"role": "assistant", "content": ""})
-            
-            # Create streaming response for summary
-            with st.chat_message("assistant"):
-                summary_container = st.empty()
-                
-                # Generate and stream summary
-                with st.spinner("📝 Generating document summary..."):
-                    summary_result = generate_document_summary(
-                        st.session_state.last_uploaded_document_id,
-                        "brief"
-                    )
-                    
-                    if summary_result.get("success"):
-                        summary_data = summary_result.get("data", {})
-                        summary_text = summary_data.get("summary", "")
-                        
-                        # Stream the summary to chat
-                        full_summary = f"📄 **Document Summary ({st.session_state.last_uploaded_filename}):**\n\n{summary_text}"
-                        
-                        # Simulate streaming by updating the container
-                        summary_container.markdown(full_summary)
-                        
-                        # Update the message in session state
-                        st.session_state.messages[-1]["content"] = full_summary
-                        
-                        print(f"🔍 DEBUG: ✅ Summary generated and streamed to chat")
-                    else:
-                        error_msg = f"❌ Failed to generate summary: {summary_result.get('error', 'Unknown error')}"
-                        summary_container.error(error_msg)
-                        st.session_state.messages[-1]["content"] = error_msg
-                
-                # Reset generating state
-                st.session_state.is_generating = False
-                st.rerun()
-                return
+        # Document context is now automatically included in all chat requests
+        # No need for separate summary handling - all prompts go through normal chat flow
         
         # Check backend health before sending
         if not st.session_state.backend_health:

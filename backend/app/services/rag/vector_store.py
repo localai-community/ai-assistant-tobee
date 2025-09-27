@@ -14,10 +14,17 @@ logger = logging.getLogger(__name__)
 class VectorStore:
     """Manages vector database operations for RAG system"""
     
-    def __init__(self, persist_directory: str = "storage/vector_db", collection_name: str = "documents"):
+    def __init__(self, persist_directory: str = "storage/vector_db", collection_name: str = "documents", conversation_id: str = None):
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(parents=True, exist_ok=True)
-        self.collection_name = collection_name
+        self.base_collection_name = collection_name
+        self.conversation_id = conversation_id
+        
+        # Create conversation-specific collection name
+        if conversation_id:
+            self.collection_name = f"{collection_name}_conv_{conversation_id}"
+        else:
+            self.collection_name = collection_name
         
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(
@@ -35,7 +42,7 @@ class VectorStore:
             )
         )
         
-        # Initialize LangChain vector store
+        # Initialize LangChain vector store with conversation-specific collection
         self.vector_store = Chroma(
             client=self.client,
             collection_name=self.collection_name,
@@ -43,7 +50,7 @@ class VectorStore:
             persist_directory=str(self.persist_directory)
         )
         
-        logger.info(f"Vector store initialized at {self.persist_directory}")
+        logger.info(f"Vector store initialized at {self.persist_directory} with collection: {self.collection_name}")
     
     def add_documents(self, documents: List[LangChainDocument]) -> bool:
         """Add documents to the vector store"""
