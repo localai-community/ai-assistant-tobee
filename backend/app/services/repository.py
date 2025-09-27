@@ -19,9 +19,10 @@ class ConversationRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def create_conversation(self, conversation: ConversationCreate) -> Conversation:
+    def create_conversation(self, conversation: ConversationCreate, conversation_id: Optional[str] = None) -> Conversation:
         """Create a new conversation."""
         db_conversation = Conversation(
+            id=conversation_id,  # Use provided ID or let database generate one
             title=conversation.title,
             model=conversation.model,
             user_id=conversation.user_id

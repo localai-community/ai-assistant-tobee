@@ -677,6 +677,7 @@ class ContextAwarenessService:
                     metadata={
                         "file_size": doc.file_size,
                         "processing_status": doc.processing_status,
+                        "file_path": doc.file_path,
                         "summary_type": doc.summary_type
                     }
                 )

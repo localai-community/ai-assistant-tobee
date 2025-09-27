@@ -1,0 +1,1 @@
+This is a simple test document with clear content that should be easy to retrieve.

@@ -416,7 +416,7 @@ class ChatService:
                 # Enhance message with document context if available
                 if document_context:
                     document_context_text = self._create_document_aware_prompt(
-                        enhanced_message, document_context
+                        enhanced_message, document_context, conversation_id
                     )
                     enhanced_message = document_context_text
                 
@@ -822,14 +822,21 @@ class ChatService:
     def _create_document_aware_prompt(
         self, 
         user_message: str, 
-        document_context: List
+        document_context: List,
+        conversation_id: str = None
     ) -> str:
         """Create prompt that includes document context."""
         try:
             from ..services.context_awareness import DocumentContext
+            from ..services.rag.retriever import RAGRetriever
             
             if not document_context:
                 return user_message
+            
+            # Initialize RAG retriever with conversation-specific vector store
+            from ..services.rag.vector_store import VectorStore
+            conversation_vector_store = VectorStore(conversation_id=conversation_id)
+            rag_retriever = RAGRetriever(vector_store=conversation_vector_store)
             
             # Build document context text
             documents_text = []
@@ -838,7 +845,77 @@ class ChatService:
                     if doc.summary:
                         documents_text.append(f"Document: {doc.filename}\nSummary: {doc.summary}")
                     else:
-                        documents_text.append(f"Document: {doc.filename} (no summary available)")
+                        # Get relevant content from the document using RAG
+                        try:
+                            logger.info(f"Attempting to retrieve content for document: {doc.filename}")
+                            
+                            # Try multiple search strategies to find document content
+                            search_queries = [
+                                user_message,  # Original user message
+                                doc.filename,  # Document filename
+                                "content text",  # Generic content search
+                                "document content"  # Another generic search
+                            ]
+                            
+                            found_content = False
+                            combined_content = ""
+                            
+                            for search_query in search_queries:
+                                try:
+                                    logger.info(f"Searching with query: {search_query}")
+                                    relevant_chunks = rag_retriever.retrieve_relevant_documents(
+                                        search_query,
+                                        k=30,  # Get more chunks
+                                        filter_dict=None
+                                    )
+                                    logger.info(f"Retrieved {len(relevant_chunks)} chunks for query: {search_query}")
+                                    
+                                    # Filter chunks to only include those from this document
+                                    document_chunks = []
+                                    for chunk_doc, score in relevant_chunks:
+                                        chunk_filename = chunk_doc.metadata.get('filename', '')
+                                        chunk_source = chunk_doc.metadata.get('source', '')
+                                        
+                                        # Check if chunk is from our specific document by matching the file path
+                                        # The source path should match the file_path from the database
+                                        file_path = doc.metadata.get('file_path', '')
+                                        if chunk_source and file_path and file_path in chunk_source:
+                                            document_chunks.append((chunk_doc, score))
+                                            logger.info(f"Found document chunk for {doc.filename} (ID: {doc.document_id}): {chunk_filename} (score: {score})")
+                                    
+                                    if document_chunks:
+                                        logger.info(f"Found {len(document_chunks)} document chunks for {doc.filename}")
+                                        # Sort by relevance score and take top chunks
+                                        document_chunks.sort(key=lambda x: x[1], reverse=True)
+                                        
+                                        content_parts = []
+                                        for chunk_doc, score in document_chunks[:5]:  # Take top 5 chunks
+                                            if score > 0.05:  # Lower threshold for relevance
+                                                content_parts.append(chunk_doc.page_content.strip())
+                                                logger.info(f"Added content chunk with score {score}: {chunk_doc.page_content[:100]}...")
+                                        
+                                        if content_parts:
+                                            combined_content = "\n\n".join(content_parts)
+                                            # Limit content length to avoid token limits
+                                            if len(combined_content) > 2000:
+                                                combined_content = combined_content[:2000] + "..."
+                                            
+                                            logger.info(f"Successfully retrieved content for {doc.filename}: {len(combined_content)} chars")
+                                            documents_text.append(f"Document: {doc.filename}\nContent:\n{combined_content}")
+                                            found_content = True
+                                            break
+                                            
+                                except Exception as search_error:
+                                    logger.warning(f"Search failed for query '{search_query}': {search_error}")
+                                    continue
+                            
+                            if not found_content:
+                                logger.warning(f"No content found for {doc.filename} after trying all search strategies")
+                                documents_text.append(f"Document: {doc.filename}\n(Document is available but no content could be retrieved. The document may be empty or in an unsupported format.)")
+                                
+                        except Exception as content_error:
+                            logger.error(f"Error retrieving content for {doc.filename}: {content_error}")
+                            documents_text.append(f"Document: {doc.filename}\n(Document is available but content could not be accessed due to an error: {str(content_error)})")
             
             if documents_text:
                 document_context_text = "\n\n".join(documents_text)

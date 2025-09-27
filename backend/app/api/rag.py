@@ -175,6 +175,27 @@ async def upload_document(
         document_repo = ChatDocumentRepository(db)
         chunk_repo = DocumentChunkRepository(db)
         
+        # Create conversation if it doesn't exist and conversation_id is provided
+        if conversation_id:
+            from ..services.repository import ConversationRepository
+            from ..models.schemas import ConversationCreate
+            from datetime import datetime
+            
+            conversation_repo = ConversationRepository(db)
+            existing_conversation = conversation_repo.get_conversation(conversation_id)
+            
+            if not existing_conversation:
+                # Create new conversation
+                conversation_data = ConversationCreate(
+                    title=f"Document Upload - {file.filename}",
+                    model="llama3:latest",
+                    user_id=user_id
+                )
+                new_conversation = conversation_repo.create_conversation(conversation_data, conversation_id)
+                logger.info(f"Created new conversation for document upload: {conversation_id}")
+            else:
+                logger.info(f"Using existing conversation: {conversation_id}")
+        
         # Create chat document record
         document_data = ChatDocumentCreate(
             filename=file.filename,
@@ -187,8 +208,13 @@ async def upload_document(
         
         chat_document = document_repo.create_document(document_data)
         
-        # Process document with RAG
-        result = rag_retriever.add_document(str(file_path))
+        # Process document with RAG using conversation-specific retriever
+        from ..services.rag.vector_store import VectorStore
+        logger.info(f"Creating conversation-specific vector store for conversation_id: {conversation_id}")
+        conversation_vector_store = VectorStore(conversation_id=conversation_id)
+        logger.info(f"Vector store created with collection: {conversation_vector_store.collection_name}")
+        conversation_rag_retriever = RAGRetriever(vector_store=conversation_vector_store)
+        result = conversation_rag_retriever.add_document(str(file_path))
         
         if result["success"]:
             # Update document status
