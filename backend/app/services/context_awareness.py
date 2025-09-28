@@ -410,6 +410,26 @@ class ContextAwarenessService:
                         enhanced_query += f" | Relevant memory: {'; '.join(memory_context)}"
                         context_metadata["memory_chunks"] = len(relevant_memory)
             
+            # Add document context
+            try:
+                document_context = self.get_document_context_for_query(conversation_id, current_message)
+                if document_context:
+                    doc_context_parts = []
+                    for doc in document_context[:3]:  # Limit to top 3 documents
+                        if doc.summary:
+                            doc_context_parts.append(f"Document '{doc.filename}': {doc.summary}")
+                        else:
+                            doc_context_parts.append(f"Document '{doc.filename}' is available (no summary)")
+                    
+                    if doc_context_parts:
+                        # Add document context as a separate section for better AI understanding
+                        document_section = f"\n\nAvailable Documents:\n" + "\n".join([f"- {doc}" for doc in doc_context_parts])
+                        enhanced_query += document_section
+                        context_metadata["documents_available"] = len(document_context)
+                        context_metadata["document_context"] = True
+            except Exception as e:
+                logger.warning(f"Error adding document context: {e}")
+            
             return enhanced_query, context_metadata
             
         except Exception as e:
@@ -424,15 +444,8 @@ class ContextAwarenessService:
     ) -> bool:
         """Update context after a new message is added."""
         try:
-            # Store the message in the database
-            if self.message_repo and message.get("content"):
-                message_data = MessageCreate(
-                    conversation_id=conversation_id,
-                    role=message.get("role"),
-                    content=message.get("content")
-                )
-                self.message_repo.create_message(message_data)
-                logger.info(f"Stored {message.get('role')} message in database for conversation {conversation_id}")
+            # Don't store messages here - they are already stored by chat service
+            # This function is only for updating context awareness, not for message storage
             
             # Clear cache to force refresh
             cache_key = f"{conversation_id}_{user_id}_True"

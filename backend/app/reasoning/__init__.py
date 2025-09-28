@@ -1,18 +1,14 @@
 """
-Reasoning System Module
+Unified Reasoning System Module
 
-This module provides a comprehensive step-by-step reasoning system with support for
-multiple reasoning types, validation, and various output formats.
+This module provides a comprehensive step-by-step reasoning system that consolidates
+all three phases of reasoning into a unified interface:
 
-Phase 2: Basic Reasoning Engines
-- Mathematical Reasoning Engine
-- Logical Reasoning Engine  
-- Causal Reasoning Engine
+Phase 1: Core Components (base classes, validation, parsing, formatting)
+Phase 2: Basic Reasoning Engines (mathematical, logical, causal)
+Phase 3: Advanced Reasoning Strategies (CoT, ToT, prompt engineering)
 
-Phase 3: Advanced Reasoning Strategies
-- Chain-of-Thought (CoT) Reasoning Strategy
-- Tree-of-Thoughts (ToT) Reasoning Strategy
-- Prompt Engineering Framework
+The unified system provides a single entry point for all reasoning capabilities.
 """
 
 from .core.base import (
@@ -72,6 +68,17 @@ from .strategies import (
     PromptEngineeringFramework
 )
 
+# Unified Reasoning System (consolidates all phases)
+from .unified import (
+    UnifiedReasoningSystem,
+    UnifiedReasoningConfig,
+    ReasoningMode,
+    ReasonerFactory,
+    HybridReasoner,
+    create_unified_reasoner,
+    quick_reason
+)
+
 __version__ = "2.0.0"
 
 __all__ = [
@@ -122,5 +129,14 @@ __all__ = [
     # Phase 3: Advanced Reasoning Strategies
     "ChainOfThoughtStrategy",
     "TreeOfThoughtsStrategy",
-    "PromptEngineeringFramework"
+    "PromptEngineeringFramework",
+    
+    # Unified Reasoning System
+    "UnifiedReasoningSystem",
+    "UnifiedReasoningConfig",
+    "ReasoningMode",
+    "ReasonerFactory",
+    "HybridReasoner",
+    "create_unified_reasoner",
+    "quick_reason"
 ]

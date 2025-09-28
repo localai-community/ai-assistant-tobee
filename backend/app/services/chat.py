@@ -337,264 +337,7 @@ class ChatService:
             logger.error(f"Failed to get available models: {e}")
             return []
     
-    async def generate_response(
-        self, 
-        message: str, 
-        model: str = "llama3:latest",
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        conversation_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        enable_mcp: bool = True,
-        enable_context_awareness: bool = True,
-        include_memory: bool = True,
-        context_strategy: str = "auto",
-        k: Optional[int] = None,
-        filter_dict: Optional[Dict[str, Any]] = None
-    ) -> ChatResponse:
-        """Generate a response from Ollama."""
-        
-        # Initialize conversation variable
-        conversation = None
-        
-        # Get or create conversation
-        if self.conversation_repo and conversation_id:
-            conversation = self.conversation_repo.get_conversation(conversation_id)
-        
-        if not conversation and self.conversation_repo:
-            # Create new conversation in database
-            conversation_data = ConversationCreate(
-                title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                model=model,
-                user_id=user_id
-            )
-            conversation = self.conversation_repo.create_conversation(conversation_data)
-            conversation_id = conversation.id
-        elif not conversation:
-            # Fallback to in-memory if no database
-            conversation_id = f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
-            conversation = Conversation(id=conversation_id, model=model)
-        
-        # Add user message to database
-        if self.message_repo:
-            user_message_data = MessageCreate(
-                conversation_id=conversation_id,
-                role="user",
-                content=message
-            )
-            self.message_repo.create_message(user_message_data)
-        
-        
-        # Initialize context awareness variables
-        context_awareness_enabled = False
-        context_strategy_used = None
-        context_entities = None
-        context_topics = None
-        memory_chunks_used = None
-        user_preferences_applied = None
-        
-        # Apply context awareness if enabled
-        enhanced_message = message
-        document_context = None
-        if enable_context_awareness and conversation_id:
-            try:
-                self._ensure_context_service_initialized()
-                
-                # Get document context for the conversation
-                document_context = self.context_service.get_document_context_for_query(
-                    conversation_id, message
-                )
-                logger.info(f"Retrieved {len(document_context)} documents for conversation {conversation_id}")
-                
-                enhanced_message, context_metadata = self.context_service.build_context_aware_query(
-                    current_message=message,
-                    conversation_id=conversation_id,
-                    user_id=user_id,
-                    include_memory=include_memory
-                )
-                
-                # Enhance message with document context if available
-                if document_context:
-                    document_context_text = self._create_document_aware_prompt(
-                        enhanced_message, document_context, conversation_id
-                    )
-                    enhanced_message = document_context_text
-                
-                context_awareness_enabled = True
-                context_strategy_used = context_strategy
-                context_entities = context_metadata.get("entities", [])
-                context_topics = context_metadata.get("topics", [])
-                memory_chunks_used = context_metadata.get("memory_chunks", 0)
-                user_preferences_applied = context_metadata.get("user_preferences", {})
-                
-                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
-                if document_context:
-                    logger.info(f"Included {len(document_context)} relevant documents in context")
-                
-            except Exception as e:
-                logger.error(f"Error applying context awareness: {e}")
-                # Continue with original message if context awareness fails
-        
-        # Get conversation messages for Ollama
-        messages = []
-        if self.message_repo:
-            db_messages = self.message_repo.get_messages(conversation_id)
-            for msg in db_messages:
-                messages.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-        else:
-            # Fallback to in-memory messages
-            if hasattr(conversation, 'messages'):
-                for msg in conversation.messages:
-                    messages.append({
-                        "role": msg.role,
-                        "content": msg.content
-                    })
-        
-        # Add current user message with context enhancement
-        messages.append({
-            "role": "user",
-            "content": enhanced_message
-        })
-        
-        # Prepare request payload
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": temperature
-            }
-        }
-        
-        if max_tokens:
-            payload["options"]["num_predict"] = max_tokens
-        
-        # Check for MCP tool calls in the message
-        tool_results = []
-        if enable_mcp:
-            tool_calls = self._detect_tool_calls(message)
-            for tool_call in tool_calls:
-                try:
-                    result = await self.call_mcp_tool(tool_call["tool"], tool_call["arguments"])
-                    tool_results.append({
-                        "tool": tool_call["tool"],
-                        "result": result
-                    })
-                except Exception as e:
-                    logger.error(f"Error calling MCP tool {tool_call['tool']}: {e}")
-                    tool_results.append({
-                        "tool": tool_call["tool"],
-                        "result": {"success": False, "content": f"Error: {str(e)}", "error": True}
-                    })
-        
-        # Process RAG if parameters are provided
-        rag_context = None
-        has_context = False
-        if k is not None:
-            try:
-                from ..services.rag.retriever import RAGRetriever
-                rag_retriever = RAGRetriever()
-                enhanced_prompt = rag_retriever.create_intelligent_rag_prompt(message, k, filter_dict)
-                
-                # Get RAG context for response
-                relevant_docs = rag_retriever.retrieve_relevant_documents(message, k, filter_dict)
-                if relevant_docs:
-                    context_parts = []
-                    for doc, score in relevant_docs:
-                        context_parts.append(f"Document: {doc.metadata.get('filename', 'Unknown')}")
-                        context_parts.append(f"Relevance: {score:.3f}")
-                        context_parts.append(f"Content: {doc.page_content[:200]}...")
-                        context_parts.append("---")
-                    rag_context = "\n".join(context_parts)
-                    has_context = True
-                
-                # Use enhanced prompt instead of original message
-                message = enhanced_prompt
-                
-            except Exception as e:
-                logger.error(f"RAG processing error: {e}")
-                # Continue with original message if RAG fails
-        
-        try:
-            # Send request to Ollama
-            response = await self.http_client.post(
-                f"{self.ollama_url}/api/chat",
-                json=payload
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                ai_response = data.get("message", {}).get("content", "")
-                
-                # Include tool results in the response if any
-                if tool_results:
-                    tool_summary = "\n\n**Tool Execution Results:**\n"
-                    for tool_result in tool_results:
-                        tool_name = tool_result["tool"]
-                        result = tool_result["result"]
-                        if result["success"]:
-                            tool_summary += f"✅ **{tool_name}**: Success\n"
-                            tool_summary += f"```\n{result['content']}\n```\n"
-                        else:
-                            tool_summary += f"❌ **{tool_name}**: Failed\n"
-                            tool_summary += f"```\n{result['content']}\n```\n"
-                    
-                    ai_response += tool_summary
-                
-                # Add AI response to database
-                if self.message_repo:
-                    ai_message_data = MessageCreate(
-                        conversation_id=conversation_id,
-                        role="assistant",
-                        content=ai_response,
-                        tokens_used=data.get("eval_count"),
-                        model_used=model
-                    )
-                    self.message_repo.create_message(ai_message_data)
-                
-                # Update conversation timestamp
-                if self.conversation_repo:
-                    self.conversation_repo.update_conversation(conversation_id)
-                
-                
-                # Update context awareness after message generation
-                if enable_context_awareness and conversation_id:
-                    try:
-                        self._ensure_context_service_initialized()
-                        self.context_service.update_context_after_message(
-                            conversation_id=conversation_id,
-                            message={"role": "assistant", "content": ai_response},
-                            user_id=user_id
-                        )
-                    except Exception as e:
-                        logger.error(f"Error updating context after message: {e}")
-                
-                return ChatResponse(
-                    response=ai_response,
-                    model=model,
-                    conversation_id=conversation_id,
-                    user_id=user_id,
-                    tokens_used=data.get("eval_count"),
-                    rag_context=rag_context,
-                    has_context=has_context,
-                    context_awareness_enabled=context_awareness_enabled,
-                    context_strategy_used=context_strategy_used,
-                    context_entities=context_entities,
-                    context_topics=context_topics,
-                    memory_chunks_used=memory_chunks_used,
-                    user_preferences_applied=user_preferences_applied
-                )
-            else:
-                error_msg = f"Ollama API error: {response.status_code}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
-                
-        except Exception as e:
-            logger.error(f"Failed to generate response: {e}")
-            raise Exception(f"Failed to generate response: {str(e)}")
+    # Removed non-streaming generate_response function - only streaming is supported
     
     async def generate_streaming_response(
         self, 
@@ -635,6 +378,7 @@ class ChatService:
         
         # Apply context awareness if enabled
         enhanced_message = message
+        document_context_available = False
         if enable_context_awareness and conversation_id:
             try:
                 self._ensure_context_service_initialized()
@@ -644,7 +388,8 @@ class ChatService:
                     user_id=user_id,
                     include_memory=include_memory
                 )
-                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
+                document_context_available = context_metadata.get("document_context", False)
+                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original, documents available: {document_context_available}")
             except Exception as e:
                 logger.error(f"Error applying context awareness: {e}")
                 enhanced_message = message
@@ -684,7 +429,7 @@ class ChatService:
         else:
             logger.warning("No message repository available for user message storage")
         
-        # Get conversation messages for Ollama
+        # Get conversation messages for Ollama (excluding the current user message to avoid duplication)
         messages = []
         if self.message_repo:
             db_messages = self.message_repo.get_messages(conversation_id)
@@ -703,10 +448,32 @@ class ChatService:
                     })
         
         # Add current user message with context enhancement
+        # Remove the most recent user message from database to avoid duplication (it's the one we just stored)
+        if messages and messages[-1]["role"] == "user":
+            messages.pop()  # Remove the last user message (the one we just stored)
         messages.append({
             "role": "user",
             "content": enhanced_message
         })
+        
+        # Debug: Log the messages being sent to Ollama
+        logger.info(f"Messages being sent to Ollama: {[{'role': msg['role'], 'content': msg['content'][:100] + '...' if len(msg['content']) > 100 else msg['content']} for msg in messages]}")
+        
+        # Add system prompt to encourage English responses for DeepSeek models and document awareness
+        system_prompt = "You are a helpful AI assistant."
+        
+        if "deepseek" in model.lower():
+            system_prompt += " Please respond in English unless the user specifically asks you to use another language."
+        
+        # Add document awareness if documents are available
+        if document_context_available:
+            system_prompt += "\n\nYou have access to documents that have been uploaded to this conversation. When the user asks questions that could be related to these documents (such as asking for summaries, analysis, or information about the content), please use the document information provided in the context to answer their questions. Always cite the source document when you use information from it."
+        
+        system_message = {
+            "role": "system", 
+            "content": system_prompt
+        }
+        messages.insert(0, system_message)
         
         # Prepare request payload
         payload = {
@@ -736,44 +503,65 @@ class ChatService:
                     return
                 
                 full_response = ""
+                assistant_message_stored = False
                 
-                # If we have tool results, include them in the response
-                if tool_results:
-                    tool_summary = "\n\n**Tool Execution Results:**\n"
-                    for tool_result in tool_results:
-                        tool_name = tool_result["tool"]
-                        result = tool_result["result"]
-                        if result["success"]:
-                            tool_summary += f"✅ **{tool_name}**: Success\n"
-                            tool_summary += f"```\n{result['content']}\n```\n"
-                        else:
-                            tool_summary += f"❌ **{tool_name}**: Failed\n"
-                            tool_summary += f"```\n{result['content']}\n```\n"
+                try:
+                    # If we have tool results, include them in the response
+                    if tool_results:
+                        tool_summary = "\n\n**Tool Execution Results:**\n"
+                        for tool_result in tool_results:
+                            tool_name = tool_result["tool"]
+                            result = tool_result["result"]
+                            if result["success"]:
+                                tool_summary += f"✅ **{tool_name}**: Success\n"
+                                tool_summary += f"```\n{result['content']}\n```\n"
+                            else:
+                                tool_summary += f"❌ **{tool_name}**: Failed\n"
+                                tool_summary += f"```\n{result['content']}\n```\n"
+                        
+                        # Yield tool results first
+                        yield tool_summary
+                        full_response += tool_summary
                     
-                    # Yield tool results first
-                    yield tool_summary
-                    full_response += tool_summary
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            try:
+                                data = json.loads(line)
+                                if "message" in data:
+                                    content = data["message"].get("content", "")
+                                    full_response += content
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
                 
-                async for line in response.aiter_lines():
-                    if line.strip():
-                        try:
-                            data = json.loads(line)
-                            if "message" in data:
-                                content = data["message"].get("content", "")
-                                full_response += content
-                                yield content
-                        except json.JSONDecodeError:
-                            continue
-                
-                # Add complete AI response to database
-                if full_response and self.message_repo:
-                    ai_message_data = MessageCreate(
-                        conversation_id=conversation_id,
-                        role="assistant",
-                        content=full_response,
-                        model_used=model
-                    )
-                    self.message_repo.create_message(ai_message_data)
+                finally:
+                    # Always store the assistant message, even if streaming was interrupted
+                    if full_response and self.message_repo and not assistant_message_stored:
+                        ai_message_data = MessageCreate(
+                            conversation_id=conversation_id,
+                            role="assistant",
+                            content=full_response,
+                            model_used=model
+                        )
+                        self.message_repo.create_message(ai_message_data)
+                        assistant_message_stored = True
+                        logger.info(f"Stored assistant message in database for conversation {conversation_id} (interrupted or completed)")
+                        
+                        # Add stream interruption marker if the response seems incomplete
+                        if self._is_response_incomplete(full_response):
+                            interruption_marker = MessageCreate(
+                                conversation_id=conversation_id,
+                                role="system",
+                                content="[STREAM_INTERRUPTED]",
+                                model_used="system"
+                            )
+                            self.message_repo.create_message(interruption_marker)
+                            logger.info(f"Added stream interruption marker for conversation {conversation_id}")
+                            
+                    elif full_response and assistant_message_stored:
+                        logger.info(f"Assistant message already stored for conversation {conversation_id}")
+                    elif not full_response:
+                        logger.warning(f"No assistant message to store - empty response for conversation {conversation_id}")
                 
                 # Update context awareness after message generation
                 if enable_context_awareness and conversation_id and full_response:
@@ -800,6 +588,30 @@ class ChatService:
         if self.conversation_repo:
             return self.conversation_repo.get_conversation(conversation_id)
         return None
+    
+    def _is_response_incomplete(self, response: str) -> bool:
+        """
+        Determine if a response appears to be incomplete/interrupted.
+        
+        This is a heuristic approach to detect stream interruptions.
+        """
+        if not response or len(response.strip()) < 10:
+            return False
+            
+        # Check for common incomplete patterns
+        incomplete_indicators = [
+            # DeepSeek thinking tags not closed
+            response.count('<think>') > response.count('</think>'),
+            # Ends mid-sentence (no ending punctuation)
+            not response.strip().endswith(('.', '!', '?', '。', '！', '？')),
+            # Ends with common incomplete words
+            response.strip().endswith(('the', 'and', 'but', 'or', 'with', 'for', 'in', 'on', 'at', 'to', 'of')),
+            # Very short responses that seem cut off
+            len(response.strip()) < 50 and not response.strip().endswith(('.', '!', '?')),
+        ]
+        
+        # Return True if any indicator suggests incompleteness
+        return any(incomplete_indicators)
     
     def list_conversations(self) -> List[Conversation]:
         """List all conversations."""

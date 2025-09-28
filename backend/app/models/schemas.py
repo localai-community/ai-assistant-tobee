@@ -132,3 +132,45 @@ class DocumentChunk(DocumentChunkBase):
     
     class Config:
         from_attributes = True
+
+# User Settings Schemas
+class UserSettingsBase(BaseModel):
+    user_id: str
+    enable_context_awareness: bool = True
+    include_memory: bool = False
+    context_strategy: str = "conversation_only"
+    selected_model: str = "deepseek-r1:8b"
+    use_streaming: bool = True
+    use_rag: bool = False
+    use_advanced_rag: bool = False
+    use_phase2_reasoning: bool = False
+    use_reasoning_chat: bool = False
+    use_phase3_reasoning: bool = False
+    selected_phase2_engine: str = "auto"
+    selected_phase3_strategy: str = "auto"
+    temperature: float = 0.7
+
+class UserSettingsCreate(UserSettingsBase):
+    pass
+
+class UserSettingsUpdate(BaseModel):
+    enable_context_awareness: Optional[bool] = None
+    include_memory: Optional[bool] = None
+    context_strategy: Optional[str] = None
+    selected_model: Optional[str] = None
+    use_streaming: Optional[bool] = None
+    use_rag: Optional[bool] = None
+    use_advanced_rag: Optional[bool] = None
+    use_phase2_reasoning: Optional[bool] = None
+    use_reasoning_chat: Optional[bool] = None
+    use_phase3_reasoning: Optional[bool] = None
+    selected_phase2_engine: Optional[str] = None
+    selected_phase3_strategy: Optional[str] = None
+    temperature: Optional[float] = None
+
+class UserSettingsResponse(UserSettingsBase):
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
