@@ -27,50 +27,7 @@ _models_cache = {}
 _models_cache_time = 0
 CACHE_TTL = 60  # 1 minute cache
 
-@router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
-    """
-    Send a message and get a response from the AI model.
-    
-    Args:
-        request: Chat request containing message and parameters
-        db: Database session
-        
-    Returns:
-        ChatResponse: AI response with conversation details
-    """
-    try:
-        # Create chat service with database
-        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        chat_service = ChatService(ollama_url=ollama_url, db=db)
-        
-        # Check if Ollama is available
-        if not await chat_service.check_ollama_health():
-            raise HTTPException(
-                status_code=503,
-                detail="Ollama service is not available. Please make sure Ollama is running."
-            )
-        
-        # Generate response
-        response = await chat_service.generate_response(
-            message=request.message,
-            model=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            conversation_id=request.conversation_id,
-            user_id=request.user_id,
-            enable_context_awareness=request.enable_context_awareness,
-            include_memory=request.include_memory,
-            context_strategy=request.context_strategy,
-            k=request.k,
-            filter_dict=request.filter_dict
-        )
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Removed non-streaming chat endpoint - only streaming is supported
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):

@@ -424,15 +424,8 @@ class ContextAwarenessService:
     ) -> bool:
         """Update context after a new message is added."""
         try:
-            # Store the message in the database
-            if self.message_repo and message.get("content"):
-                message_data = MessageCreate(
-                    conversation_id=conversation_id,
-                    role=message.get("role"),
-                    content=message.get("content")
-                )
-                self.message_repo.create_message(message_data)
-                logger.info(f"Stored {message.get('role')} message in database for conversation {conversation_id}")
+            # Don't store messages here - they are already stored by chat service
+            # This function is only for updating context awareness, not for message storage
             
             # Clear cache to force refresh
             cache_key = f"{conversation_id}_{user_id}_True"

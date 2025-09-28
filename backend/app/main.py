@@ -7,12 +7,8 @@ from app.core.config import settings
 from app.core.models import HealthResponse, RootResponse, ApiStatusResponse
 from app.core.database import get_db, init_db
 from app.api.chat import router as chat_router
-from app.api.rag import router as rag_router
-from app.api.advanced_rag import router as advanced_rag_router
 from app.api.reasoning import router as reasoning_router
-from app.api.reasoning_chat import router as reasoning_chat_router
-from app.api.phase2_reasoning import router as phase2_reasoning_router
-from app.api.phase3_reasoning import router as phase3_reasoning_router
+from app.api.user_settings import router as user_settings_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -57,12 +53,8 @@ async def shutdown_event():
 
 # Include API routers
 app.include_router(chat_router)
-app.include_router(rag_router)
-app.include_router(advanced_rag_router)
 app.include_router(reasoning_router)
-app.include_router(reasoning_chat_router)
-app.include_router(phase2_reasoning_router)
-app.include_router(phase3_reasoning_router)
+app.include_router(user_settings_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():
@@ -89,13 +81,10 @@ async def api_status():
         status="operational",
         features={
             "chat": "enabled",
-            "rag": "enabled",
-            "advanced_rag": "enabled",
+            "streaming_chat": "enabled",
             "mcp": "enabled",
             "reasoning": "enabled",
-            "reasoning_chat": "enabled",
-            "phase2_reasoning": "enabled",
-            "phase3_reasoning": "enabled"
+            "user_settings": "enabled"
         }
     )
 

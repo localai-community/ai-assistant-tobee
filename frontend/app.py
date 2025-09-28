@@ -240,16 +240,94 @@ def get_css():
     </style>
     """
 
+def get_default_user_settings():
+    """Get default user settings."""
+    return {
+        "enable_context_awareness": True,
+        "include_memory": False,
+        "context_strategy": "conversation_only",
+        "user_id": "leia",
+        "selected_model": "deepseek-r1:8b",
+        "use_streaming": True,
+        "use_rag": False,
+        "use_advanced_rag": False,
+        "use_phase2_reasoning": False,
+        "use_reasoning_chat": False,
+        "use_phase3_reasoning": False,
+        "selected_phase2_engine": "auto",
+        "selected_phase3_strategy": "auto",
+        "temperature": 0.7
+    }
+
+def save_user_settings():
+    """Save current user settings to database."""
+    try:
+        settings = {
+            "enable_context_awareness": st.session_state.enable_context_awareness,
+            "include_memory": st.session_state.include_memory,
+            "context_strategy": st.session_state.context_strategy,
+            "selected_model": st.session_state.selected_model,
+            "use_streaming": st.session_state.use_streaming,
+            "use_rag": st.session_state.use_rag,
+            "use_advanced_rag": st.session_state.use_advanced_rag,
+            "use_phase2_reasoning": st.session_state.use_phase2_reasoning,
+            "use_reasoning_chat": st.session_state.use_reasoning_chat,
+            "use_phase3_reasoning": st.session_state.use_phase3_reasoning,
+            "selected_phase2_engine": st.session_state.selected_phase2_engine,
+            "selected_phase3_strategy": st.session_state.selected_phase3_strategy,
+            "temperature": st.session_state.temperature
+        }
+        
+        # Make API call to save settings
+        import httpx
+        with httpx.Client() as client:
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/user-settings/{st.session_state.user_id}/upsert",
+                json=settings,
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                # Settings saved successfully
+                pass
+            else:
+                st.error(f"Failed to save settings: {response.status_code}")
+                
+    except Exception as e:
+        st.error(f"Error saving settings: {str(e)}")
+
+def load_user_settings_from_database(user_id: str):
+    """Load user settings from database."""
+    try:
+        import httpx
+        with httpx.Client() as client:
+            response = client.get(
+                f"{BACKEND_URL}/api/v1/user-settings/{user_id}",
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                settings = response.json()
+                return settings
+            else:
+                # Return default settings if not found
+                return get_default_user_settings()
+                
+    except Exception as e:
+        st.error(f"Error loading settings: {str(e)}")
+        return get_default_user_settings()
+
 def init_session_state():
-    """Initialize session state variables."""
+    """Initialize session state variables with persistent settings."""
+    default_settings = get_default_user_settings()
+    
+    # Initialize basic session state (non-persistent)
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "conversation_id" not in st.session_state:
         st.session_state.conversation_id = None
     if "available_models" not in st.session_state:
         st.session_state.available_models = []
-    if "selected_model" not in st.session_state:
-        st.session_state.selected_model = None
     if "backend_health" not in st.session_state:
         st.session_state.backend_health = False
     if "conversations" not in st.session_state:
@@ -258,41 +336,51 @@ def init_session_state():
         st.session_state.auto_loaded = False
     if "rag_stats" not in st.session_state:
         st.session_state.rag_stats = {}
-    if "use_rag" not in st.session_state:
-        st.session_state.use_rag = False
-    if "use_advanced_rag" not in st.session_state:
-        st.session_state.use_advanced_rag = False
-    # Force disable phase 2 reasoning by default
-    st.session_state.use_phase2_reasoning = False
-    if "selected_phase2_engine" not in st.session_state:
-        st.session_state.selected_phase2_engine = "auto"
     if "mcp_tools" not in st.session_state:
         st.session_state.mcp_tools = []
     if "mcp_health" not in st.session_state:
         st.session_state.mcp_health = {}
-    if "use_streaming" not in st.session_state:
-        st.session_state.use_streaming = True
     if "advanced_rag_strategies" not in st.session_state:
         st.session_state.advanced_rag_strategies = []
-    # Force disable reasoning chat by default
-    st.session_state.use_reasoning_chat = False
     if "sample_question" not in st.session_state:
         st.session_state.sample_question = None
     if "chat_input_key" not in st.session_state:
         st.session_state.chat_input_key = 0
     if "temp_phase_override" not in st.session_state:
         st.session_state.temp_phase_override = None
-    # Context Awareness Features
-    if "enable_context_awareness" not in st.session_state:
-        st.session_state.enable_context_awareness = True
-    if "include_memory" not in st.session_state:
-        st.session_state.include_memory = False  # Disable long-term memory by default
-    if "context_strategy" not in st.session_state:
-        st.session_state.context_strategy = "conversation_only"  # Use conversation_only by default
     if "context_info" not in st.session_state:
         st.session_state.context_info = {}
-    if "user_id" not in st.session_state:
-        st.session_state.user_id = "leia"  # Set default user ID
+    
+    # Initialize user settings with defaults first
+    for key, default_value in default_settings.items():
+        if key not in st.session_state:
+            st.session_state[key] = default_value
+    
+    # Load settings from database if not already loaded
+    if "settings_loaded" not in st.session_state:
+        st.session_state.settings_loaded = True
+        # Load settings from database
+        db_settings = load_user_settings_from_database(st.session_state.user_id)
+        # Apply database settings to session state
+        for key, value in db_settings.items():
+            if key != "user_id" and key in st.session_state:  # Don't override user_id
+                st.session_state[key] = value
+    
+    # Check URL parameters for settings override (for sharing settings via URL)
+    query_params = st.query_params
+    for key in default_settings.keys():
+        if key in query_params:
+            value = query_params[key]
+            if key in ["enable_context_awareness", "include_memory", "use_streaming", "use_rag", "use_advanced_rag", "use_phase2_reasoning", "use_reasoning_chat", "use_phase3_reasoning"]:
+                st.session_state[key] = value.lower() in ['true', '1', 'yes']
+            elif key == "temperature":
+                try:
+                    st.session_state[key] = float(value)
+                except ValueError:
+                    st.session_state[key] = default_settings[key]
+            else:
+                st.session_state[key] = value
+    
     # Add stop button state variable
     if "stop_generation" not in st.session_state:
         st.session_state.stop_generation = False
@@ -406,51 +494,19 @@ def get_conversations() -> List[Dict]:
     return []
 
 def get_rag_stats() -> Dict:
-    """Get RAG statistics from backend."""
-    try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/rag/stats", timeout=5.0)
-            if response.status_code == 200:
-                data = response.json()
-                # Extract stats from the nested structure
-                if "stats" in data and "vector_store" in data["stats"]:
-                    vector_stats = data["stats"]["vector_store"]["stats"]
-                    stats = {
-                        "total_documents": vector_stats.get("total_documents", 0),
-                        "total_chunks": vector_stats.get("total_documents", 0),  # Same as total_documents
-                        "vector_db_size_mb": vector_stats.get("storage_size_mb", 0.0),
-                        "collection_name": vector_stats.get("collection_name", ""),
-                        "persist_directory": vector_stats.get("persist_directory", "")
-                    }
-                    return stats
-                return {}
-    except Exception as e:
-        print(f"Error getting RAG stats: {e}")
-        pass
+    """Get RAG statistics from backend - simplified version."""
+    # RAG service removed, return empty stats
     return {}
 
 def get_advanced_rag_strategies() -> List[Dict]:
-    """Get available advanced RAG strategies from backend."""
-    try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/advanced-rag/strategies", timeout=5.0)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('strategies', {})
-    except:
-        pass
+    """Get available advanced RAG strategies from backend - simplified version."""
+    # Advanced RAG service removed, return empty strategies
     return {}
 
 def get_advanced_rag_health() -> Dict:
-    """Get advanced RAG health status."""
-    try:
-        with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/advanced-rag/health", timeout=5.0)
-            if response.status_code == 200:
-                return response.json()
-    except:
-        pass
-    return {"status": "unhealthy", "error": "Connection failed"}
+    """Get advanced RAG health status - simplified version."""
+    # Advanced RAG service removed, return unhealthy status
+    return {"status": "unhealthy", "error": "Service removed"}
 
 def get_mcp_tools() -> List[Dict]:
     """Get MCP tools from backend."""
@@ -801,212 +857,19 @@ def get_conversation_documents(conversation_id: str) -> Dict:
         return {"success": False, "error": f"Error getting documents: {str(e)}"}
 
 def send_advanced_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
-    """Send message to backend with advanced RAG enhancement."""
-    try:
-        with httpx.Client() as client:
-            # Use the first available model or fallback to llama3:latest
-            model = get_selected_model()
-            
-            payload = {
-                "message": message,
-                "model": model,
-                "temperature": 0.7,
-                "k": 4,
-                "use_advanced_strategies": True,
-                "conversation_history": st.session_state.messages if st.session_state.messages else [],
-                "enable_context_awareness": st.session_state.enable_context_awareness,
-                "include_memory": st.session_state.include_memory,
-                "context_strategy": st.session_state.context_strategy
-            }
-            
-            if conversation_id:
-                payload["conversation_id"] = conversation_id
-            
-            response = client.post(
-                f"{BACKEND_URL}/api/v1/advanced-rag/chat",
-                json=payload,
-                timeout=120.0  # Increased timeout for advanced RAG processing
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "response": data.get("response", "No response from backend"),
-                    "conversation_id": data.get("conversation_id"),
-                    "strategies_used": data.get("strategies_used", []),
-                    "results_count": data.get("results_count", 0),
-                    "has_context": data.get("has_context", False),
-                    "results": data.get("results", [])
-                }
-            elif response.status_code == 503:
-                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
-            else:
-                return {"response": f"Backend error: {response.status_code}"}
-                
-    except httpx.TimeoutException:
-        return {"response": "Request timed out. Please try again."}
-    except Exception as e:
-        return {"response": f"Communication error: {str(e)}"}
+    """Send message to backend with advanced RAG enhancement - simplified version."""
+    # Advanced RAG service removed, use regular streaming chat instead
+    return send_streaming_chat(message, conversation_id)
 
 def send_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
-    """Send message to backend with RAG enhancement."""
-    try:
-        with httpx.Client() as client:
-            # Use the first available model or fallback to llama3:latest
-            model = get_selected_model()
-            
-            payload = {
-                "message": message,
-                "model": model,
-                "temperature": 0.7,
-                "k": 4,
-                "enable_context_awareness": st.session_state.enable_context_awareness,
-                "include_memory": st.session_state.include_memory,
-                "context_strategy": st.session_state.context_strategy
-            }
-            
-            if conversation_id:
-                payload["conversation_id"] = conversation_id
-            
-            response = client.post(
-                f"{BACKEND_URL}/api/v1/chat/",
-                json=payload,
-                timeout=120.0  # Increased timeout for RAG processing (2 minutes)
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "response": data.get("response", "No response from backend"),
-                    "conversation_id": data.get("conversation_id"),
-                    "rag_context": data.get("rag_context", ""),
-                    "has_context": data.get("has_context", False)
-                }
-            elif response.status_code == 503:
-                return {"response": "❌ Ollama service is not available. Please make sure Ollama is running."}
-            else:
-                return {"response": f"Backend error: {response.status_code}"}
-                
-    except httpx.TimeoutException:
-        return {"response": "Request timed out. Please try again."}
-    except Exception as e:
-        return {"response": f"Communication error: {str(e)}"}
+    """Send message to backend with RAG enhancement - simplified version."""
+    # RAG service removed, use regular streaming chat instead
+    return send_streaming_chat(message, conversation_id)
 
 def send_streaming_rag_chat(message: str, conversation_id: Optional[str] = None) -> Optional[Dict]:
-    """Send message to backend with RAG enhancement and streaming response."""
-    st.info("🚀 Starting RAG streaming function...")
-    try:
-        with httpx.Client() as client:
-            # Use the first available model or fallback to llama3:latest
-            model = get_selected_model()
-            
-            payload = {
-                "message": message,
-                "model": model,
-                "temperature": 0.7,
-                "k": 4,
-                "enable_context_awareness": st.session_state.enable_context_awareness,
-                "include_memory": st.session_state.include_memory,
-                "context_strategy": st.session_state.context_strategy
-            }
-            
-            if conversation_id:
-                payload["conversation_id"] = conversation_id
-            
-            # Create assistant message container for streaming
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                # Store in session state so stop button can access it
-                st.session_state.current_response = ""
-                
-                # Stream the response
-                with client.stream(
-                    "POST",
-                    f"{BACKEND_URL}/api/v1/rag/stream",
-                    json=payload,
-                    timeout=300.0,  # Increased timeout for RAG processing (5 minutes)
-                    headers={"Accept": "text/event-stream", "Connection": "keep-alive"}
-                ) as response:
-                    if response.status_code == 200:
-                        # Process Server-Sent Events
-                        for line in response.iter_lines():
-                            # Check for stop signal
-                            if st.session_state.stop_generation:
-                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
-                                return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
-                            
-                            if line:
-                                # httpx.iter_lines() returns strings, not bytes
-                                if line.startswith('data: '):
-                                    data_str = line[6:]  # Remove 'data: ' prefix
-                                    try:
-                                        data = json.loads(data_str)
-                                        
-                                        if data.get("type") == "error":
-                                            return {"response": f"Error: {data.get('error', 'Unknown error')}"}
-                                        
-                                        # Handle different response types
-                                        if "content" in data:
-                                            chunk = data["content"]
-                                            full_response += chunk
-                                            # Update session state so stop button can access current content
-                                            st.session_state.current_response = full_response
-                                            message_placeholder.markdown(full_response + "▌")
-                                            print(f"🔍 Added chunk: {chunk[:50]}...")
-                                            
-                                            # Add artificial delay to see streaming effect (optional)
-                                            # Uncomment the next line to slow down streaming for testing
-                                            # time.sleep(0.2)  # 200ms delay
-                                        
-                                        elif "conversation_id" in data:
-                                            # Update conversation ID
-                                            st.session_state.conversation_id = data["conversation_id"]
-                                        
-                                        elif "rag_context" in data:
-                                            # Found rag_context - this is the final line
-                                            message_placeholder.markdown(full_response)
-                                            # Debug: Log what we found
-                                            print(f"🔍 RAG CONTEXT FOUND: {data.get('rag_context', '')}")
-                                            print(f"🔍 HAS CONTEXT: {data.get('has_context', False)}")
-                                            # Clear current response since generation is complete
-                                            st.session_state.current_response = ""
-                                            return {
-                                                "response": full_response,
-                                                "conversation_id": st.session_state.conversation_id,
-                                                "rag_context": data.get("rag_context", ""),
-                                                "has_context": data.get("has_context", True)  # Assume True if rag_context is present
-                                            }
-
-                                            
-                                    except json.JSONDecodeError as e:
-                                        continue
-                        
-                        # If we get here without returning, the streaming ended without content
-                        if not full_response:
-                            return {"response": "No response generated. Please try again."}
-                        else:
-                            # If we have content but no rag_context line, return what we have
-                            # Clear current response in case of any exit path
-                            st.session_state.current_response = ""
-                            return {
-                                "response": full_response,
-                                "conversation_id": st.session_state.conversation_id,
-                                "rag_context": "",
-                                "has_context": False
-                            }
-                    else:
-                        return {"response": f"Backend error: {response.status_code}"}
-                        
-    except httpx.TimeoutException:
-        st.error("⏰ RAG streaming timed out")
-        return {"response": "Request timed out. Please try again."}
-    except Exception as e:
-        st.error(f"💥 RAG streaming error: {str(e)}")
-        return {"response": f"Communication error: {str(e)}"}
-    
-    st.error("🔚 RAG streaming function completed without returning anything")
-    return None
+    """Send message to backend with RAG enhancement and streaming response - simplified version."""
+    # RAG service removed, use regular streaming chat instead
+    return send_streaming_chat(message, conversation_id)
 
 def load_conversation_messages(conversation_id: str) -> List[Dict]:
     """Load messages for a specific conversation."""
@@ -1046,8 +909,15 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
             
             # Create assistant message container for streaming
             with st.chat_message("assistant"):
-                message_placeholder = st.empty()
+                # Create containers for thinking and answer in the correct order
+                thinking_container = st.empty()  # This will hold the expandable thinking box
+                answer_placeholder = st.empty()  # This will hold the final answer
                 full_response = ""
+                thinking_content = ""
+                answer_content = ""
+                is_deepseek_format = False
+                in_thinking_phase = False
+                thinking_stream_placeholder = None
                 
                 # Stream the response
                 with client.stream(
@@ -1063,7 +933,10 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                             # Check for stop signal
                             if st.session_state.stop_generation:
                                 print(f"🔍 DEBUG: Stop signal detected in basic streaming chat!")
-                                message_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
+                                if is_deepseek_format:
+                                    display_deepseek_response(thinking_content, answer_content, answer_placeholder, create_expander=False)
+                                else:
+                                    answer_placeholder.markdown(full_response + "\n\n*Generation stopped by user.*")
                                 return {"response": full_response + "\n\n*Generation stopped by user.*", "stopped": True}
                             
                             if line:
@@ -1082,15 +955,78 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                                         
                                         full_response += chunk
                                         
-                                        # Update the message placeholder with accumulated response
-                                        message_placeholder.markdown(full_response + "▌")
+                                        # Check for DeepSeek reasoning format
+                                        if '<think>' in full_response and not is_deepseek_format:
+                                            is_deepseek_format = True
+                                            in_thinking_phase = True
+                                            # Create expandable thinking section immediately in the thinking container
+                                            with thinking_container.container():
+                                                with st.expander("🧠 View Reasoning Process", expanded=False):
+                                                    thinking_stream_placeholder = st.empty()
+                                        
+                                        if is_deepseek_format:
+                                            # Extract current thinking content for streaming
+                                            if '<think>' in full_response:
+                                                # Get the thinking content up to the current point
+                                                think_start = full_response.find('<think>')
+                                                if '</think>' in full_response:
+                                                    # Complete thinking section
+                                                    think_end = full_response.find('</think>')
+                                                    current_thinking = full_response[think_start + 7:think_end].strip()
+                                                    
+                                                    # Update thinking content in expandable section
+                                                    if thinking_stream_placeholder and current_thinking:
+                                                        thinking_stream_placeholder.markdown(f'<div style="color: #888888;">{current_thinking}</div>', unsafe_allow_html=True)
+                                                    
+                                                    # Parse and show answer content
+                                                    parsed = parse_deepseek_reasoning(full_response)
+                                                    if parsed['is_deepseek_format']:
+                                                        thinking_content = parsed['thinking']
+                                                        answer_content = parsed['answer']
+                                                        
+                                                        # Show answer content (or partial if still streaming)
+                                                        if answer_content:
+                                                            answer_placeholder.markdown(answer_content + "▌")
+                                                        else:
+                                                            answer_placeholder.markdown("🧠 *Thinking...*")
+                                                    else:
+                                                        answer_placeholder.markdown(full_response + "▌")
+                                                else:
+                                                    # Still in thinking phase, stream the thinking content
+                                                    current_thinking = full_response[think_start + 7:].strip()
+                                                    
+                                                    # Update thinking content in expandable section
+                                                    if thinking_stream_placeholder and current_thinking:
+                                                        thinking_stream_placeholder.markdown(f'<div style="color: #888888;">{current_thinking}▌</div>', unsafe_allow_html=True)
+                                                    
+                                                    # Show thinking indicator in answer area
+                                                    answer_placeholder.markdown("🧠 *Thinking...*")
+                                            else:
+                                                # Not yet in DeepSeek format, show regular streaming
+                                                answer_placeholder.markdown(full_response + "▌")
+                                        else:
+                                            # Regular response, show normal streaming
+                                            answer_placeholder.markdown(full_response + "▌")
+                                            
                                     except json.JSONDecodeError:
                                         continue
                                 elif line.strip() == '':  # Empty line indicates end of SSE
                                     continue
                         
                         # Final update without cursor
-                        message_placeholder.markdown(full_response)
+                        if is_deepseek_format:
+                            # Parse final response and display properly
+                            parsed = parse_deepseek_reasoning(full_response)
+                            if parsed['is_deepseek_format']:
+                                # Just show the final answer, thinking is already displayed in expandable box
+                                if parsed['answer'].strip():
+                                    answer_placeholder.markdown(parsed['answer'])
+                                else:
+                                    answer_placeholder.markdown(parsed['thinking'])
+                            else:
+                                answer_placeholder.markdown(full_response)
+                        else:
+                            answer_placeholder.markdown(full_response)
                         
                         return {
                             "response": full_response,
@@ -1098,11 +1034,11 @@ def send_streaming_chat(message: str, conversation_id: Optional[str] = None) -> 
                         }
                     elif response.status_code == 503:
                         error_msg = "❌ Ollama service is not available. Please make sure Ollama is running."
-                        message_placeholder.error(error_msg)
+                        answer_placeholder.error(error_msg)
                         return {"response": error_msg}
                     else:
                         error_msg = f"Backend error: {response.status_code}"
-                        message_placeholder.error(error_msg)
+                        answer_placeholder.error(error_msg)
                         return {"response": error_msg}
                     
     except httpx.TimeoutException:
@@ -1168,6 +1104,173 @@ def send_to_backend(message: str, conversation_id: Optional[str] = None, use_str
         return {"response": "Request timed out. Please try again."}
     except Exception as e:
         return {"response": f"Communication error: {str(e)}"}
+
+def parse_deepseek_reasoning(response_text: str) -> dict:
+    """
+    Parse DeepSeek reasoning format with <think>...</think> tags.
+    
+    Args:
+        response_text: The full response text from DeepSeek
+        
+    Returns:
+        dict: Contains 'thinking', 'answer', and 'is_deepseek_format' keys
+    """
+    import re
+    
+    # Check if response contains DeepSeek reasoning format
+    think_pattern = r'<think>(.*?)</think>'
+    matches = re.findall(think_pattern, response_text, re.DOTALL)
+    
+    if matches:
+        # Extract thinking content
+        thinking_content = matches[0].strip()
+        
+        # Extract answer content (everything after </think>)
+        answer_pattern = r'</think>(.*)'
+        answer_match = re.search(answer_pattern, response_text, re.DOTALL)
+        answer_content = answer_match.group(1).strip() if answer_match else ""
+        
+        return {
+            'thinking': thinking_content,
+            'answer': answer_content,
+            'is_deepseek_format': True
+        }
+    else:
+        # Not DeepSeek format, return as regular response
+        return {
+            'thinking': "",
+            'answer': response_text,
+            'is_deepseek_format': False
+        }
+
+def display_deepseek_response(thinking_content: str, answer_content: str, message_placeholder, create_expander=True):
+    """
+    Display DeepSeek response with expandable thinking section.
+    
+    Args:
+        thinking_content: The thinking/reasoning content
+        answer_content: The final answer content
+        message_placeholder: Streamlit placeholder for the message
+        create_expander: Whether to create the expandable thinking section (True for history, False for streaming)
+    """
+    if create_expander and thinking_content.strip():
+        # Create expandable thinking section for conversation history
+        with st.expander("🧠 View Reasoning Process", expanded=False):
+            st.markdown(f'<div style="color: #888888;">{thinking_content}</div>', unsafe_allow_html=True)
+    
+    # Display the final answer
+    if answer_content.strip():
+        message_placeholder.markdown(answer_content)
+    else:
+        # If no answer content, show the full response (fallback)
+        message_placeholder.markdown(thinking_content)
+
+def test_deepseek_parsing():
+    """Test function to verify DeepSeek reasoning format parsing works correctly."""
+    # Test case 1: Normal DeepSeek response
+    test_response_1 = """<think>
+I need to solve this math problem step by step.
+First, I'll identify what's being asked.
+The problem is asking for the area of a circle with radius 5.
+The formula for area of a circle is A = πr².
+So A = π × 5² = π × 25 = 25π.
+</think>
+
+The area of a circle with radius 5 is **25π** square units.
+
+To calculate this:
+1. Use the formula: A = πr²
+2. Substitute r = 5: A = π × 5²
+3. Calculate: A = π × 25 = 25π
+
+Therefore, the answer is 25π square units."""
+
+    # Test case 2: Regular response (not DeepSeek format)
+    test_response_2 = "This is a regular response without thinking tags."
+
+    # Test case 3: Empty thinking section
+    test_response_3 = """<think></think>
+This is the answer without any thinking process."""
+
+    # Test case 4: Streaming simulation - partial response
+    test_response_4 = """<think>
+First, the user asked "What is 2+2? Show your thinking process."
+I need to solve this step by step."""
+
+    print("Testing DeepSeek parsing...")
+    
+    # Test case 1
+    result_1 = parse_deepseek_reasoning(test_response_1)
+    print(f"Test 1 - Is DeepSeek format: {result_1['is_deepseek_format']}")
+    print(f"Test 1 - Thinking length: {len(result_1['thinking'])}")
+    print(f"Test 1 - Answer length: {len(result_1['answer'])}")
+    
+    # Test case 2
+    result_2 = parse_deepseek_reasoning(test_response_2)
+    print(f"Test 2 - Is DeepSeek format: {result_2['is_deepseek_format']}")
+    print(f"Test 2 - Answer: {result_2['answer'][:50]}...")
+    
+    # Test case 3
+    result_3 = parse_deepseek_reasoning(test_response_3)
+    print(f"Test 3 - Is DeepSeek format: {result_3['is_deepseek_format']}")
+    print(f"Test 3 - Thinking empty: {not result_3['thinking'].strip()}")
+    print(f"Test 3 - Answer: {result_3['answer'][:50]}...")
+    
+    # Test case 4 - partial response (should not be detected as DeepSeek format yet)
+    result_4 = parse_deepseek_reasoning(test_response_4)
+    print(f"Test 4 - Is DeepSeek format: {result_4['is_deepseek_format']}")
+    print(f"Test 4 - Answer: {result_4['answer'][:50]}...")
+    
+    print("DeepSeek parsing tests completed!")
+
+def test_streaming_simulation():
+    """Test function to simulate streaming chunks and verify the logic works."""
+    print("\nTesting streaming simulation...")
+    
+    # Simulate streaming chunks
+    chunks = [
+        '<think>',
+        '\nFirst, the user asked "What is 2+2? Show your thinking process."\n',
+        'I need to solve this step by step.\n',
+        '2 + 2 = 4\n',
+        '</think>\n\n',
+        'The answer is **4**.\n\n',
+        'Here\'s the step-by-step solution:\n',
+        '1. Start with 2\n',
+        '2. Add 2 to it\n',
+        '3. Result is 4'
+    ]
+    
+    full_response = ""
+    is_deepseek_format = False
+    
+    for i, chunk in enumerate(chunks):
+        full_response += chunk
+        print(f"Chunk {i+1}: '{chunk}'")
+        print(f"Full response so far: '{full_response[:50]}...'")
+        
+        # Check for DeepSeek reasoning format
+        if '<think>' in full_response and not is_deepseek_format:
+            is_deepseek_format = True
+            print(f"  -> DeepSeek format detected!")
+        
+        if is_deepseek_format:
+            if '</think>' in full_response:
+                print(f"  -> Complete thinking section found!")
+                parsed = parse_deepseek_reasoning(full_response)
+                if parsed['is_deepseek_format']:
+                    print(f"  -> Parsed successfully!")
+                    print(f"  -> Thinking: '{parsed['thinking'][:50]}...'")
+                    print(f"  -> Answer: '{parsed['answer'][:50]}...'")
+                else:
+                    print(f"  -> Parsing failed!")
+            else:
+                print(f"  -> Still in thinking phase...")
+        else:
+            print(f"  -> Regular response...")
+        print()
+    
+    print("Streaming simulation completed!")
 
 def display_welcome_message():
     """Display welcome message and status information."""
@@ -1683,8 +1786,11 @@ def handle_sample_question(question):
                     if response_data.get("conversation_id"):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
-                    # Add assistant response to chat history
-                    message_data = {"role": "assistant", "content": response_data["response"]}
+                    # For streaming responses, the message is already displayed and stored by the streaming function
+                    # Only add to session state for non-streaming responses
+                    if not st.session_state.use_streaming:
+                        # Add assistant response to chat history
+                        message_data = {"role": "assistant", "content": response_data["response"]}
                     
                     # Handle advanced RAG information for regular responses
                     if st.session_state.use_advanced_rag and response_data.get("strategies_used"):
@@ -1777,7 +1883,9 @@ def handle_sample_question(question):
                         message_data["reasoning_type"] = reasoning_type
                         message_data["confidence"] = confidence
                     
-                    st.session_state.messages.append(message_data)
+                    # Only add to session state for non-streaming responses
+                    if not st.session_state.use_streaming:
+                        st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
@@ -1801,12 +1909,22 @@ def display_chat_messages():
         with st.chat_message(message["role"]):
             content = message["content"]
             
+            # Check if this is a DeepSeek format response
+            parsed = parse_deepseek_reasoning(content)
+            
             # Show visual indicator if message was stopped
             if message.get("stopped"):
-                st.markdown(content)
+                if parsed['is_deepseek_format']:
+                    display_deepseek_response(parsed['thinking'], parsed['answer'], st)
+                else:
+                    st.markdown(content)
                 st.info("⏹️ Generation stopped by user - content preserved!")
             else:
-                st.markdown(content)
+                if parsed['is_deepseek_format']:
+                    # Display DeepSeek response with expandable thinking section
+                    display_deepseek_response(parsed['thinking'], parsed['answer'], st)
+                else:
+                    st.markdown(content)
                 
                 # Display context awareness information for assistant messages
                 if message["role"] == "assistant" and message.get("context_awareness_enabled"):
@@ -2338,11 +2456,8 @@ def main():
                 if not st.session_state.selected_model and st.session_state.available_models:
                     st.session_state.selected_model = st.session_state.available_models[0]
                 
-                # Load secondary data in background
-                try:
-                    st.session_state.rag_stats = get_rag_stats()
-                except:
-                    st.session_state.rag_stats = {}
+                # Load secondary data in background - RAG service removed
+                st.session_state.rag_stats = {}
                     
         st.session_state.auto_loaded = True
     else:
@@ -2364,7 +2479,7 @@ def main():
             # Store current selected model
             current_model = st.session_state.selected_model
             
-            st.session_state.rag_stats = get_rag_stats()
+            st.session_state.rag_stats = {}  # RAG service removed
             st.session_state.conversations = get_conversations()
             st.session_state.available_models = get_available_models()
             
@@ -2414,6 +2529,7 @@ def main():
             # Update session state if model changed
             if selected_model != st.session_state.selected_model:
                 st.session_state.selected_model = selected_model
+                save_user_settings()  # Save settings when changed
                 st.success(f"✅ Switched to {selected_model}")
                 st.rerun()
             
@@ -2433,7 +2549,9 @@ def main():
                 value=st.session_state.use_reasoning_chat,
                 help="When enabled, responses will show basic step-by-step reasoning for general problems"
             )
-            st.session_state.use_reasoning_chat = use_reasoning_chat
+            if st.session_state.use_reasoning_chat != use_reasoning_chat:
+                st.session_state.use_reasoning_chat = use_reasoning_chat
+                save_user_settings()  # Save settings when changed
             
             if use_reasoning_chat:
                 st.success("✅ Phase 1 reasoning enabled - responses will show basic step-by-step solutions")
@@ -2491,25 +2609,32 @@ def main():
                 value=st.session_state.use_phase2_reasoning,
                 help="When enabled, uses specialized reasoning engines for mathematical, logical, and causal problems"
             )
-            st.session_state.use_phase2_reasoning = use_phase2_reasoning
+            if st.session_state.use_phase2_reasoning != use_phase2_reasoning:
+                st.session_state.use_phase2_reasoning = use_phase2_reasoning
+                save_user_settings()  # Save settings when changed
             
             if use_phase2_reasoning:
                 st.success("✅ Phase 2 engines enabled - specialized reasoning for complex problems")
                 
                 # Engine Selection
+                # Find current index
+                current_index = 0
+                engine_options = [("auto", "🔄 Auto-detect (Recommended)"), ("mathematical", "🔢 Mathematical Engine"), ("logical", "🧮 Logical Engine"), ("causal", "🔗 Causal Engine")]
+                for i, (key, _) in enumerate(engine_options):
+                    if key == st.session_state.selected_phase2_engine:
+                        current_index = i
+                        break
+                
                 selected_engine = st.selectbox(
                     "Select Reasoning Engine",
-                    options=[
-                        ("auto", "🔄 Auto-detect (Recommended)"),
-                        ("mathematical", "🔢 Mathematical Engine"),
-                        ("logical", "🧮 Logical Engine"),
-                        ("causal", "🔗 Causal Engine")
-                    ],
+                    options=engine_options,
                     format_func=lambda x: x[1],
-                    index=0,
+                    index=current_index,
                     key="phase2_engine_select"
                 )
-                st.session_state.selected_phase2_engine = selected_engine[0]
+                if st.session_state.selected_phase2_engine != selected_engine[0]:
+                    st.session_state.selected_phase2_engine = selected_engine[0]
+                    save_user_settings()  # Save settings when changed
                 
                 st.info(f"💡 Selected: {selected_engine[1]}")
                 
@@ -2613,25 +2738,32 @@ def main():
                 value=st.session_state.use_phase3_reasoning,
                 help="When enabled, uses advanced reasoning strategies for complex problem solving"
             )
-            st.session_state.use_phase3_reasoning = use_phase3_reasoning
+            if st.session_state.use_phase3_reasoning != use_phase3_reasoning:
+                st.session_state.use_phase3_reasoning = use_phase3_reasoning
+                save_user_settings()  # Save settings when changed
             
             if use_phase3_reasoning:
                 st.success("✅ Phase 3 strategies enabled - advanced reasoning for complex problems")
                 
                 # Strategy Selection
+                # Find current index
+                current_index = 0
+                strategy_options = [("auto", "🔄 Auto-detect (Recommended)"), ("chain_of_thought", "🔗 Chain-of-Thought"), ("tree_of_thoughts", "🌳 Tree-of-Thoughts"), ("prompt_engineering", "📝 Prompt Engineering")]
+                for i, (key, _) in enumerate(strategy_options):
+                    if key == st.session_state.selected_phase3_strategy:
+                        current_index = i
+                        break
+                
                 selected_strategy = st.selectbox(
                     "Select Reasoning Strategy",
-                    options=[
-                        ("auto", "🔄 Auto-detect (Recommended)"),
-                        ("chain_of_thought", "🔗 Chain-of-Thought"),
-                        ("tree_of_thoughts", "🌳 Tree-of-Thoughts"),
-                        ("prompt_engineering", "📝 Prompt Engineering")
-                    ],
+                    options=strategy_options,
                     format_func=lambda x: x[1],
-                    index=0,
+                    index=current_index,
                     key="phase3_strategy_select"
                 )
-                st.session_state.selected_phase3_strategy = selected_strategy[0]
+                if st.session_state.selected_phase3_strategy != selected_strategy[0]:
+                    st.session_state.selected_phase3_strategy = selected_strategy[0]
+                    save_user_settings()  # Save settings when changed
                 
                 st.info(f"💡 Selected: {selected_strategy[1]}")
                 
@@ -2775,9 +2907,9 @@ def main():
                         st.json(stats)
                     
                     if st.button("🔄 Refresh RAG Stats"):
-                        new_stats = get_rag_stats()
-                        st.session_state.rag_stats = new_stats
-                        st.success(f"Stats refreshed: {new_stats.get('total_documents', 0)} documents")
+                        # RAG service removed
+                        st.session_state.rag_stats = {}
+                        st.success("RAG service has been removed - stats cleared")
                         st.rerun()
             else:
                 st.warning("Backend not available for document upload")
@@ -2790,7 +2922,9 @@ def main():
                 value=st.session_state.enable_context_awareness,
                 help="Enable advanced context awareness features including conversation memory and user preferences"
             )
-            st.session_state.enable_context_awareness = enable_context_awareness
+            if st.session_state.enable_context_awareness != enable_context_awareness:
+                st.session_state.enable_context_awareness = enable_context_awareness
+                save_user_settings()  # Save settings when changed
             
             if enable_context_awareness:
                 # User ID Input
@@ -2799,7 +2933,9 @@ def main():
                     value=st.session_state.user_id or "",
                     help="Enter a user ID for personalized context across conversations"
                 )
-                st.session_state.user_id = user_id if user_id else None
+                if st.session_state.user_id != (user_id if user_id else None):
+                    st.session_state.user_id = user_id if user_id else None
+                    save_user_settings()  # Save settings when changed
                 
                 # Context Strategy Selection
                 context_strategy = st.selectbox(
@@ -2808,7 +2944,9 @@ def main():
                     index=["auto", "conversation_only", "memory_only", "hybrid"].index(st.session_state.context_strategy),
                     help="Choose how context should be retrieved and used"
                 )
-                st.session_state.context_strategy = context_strategy
+                if st.session_state.context_strategy != context_strategy:
+                    st.session_state.context_strategy = context_strategy
+                    save_user_settings()  # Save settings when changed
                 
                 # Include Memory Toggle
                 include_memory = st.checkbox(
@@ -2816,7 +2954,27 @@ def main():
                     value=st.session_state.include_memory,
                     help="Include relevant information from past conversations"
                 )
-                st.session_state.include_memory = include_memory
+                if st.session_state.include_memory != include_memory:
+                    st.session_state.include_memory = include_memory
+                    save_user_settings()  # Save settings when changed
+                
+                # Settings Status (for testing)
+                with st.expander("🔧 Settings Status", expanded=False):
+                    st.json({
+                        "Context Awareness": st.session_state.enable_context_awareness,
+                        "Include Memory": st.session_state.include_memory,
+                        "Context Strategy": st.session_state.context_strategy,
+                        "User ID": st.session_state.user_id,
+                        "Selected Model": st.session_state.selected_model,
+                        "Temperature": st.session_state.temperature,
+                        "Use Streaming": st.session_state.use_streaming,
+                        "Use RAG": st.session_state.use_rag,
+                        "Phase 1 Reasoning": st.session_state.use_reasoning_chat,
+                        "Phase 2 Reasoning": st.session_state.use_phase2_reasoning,
+                        "Phase 2 Engine": st.session_state.selected_phase2_engine,
+                        "Phase 3 Reasoning": st.session_state.use_phase3_reasoning,
+                        "Phase 3 Strategy": st.session_state.selected_phase3_strategy
+                    })
                 
                 # Context Information Display
                 if st.session_state.context_info:
@@ -2835,7 +2993,9 @@ def main():
                 value=st.session_state.use_rag,
                 help="When enabled, responses will use document context from uploaded files"
             )
-            st.session_state.use_rag = use_rag
+            if st.session_state.use_rag != use_rag:
+                st.session_state.use_rag = use_rag
+                save_user_settings()  # Save settings when changed
             
             if use_rag:
                 if st.session_state.rag_stats.get("total_documents", 0) == 0:
@@ -2846,50 +3006,9 @@ def main():
             # Advanced RAG Section
             st.markdown('<div class="section-header">🚀 Advanced RAG</div>', unsafe_allow_html=True)
             
-            # Get advanced RAG health and strategies
+            # Advanced RAG service removed
             if st.session_state.backend_health:
-                advanced_rag_health = get_advanced_rag_health()
-                advanced_rag_strategies = get_advanced_rag_strategies()
-                
-                if advanced_rag_health.get("status") == "healthy":
-                    st.success("✅ Advanced RAG Available")
-                    
-                    use_advanced_rag = st.checkbox(
-                        "Enable Advanced RAG",
-                        value=st.session_state.use_advanced_rag,
-                        help="Use multiple retrieval strategies for better results"
-                    )
-                    st.session_state.use_advanced_rag = use_advanced_rag
-                    
-                    if use_advanced_rag:
-                        st.info("🚀 Advanced RAG enabled - using multiple retrieval strategies")
-                        
-                        # Show available strategies
-                        if advanced_rag_strategies:
-                            st.markdown('<div class="section-header">Available Strategies</div>', unsafe_allow_html=True)
-                            for strategy_name, strategy_info in advanced_rag_strategies.items():
-                                st.markdown(f"""
-                                <div class="strategy-badge">{strategy_name.upper()}</div>
-                                <small>{strategy_info.get('description', 'No description')}</small>
-                                """, unsafe_allow_html=True)
-                        
-                        # Show components status
-                        components = advanced_rag_health.get("components", {})
-                        if components:
-                            st.markdown('<div class="section-header">Components</div>', unsafe_allow_html=True)
-                            for component, status in components.items():
-                                if status:
-                                    st.success(f"✅ {component}")
-                                else:
-                                    st.error(f"❌ {component}")
-                    else:
-                        st.info("💡 Enable Advanced RAG for multi-strategy retrieval")
-                else:
-                    st.warning("⚠️ Advanced RAG not available")
-                    if advanced_rag_health.get("error"):
-                        st.error(f"Error: {advanced_rag_health['error']}")
-            else:
-                st.warning("Backend not available for Advanced RAG")
+                st.info("ℹ️ Advanced RAG service has been removed - using simplified streaming chat only")
         
         # MCP Tools Section (Collapsible)
         with st.expander("🛠️ MCP Tools", expanded=False):
@@ -2990,7 +3109,10 @@ def main():
         # Settings Section (Collapsible)
         with st.expander("⚙️ Settings", expanded=False):
             # Temperature slider
-            temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1)
+            temperature = st.slider("Temperature", 0.0, 1.0, st.session_state.temperature, 0.1)
+            if st.session_state.temperature != temperature:
+                st.session_state.temperature = temperature
+                save_user_settings()  # Save settings when changed
             
             # Chat settings
             st.markdown('<div class="section-header">Chat Settings</div>', unsafe_allow_html=True)
@@ -2999,7 +3121,9 @@ def main():
                 value=st.session_state.use_streaming,
                 help="When enabled, responses will stream in real-time as they're generated"
             )
-            st.session_state.use_streaming = use_streaming
+            if st.session_state.use_streaming != use_streaming:
+                st.session_state.use_streaming = use_streaming
+                save_user_settings()  # Save settings when changed
             
             if use_streaming:
                 st.success("✅ Streaming enabled - responses will appear in real-time")
