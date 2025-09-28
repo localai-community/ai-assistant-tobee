@@ -3,7 +3,7 @@ LocalAI Community - Chat API Endpoints
 API routes for chat functionality with Ollama integration.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -11,8 +11,14 @@ import json
 import logging
 import os
 from functools import lru_cache
+import uuid
+from datetime import datetime
+from pathlib import Path
 
 from ..services.chat import ChatService, ChatRequest, ChatResponse, Conversation
+from ..services.document_manager import DocumentManager
+from ..services.rag.document_processor import DocumentProcessor
+from ..services.rag.vector_store import VectorStore
 from ..core.database import get_db
 from ..core.models import ErrorResponse
 
@@ -469,4 +475,158 @@ async def store_conversation_memory(conversation_id: str, db: Session = Depends(
         
     except Exception as e:
         logger.error(f"Failed to store conversation memory: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    conversation_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a document for RAG processing.
+    
+    Args:
+        file: The uploaded file
+        conversation_id: Optional conversation ID to associate with the document
+        user_id: Optional user ID to associate with the document
+        db: Database session
+        
+    Returns:
+        dict: Upload result with document information
+    """
+    try:
+        # Validate file type
+        allowed_types = ['.pdf', '.docx', '.txt', '.md', '.doc']
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        
+        if file_extension not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type {file_extension} not supported. Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        # Generate document ID
+        document_id = str(uuid.uuid4())
+        
+        # Create upload directory if it doesn't exist
+        upload_dir = Path("storage/uploads")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save file
+        file_path = upload_dir / f"{document_id}_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Initialize services
+        document_manager = DocumentManager(db)
+        document_processor = DocumentProcessor()
+        vector_store = VectorStore(conversation_id=conversation_id)
+        
+        # Process document
+        documents = document_processor.process_file(str(file_path))
+        
+        if not documents:
+            # Clean up file if processing failed
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to process document. The file may be empty or corrupted."
+            )
+        
+        # Store in vector database
+        vector_store.add_documents(documents)
+        
+        # Create document record in database
+        from ..models.schemas import ChatDocumentCreate
+        document_data = ChatDocumentCreate(
+            id=document_id,
+            filename=file.filename,
+            file_path=str(file_path),
+            file_type=file_extension,
+            file_size=len(content),
+            conversation_id=conversation_id,
+            user_id=user_id,
+            processing_status="completed",
+            upload_timestamp=datetime.now()
+        )
+        
+        document = document_manager.document_repo.create_document(document_data)
+        
+        # Generate automatic summary
+        try:
+            from ..services.document_summary import DocumentSummaryService
+            summary_service = DocumentSummaryService(ollama_url=os.getenv("OLLAMA_URL", "http://localhost:11434"), db=db)
+            
+            # Generate a brief summary
+            summary_result = await summary_service.generate_summary(
+                document_id=document_id,
+                summary_type="brief"
+            )
+            
+            if summary_result.get("success"):
+                logger.info(f"Generated summary for document {document_id}")
+            else:
+                logger.warning(f"Failed to generate summary for document {document_id}: {summary_result.get('error')}")
+                
+        except Exception as e:
+            logger.error(f"Error generating summary for document {document_id}: {e}")
+            # Don't fail the upload if summary generation fails
+        
+        return {
+            "success": True,
+            "document_id": document_id,
+            "filename": file.filename,
+            "file_type": file_extension,
+            "file_size": len(content),
+            "chunks_created": len(documents),
+            "conversation_id": conversation_id,
+            "message": f"Document '{file.filename}' uploaded and processed successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Document upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@router.get("/documents/{conversation_id}")
+async def get_conversation_documents(conversation_id: str, db: Session = Depends(get_db)):
+    """
+    Get all documents for a conversation.
+    
+    Args:
+        conversation_id: The conversation ID
+        db: Database session
+        
+    Returns:
+        dict: List of documents for the conversation
+    """
+    try:
+        document_manager = DocumentManager(db)
+        documents = document_manager.document_repo.get_conversation_documents(conversation_id)
+        
+        document_list = []
+        for doc in documents:
+            document_list.append({
+                "id": doc.id,
+                "filename": doc.filename,
+                "file_type": doc.file_type,
+                "file_size": doc.file_size,
+                "processing_status": doc.processing_status,
+                "upload_timestamp": doc.upload_timestamp.isoformat(),
+                "summary_text": getattr(doc, 'summary_text', None)
+            })
+        
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "documents": document_list,
+            "total_documents": len(document_list)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting conversation documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get documents: {str(e)}") 

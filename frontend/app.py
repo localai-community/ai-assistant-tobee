@@ -273,6 +273,8 @@ def save_user_settings():
             "use_phase3_reasoning": st.session_state.use_phase3_reasoning,
             "selected_phase2_engine": st.session_state.selected_phase2_engine,
             "selected_phase3_strategy": st.session_state.selected_phase3_strategy,
+            "use_unified_reasoning": st.session_state.use_unified_reasoning,
+            "selected_reasoning_mode": st.session_state.selected_reasoning_mode,
             "temperature": st.session_state.temperature
         }
         
@@ -441,6 +443,17 @@ def init_session_state():
                 "Craft a prompt for debugging code issues"
             ]
         }
+    
+    # Unified Reasoning System
+    # Initialize unified reasoning system state variables
+    if "use_unified_reasoning" not in st.session_state:
+        st.session_state.use_unified_reasoning = False
+    if "selected_reasoning_mode" not in st.session_state:
+        st.session_state.selected_reasoning_mode = "auto"
+    if "unified_reasoning_status" not in st.session_state:
+        st.session_state.unified_reasoning_status = {}
+    if "temp_reasoning_override" not in st.session_state:
+        st.session_state.temp_reasoning_override = None
 
 
 @st.cache_data(ttl=30)  # Cache for 30 seconds
@@ -786,7 +799,7 @@ def upload_document_for_rag(uploaded_file, conversation_id: Optional[str] = None
                 data["user_id"] = user_id
             
             response = client.post(
-                f"{BACKEND_URL}/api/v1/rag/upload", 
+                f"{BACKEND_URL}/api/v1/chat/upload", 
                 files=files, 
                 data=data,
                 timeout=60.0
@@ -810,10 +823,9 @@ def generate_upload_response(filename: str, conversation_id: Optional[str]) -> O
             "message": message,
             "model": get_selected_model(),
             "temperature": 0.7,
-            "stream": False,
             "enable_context_awareness": True,
             "include_memory": False,
-            "context_strategy": "auto"
+            "context_strategy": "conversation_only"
         }
         
         if conversation_id:
@@ -826,17 +838,30 @@ def generate_upload_response(filename: str, conversation_id: Optional[str]) -> O
         
         with httpx.Client() as client:
             response = client.post(
-                f"{BACKEND_URL}/api/v1/chat/",
+                f"{BACKEND_URL}/api/v1/chat/stream",
                 json=payload,
-                timeout=120.0
+                timeout=30.0
             )
             
             if response.status_code == 200:
-                data = response.json()
-                return data.get("response", "")
+                # For streaming response, we need to collect all chunks
+                full_response = ""
+                for line in response.iter_lines():
+                    if line.strip():
+                        try:
+                            # Parse SSE format
+                            if line.startswith("data: "):
+                                data_str = line[6:]  # Remove "data: " prefix
+                                data = json.loads(data_str)
+                                if data.get("type") == "content":
+                                    full_response += data.get("content", "")
+                        except json.JSONDecodeError:
+                            continue
+                
+                return full_response if full_response else "Document uploaded successfully. You can now ask questions about it."
             else:
                 print(f"🔍 DEBUG: Upload response generation failed: {response.status_code}")
-                return None
+                return "Document uploaded successfully. You can now ask questions about it."
                 
     except Exception as e:
         print(f"🔍 DEBUG: Error generating upload response: {e}")
@@ -846,7 +871,7 @@ def get_conversation_documents(conversation_id: str) -> Dict:
     """Get all documents for a conversation."""
     try:
         with httpx.Client() as client:
-            response = client.get(f"{BACKEND_URL}/api/v1/rag/documents/{conversation_id}")
+            response = client.get(f"{BACKEND_URL}/api/v1/chat/documents/{conversation_id}")
             if response.status_code == 200:
                 return {"success": True, "data": response.json()}
             else:
@@ -1978,6 +2003,49 @@ def get_phase3_health() -> Dict:
         }
 
 
+def get_unified_reasoning_status() -> Dict:
+    """Get unified reasoning system status from backend."""
+    try:
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/api/v1/unified-reasoning/status", timeout=5.0)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "status": "unavailable",
+                    "error": f"HTTP {response.status_code}",
+                    "components": {
+                        "core": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                        "engines": {
+                            "mathematical": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                            "logical": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                            "causal": {"status": "unknown", "error": f"HTTP {response.status_code}"}
+                        },
+                        "strategies": {
+                            "chain_of_thought": {"status": "unknown", "error": f"HTTP {response.status_code}"},
+                            "tree_of_thoughts": {"status": "unknown", "error": f"HTTP {response.status_code}"}
+                        }
+                    }
+                }
+    except Exception as e:
+        return {
+            "status": "unavailable",
+            "error": str(e),
+            "components": {
+                "core": {"status": "unknown", "error": str(e)},
+                "engines": {
+                    "mathematical": {"status": "unknown", "error": str(e)},
+                    "logical": {"status": "unknown", "error": str(e)},
+                    "causal": {"status": "unknown", "error": str(e)}
+                },
+                "strategies": {
+                    "chain_of_thought": {"status": "unknown", "error": str(e)},
+                    "tree_of_thoughts": {"status": "unknown", "error": str(e)}
+                }
+            }
+        }
+
+
 def get_phase3_strategies() -> Dict:
     """Get available Phase 3 strategies from backend."""
     try:
@@ -2284,6 +2352,50 @@ def send_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conver
     except Exception as e:
         return {"response": f"Communication error: {str(e)}"}
 
+def send_unified_reasoning_chat(message: str, reasoning_mode: str = "auto", conversation_id: Optional[str] = None) -> Optional[Dict]:
+    """Send message to backend with unified reasoning system."""
+    try:
+        with httpx.Client() as client:
+            # Use the first available model or fallback to llama3:latest
+            model = get_selected_model()
+            
+            payload = {
+                "message": message,
+                "model": model,
+                "temperature": 0.7,
+                "reasoning_mode": reasoning_mode,
+                "show_steps": True,
+                "output_format": "markdown",
+                "include_validation": True,
+                "enable_context_awareness": st.session_state.enable_context_awareness,
+                "include_memory": st.session_state.include_memory,
+                "context_strategy": st.session_state.context_strategy
+            }
+            
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
+            
+            print(f"🔍 Sending unified reasoning request to: {BACKEND_URL}/api/v1/unified-reasoning/chat")
+            print(f"🔍 Payload: {payload}")
+            
+            response = client.post(
+                f"{BACKEND_URL}/api/v1/unified-reasoning/chat",
+                json=payload,
+                timeout=60.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"🔍 Unified reasoning response received: {result.get('response', '')[:100]}...")
+                return result
+            else:
+                print(f"🔍 Unified reasoning request failed with status: {response.status_code}")
+                return {"response": f"❌ Unified reasoning request failed: {response.status_code}"}
+                
+    except Exception as e:
+        print(f"🔍 Unified reasoning error: {str(e)}")
+        return {"response": f"Communication error: {str(e)}"}
+
 def send_streaming_phase3_reasoning_chat(message: str, strategy_type: str = "auto", conversation_id: Optional[str] = None):
     """Send message to backend with Phase 3 reasoning strategies using streaming."""
     st.info("🧠 Starting Phase 3 advanced reasoning streaming...")
@@ -2509,7 +2621,7 @@ def main():
         st.markdown("---")
         
         # RAG Section (Collapsible) - Simplified for document viewing only
-        with st.expander("📚 Conversation Documents", expanded=False):
+        with st.expander("📚 Documents", expanded=False):
             st.markdown('<div class="section-header">Uploaded Documents</div>', unsafe_allow_html=True)
             st.info("💡 Use the 📄 Upload button in the main chat area to upload documents")
             
@@ -2624,7 +2736,9 @@ def main():
                         "Phase 2 Reasoning": st.session_state.use_phase2_reasoning,
                         "Phase 2 Engine": st.session_state.selected_phase2_engine,
                         "Phase 3 Reasoning": st.session_state.use_phase3_reasoning,
-                        "Phase 3 Strategy": st.session_state.selected_phase3_strategy
+                        "Phase 3 Strategy": st.session_state.selected_phase3_strategy,
+                        "Unified Reasoning": st.session_state.use_unified_reasoning,
+                        "Reasoning Mode": st.session_state.selected_reasoning_mode
                     })
                 
                 # Context Information Display
@@ -2757,322 +2871,175 @@ def main():
             else:
                 st.info("No conversations available")
         
-        # Phase 1-3 Reasoning Sections (Moved to bottom)
-        
-        # Reasoning System Section (Collapsible)
-        with st.expander("🧠 Phase 1: Reasoning System", expanded=False):
-            # Reasoning Chat Toggle (Always visible within the expander)
-            use_reasoning_chat = st.checkbox(
-                "Enable Phase 1: Basic Step-by-Step Reasoning",
-                value=st.session_state.use_reasoning_chat,
-                help="When enabled, responses will show basic step-by-step reasoning for general problems"
+        # Unified Reasoning System Section (Collapsible)
+        with st.expander("🧠 Reasoning", expanded=False):
+            st.markdown('<div class="section-header">Reasoning Configuration</div>', unsafe_allow_html=True)
+            
+            # Unified Reasoning Toggle
+            use_unified_reasoning = st.checkbox(
+                "Enable Unified Reasoning System",
+                value=st.session_state.use_unified_reasoning,
+                help="When enabled, uses the unified reasoning system that automatically selects the best approach for your problem"
             )
-            if st.session_state.use_reasoning_chat != use_reasoning_chat:
-                st.session_state.use_reasoning_chat = use_reasoning_chat
+            if st.session_state.use_unified_reasoning != use_unified_reasoning:
+                st.session_state.use_unified_reasoning = use_unified_reasoning
                 save_user_settings()  # Save settings when changed
             
-            if use_reasoning_chat:
-                st.success("✅ Phase 1 reasoning enabled - responses will show basic step-by-step solutions")
-                st.info("💡 Works best with general analytical questions")
-            else:
-                st.info("💡 Enable Phase 1 reasoning for basic step-by-step solutions")
-            
-            st.divider()
-            
-            if st.session_state.backend_health:
-                # Get reasoning health
-                reasoning_health = get_reasoning_health()
+            if use_unified_reasoning:
+                st.success("✅ Unified reasoning enabled - intelligent problem-solving with automatic mode selection")
                 
-                if reasoning_health.get("status") == "healthy":
-                    st.success("✅ Reasoning System Available")
-                else:
-                    st.warning("⚠️ Reasoning System not available")
-                    if reasoning_health.get("error"):
-                        st.error(f"Error: {reasoning_health['error']}")
-            else:
-                st.warning("Backend not available for reasoning system")
-            
-            # Sample Questions
-            if use_reasoning_chat:
-                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
-                
-                # General analytical questions for Phase 1
-                phase1_sample_questions = [
-                    "Explain how photosynthesis works step by step",
-                    "What are the steps to make a sandwich?",
-                    "How does a computer process information?",
-                    "Explain the water cycle in detail",
-                    "What is the process of making coffee?",
-                    "How do plants grow from seeds?"
-                ]
-                
-                for i, question in enumerate(phase1_sample_questions):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase1_general_{i}_{st.session_state.chat_input_key}"):
-                        st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase1"
-                        print(f"🔍 DEBUG: Phase 1 button clicked, set temp_phase_override to: {st.session_state.temp_phase_override}")
-                        st.session_state.chat_input_key += 1
-                        st.rerun()
-                
-                st.divider()
-                st.info("💡 Phase 1 reasoning provides basic step-by-step solutions for general analytical questions.")
-        
-        # Phase 2 Reasoning Engines Section (Collapsible)
-        with st.expander("🚀 Phase 2: Advanced Reasoning Engines", expanded=False):
-            st.markdown('<div class="section-header">Engine Selection</div>', unsafe_allow_html=True)
-            
-            # Phase 2 Reasoning Toggle
-            use_phase2_reasoning = st.checkbox(
-                "Enable Phase 2 Reasoning Engines",
-                value=st.session_state.use_phase2_reasoning,
-                help="When enabled, uses specialized reasoning engines for mathematical, logical, and causal problems"
-            )
-            if st.session_state.use_phase2_reasoning != use_phase2_reasoning:
-                st.session_state.use_phase2_reasoning = use_phase2_reasoning
-                save_user_settings()  # Save settings when changed
-            
-            if use_phase2_reasoning:
-                st.success("✅ Phase 2 engines enabled - specialized reasoning for complex problems")
-                
-                # Engine Selection
-                # Find current index
+                # Reasoning Mode Selection
                 current_index = 0
-                engine_options = [("auto", "🔄 Auto-detect (Recommended)"), ("mathematical", "🔢 Mathematical Engine"), ("logical", "🧮 Logical Engine"), ("causal", "🔗 Causal Engine")]
-                for i, (key, _) in enumerate(engine_options):
-                    if key == st.session_state.selected_phase2_engine:
+                mode_options = [
+                    ("auto", "🔄 Auto-detect (Recommended)"),
+                    ("mathematical", "🔢 Mathematical"),
+                    ("logical", "🧮 Logical"),
+                    ("causal", "🔗 Causal"),
+                    ("chain_of_thought", "🔗 Chain-of-Thought"),
+                    ("tree_of_thoughts", "🌳 Tree-of-Thoughts"),
+                    ("hybrid", "🔀 Hybrid (Multi-mode)")
+                ]
+                for i, (key, _) in enumerate(mode_options):
+                    if key == st.session_state.selected_reasoning_mode:
                         current_index = i
                         break
                 
-                selected_engine = st.selectbox(
-                    "Select Reasoning Engine",
-                    options=engine_options,
+                selected_mode = st.selectbox(
+                    "Select Reasoning Mode",
+                    options=mode_options,
                     format_func=lambda x: x[1],
                     index=current_index,
-                    key="phase2_engine_select"
+                    key="unified_reasoning_mode_select"
                 )
-                if st.session_state.selected_phase2_engine != selected_engine[0]:
-                    st.session_state.selected_phase2_engine = selected_engine[0]
+                if st.session_state.selected_reasoning_mode != selected_mode[0]:
+                    st.session_state.selected_reasoning_mode = selected_mode[0]
                     save_user_settings()  # Save settings when changed
                 
-                st.info(f"💡 Selected: {selected_engine[1]}")
+                st.info(f"💡 Selected: {selected_mode[1]}")
                 
-                # Engine Status
+                # System Status
                 if st.session_state.backend_health:
-                    st.markdown('<div class="section-header">Engine Status</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-header">System Status</div>', unsafe_allow_html=True)
                     
-                    # Get Phase 2 engine status
-                    phase2_status = get_phase2_engine_status()
+                    # Get unified reasoning system status
+                    unified_status = get_unified_reasoning_status()
                     
-                    if phase2_status.get("status") == "available":
-                        engines = phase2_status.get("engines", {})
+                    if unified_status.get("status") == "available":
+                        st.success("✅ Unified Reasoning System: Available")
                         
-                        # Mathematical Engine Status
-                        math_status = engines.get("mathematical", {})
-                        if math_status.get("status") == "available":
+                        # Show available components
+                        components = unified_status.get("components", {})
+                        
+                        # Core Components
+                        if components.get("core", {}).get("status") == "available":
+                            st.success("✅ Core Components: Available")
+                        else:
+                            st.warning("⚠️ Core Components: Limited")
+                        
+                        # Reasoning Engines
+                        engines = components.get("engines", {})
+                        if engines.get("mathematical", {}).get("status") == "available":
                             st.success("✅ Mathematical Engine: Available")
-                            if math_status.get("features"):
-                                st.caption(f"Features: {', '.join(math_status['features'])}")
                         else:
                             st.warning("⚠️ Mathematical Engine: Limited")
-                            if math_status.get("error"):
-                                st.caption(f"Error: {math_status['error']}")
                         
-                        # Logical Engine Status
-                        logic_status = engines.get("logical", {})
-                        if logic_status.get("status") == "available":
+                        if engines.get("logical", {}).get("status") == "available":
                             st.success("✅ Logical Engine: Available")
-                            if logic_status.get("features"):
-                                st.caption(f"Features: {', '.join(logic_status['features'])}")
                         else:
                             st.warning("⚠️ Logical Engine: Limited")
-                            if logic_status.get("error"):
-                                st.caption(f"Error: {logic_status['error']}")
                         
-                        # Causal Engine Status
-                        causal_status = engines.get("causal", {})
-                        if causal_status.get("status") == "available":
+                        if engines.get("causal", {}).get("status") == "available":
                             st.success("✅ Causal Engine: Available")
-                            if causal_status.get("features"):
-                                st.caption(f"Features: {', '.join(causal_status['features'])}")
                         else:
                             st.warning("⚠️ Causal Engine: Limited")
-                            if causal_status.get("error"):
-                                st.caption(f"Error: {causal_status['error']}")
                         
-                        # Refresh button
-                        if st.button("🔄 Refresh Engine Status", key="refresh_phase2_status"):
-                            st.session_state.phase2_engine_status = get_phase2_engine_status()
-                            st.rerun()
-                    else:
-                        st.warning("⚠️ Phase 2 engines not available")
-                        if phase2_status.get("error"):
-                            st.error(f"Error: {phase2_status['error']}")
-                else:
-                    st.warning("Backend not available for Phase 2 engines")
-                
-                # Sample Questions
-                st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
-                
-                # Mathematical Sample Questions
-                st.markdown("**🔢 Mathematical Problems:**")
-                for i, question in enumerate(st.session_state.phase2_sample_questions["mathematical"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase2_math_{i}_{st.session_state.chat_input_key}"):
-                        st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase2"
-                        print(f"🔍 DEBUG: Phase 2 math button clicked, set temp_phase_override to: {st.session_state.temp_phase_override}")
-                        st.session_state.chat_input_key += 1
-                        st.rerun()
-                
-                # Logical Sample Questions
-                st.markdown("**🧮 Logical Problems:**")
-                for i, question in enumerate(st.session_state.phase2_sample_questions["logical"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase2_logic_{i}_{st.session_state.chat_input_key}"):
-                        st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase2"
-                        st.session_state.chat_input_key += 1
-                        st.rerun()
-                
-                # Causal Sample Questions
-                st.markdown("**🔗 Causal Problems:**")
-                for i, question in enumerate(st.session_state.phase2_sample_questions["causal"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase2_causal_{i}_{st.session_state.chat_input_key}"):
-                        st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase2"
-                        st.session_state.chat_input_key += 1
-                        st.rerun()
-                
-                st.divider()
-                st.info("💡 Phase 2 engines provide specialized reasoning for complex mathematical, logical, and causal problems with step-by-step solutions.")
-            else:
-                st.info("💡 Enable Phase 2 engines for specialized reasoning capabilities")
-        
-        # Phase 3 Advanced Reasoning Strategies Section (Collapsible)
-        with st.expander("🧠 Phase 3: Advanced Reasoning Strategies", expanded=False):
-            st.markdown('<div class="section-header">Strategy Selection</div>', unsafe_allow_html=True)
-            
-            # Phase 3 Reasoning Toggle
-            use_phase3_reasoning = st.checkbox(
-                "Enable Phase 3 Advanced Reasoning Strategies",
-                value=st.session_state.use_phase3_reasoning,
-                help="When enabled, uses advanced reasoning strategies for complex problem solving"
-            )
-            if st.session_state.use_phase3_reasoning != use_phase3_reasoning:
-                st.session_state.use_phase3_reasoning = use_phase3_reasoning
-                save_user_settings()  # Save settings when changed
-            
-            if use_phase3_reasoning:
-                st.success("✅ Phase 3 strategies enabled - advanced reasoning for complex problems")
-                
-                # Strategy Selection
-                # Find current index
-                current_index = 0
-                strategy_options = [("auto", "🔄 Auto-detect (Recommended)"), ("chain_of_thought", "🔗 Chain-of-Thought"), ("tree_of_thoughts", "🌳 Tree-of-Thoughts"), ("prompt_engineering", "📝 Prompt Engineering")]
-                for i, (key, _) in enumerate(strategy_options):
-                    if key == st.session_state.selected_phase3_strategy:
-                        current_index = i
-                        break
-                
-                selected_strategy = st.selectbox(
-                    "Select Reasoning Strategy",
-                    options=strategy_options,
-                    format_func=lambda x: x[1],
-                    index=current_index,
-                    key="phase3_strategy_select"
-                )
-                if st.session_state.selected_phase3_strategy != selected_strategy[0]:
-                    st.session_state.selected_phase3_strategy = selected_strategy[0]
-                    save_user_settings()  # Save settings when changed
-                
-                st.info(f"💡 Selected: {selected_strategy[1]}")
-                
-                # Strategy Status
-                if st.session_state.backend_health:
-                    st.markdown('<div class="section-header">Strategy Status</div>', unsafe_allow_html=True)
-                    
-                    # Get Phase 3 strategy status
-                    phase3_status = get_phase3_health()
-                    
-                    if phase3_status.get("status") == "available":
-                        strategies = phase3_status.get("strategies", {})
-                        
-                        # Chain-of-Thought Strategy Status
-                        cot_status = strategies.get("chain_of_thought", {})
-                        if cot_status.get("status") == "available":
+                        # Advanced Strategies
+                        strategies = components.get("strategies", {})
+                        if strategies.get("chain_of_thought", {}).get("status") == "available":
                             st.success("✅ Chain-of-Thought: Available")
-                            if cot_status.get("features"):
-                                st.caption(f"Features: {', '.join(cot_status['features'])}")
                         else:
                             st.warning("⚠️ Chain-of-Thought: Limited")
-                            if cot_status.get("error"):
-                                st.caption(f"Error: {cot_status['error']}")
                         
-                        # Tree-of-Thoughts Strategy Status
-                        tot_status = strategies.get("tree_of_thoughts", {})
-                        if tot_status.get("status") == "available":
+                        if strategies.get("tree_of_thoughts", {}).get("status") == "available":
                             st.success("✅ Tree-of-Thoughts: Available")
-                            if tot_status.get("features"):
-                                st.caption(f"Features: {', '.join(tot_status['features'])}")
                         else:
                             st.warning("⚠️ Tree-of-Thoughts: Limited")
-                            if tot_status.get("error"):
-                                st.caption(f"Error: {tot_status['error']}")
-                        
-                        # Prompt Engineering Strategy Status
-                        pe_status = strategies.get("prompt_engineering", {})
-                        if pe_status.get("status") == "available":
-                            st.success("✅ Prompt Engineering: Available")
-                            if pe_status.get("features"):
-                                st.caption(f"Features: {', '.join(pe_status['features'])}")
-                        else:
-                            st.warning("⚠️ Prompt Engineering: Limited")
-                            if pe_status.get("error"):
-                                st.caption(f"Error: {pe_status['error']}")
                         
                         # Refresh button
-                        if st.button("🔄 Refresh Strategy Status", key="refresh_phase3_status"):
-                            st.session_state.phase3_health = get_phase3_health()
+                        if st.button("🔄 Refresh System Status", key="refresh_unified_status"):
+                            st.session_state.unified_reasoning_status = get_unified_reasoning_status()
                             st.rerun()
                     else:
-                        st.warning("⚠️ Phase 3 strategies not available")
-                        if phase3_status.get("error"):
-                            st.error(f"Error: {phase3_status['error']}")
+                        st.warning("⚠️ Unified Reasoning System not available")
+                        if unified_status.get("error"):
+                            st.error(f"Error: {unified_status['error']}")
                 else:
-                    st.warning("Backend not available for Phase 3 strategies")
+                    st.warning("Backend not available for unified reasoning system")
                 
                 # Sample Questions
                 st.markdown('<div class="section-header">Sample Questions</div>', unsafe_allow_html=True)
                 
-                # Chain-of-Thought Sample Questions
-                st.markdown("**🔗 Chain-of-Thought Problems:**")
-                for i, question in enumerate(st.session_state.phase3_sample_questions["chain_of_thought"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase3_cot_{i}_{st.session_state.chat_input_key}"):
+                # Mathematical Problems
+                st.markdown("**🔢 Mathematical Problems:**")
+                math_questions = [
+                    "What is 15 * 23 + 45?",
+                    "Solve for x: 2x + 5 = 13",
+                    "Calculate the area of a circle with radius 7",
+                    "What is the derivative of x² + 3x + 2?"
+                ]
+                for i, question in enumerate(math_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"unified_math_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase3"
+                        st.session_state.temp_reasoning_override = "unified"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
-                # Tree-of-Thoughts Sample Questions
-                st.markdown("**🌳 Tree-of-Thoughts Problems:**")
-                for i, question in enumerate(st.session_state.phase3_sample_questions["tree_of_thoughts"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase3_tot_{i}_{st.session_state.chat_input_key}"):
+                # Logical Problems
+                st.markdown("**🧮 Logical Problems:**")
+                logic_questions = [
+                    "If all birds can fly and penguins are birds, can penguins fly?",
+                    "What is the logical conclusion: All A are B, All B are C, therefore...",
+                    "Analyze this argument: If it rains, the ground gets wet. The ground is wet. Therefore, it rained."
+                ]
+                for i, question in enumerate(logic_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"unified_logic_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase3"
+                        st.session_state.temp_reasoning_override = "unified"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
-                # Prompt Engineering Sample Questions
-                st.markdown("**📝 Prompt Engineering Problems:**")
-                for i, question in enumerate(st.session_state.phase3_sample_questions["prompt_engineering"]):
-                    if st.button(f"📝 {question[:40]}...", key=f"phase3_pe_{i}_{st.session_state.chat_input_key}"):
+                # Causal Problems
+                st.markdown("**🔗 Causal Problems:**")
+                causal_questions = [
+                    "Does exercise cause better health outcomes?",
+                    "What causes seasonal changes in weather?",
+                    "Analyze the causal relationship between diet and weight loss"
+                ]
+                for i, question in enumerate(causal_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"unified_causal_{i}_{st.session_state.chat_input_key}"):
                         st.session_state.sample_question = question
-                        st.session_state.temp_phase_override = "phase3"
+                        st.session_state.temp_reasoning_override = "unified"
+                        st.session_state.chat_input_key += 1
+                        st.rerun()
+                
+                # Complex Problems
+                st.markdown("**🔀 Complex Multi-faceted Problems:**")
+                complex_questions = [
+                    "A store sells apples for $2.50 per pound and oranges for $3.00 per pound. If a customer buys 2.5 pounds of apples and 1.8 pounds of oranges, and there's a 10% discount on the total, what is the final price? Also, explain the reasoning behind the calculation.",
+                    "Design a study to test whether a new drug is effective. What are the key considerations for ensuring valid results?",
+                    "Explain how a computer processes information from input to output, including the role of memory, CPU, and storage."
+                ]
+                for i, question in enumerate(complex_questions):
+                    if st.button(f"📝 {question[:40]}...", key=f"unified_complex_{i}_{st.session_state.chat_input_key}"):
+                        st.session_state.sample_question = question
+                        st.session_state.temp_reasoning_override = "unified"
                         st.session_state.chat_input_key += 1
                         st.rerun()
                 
                 st.divider()
-                st.info("💡 Phase 3 strategies provide advanced reasoning capabilities including Chain-of-Thought, Tree-of-Thoughts, and Prompt Engineering for complex problem solving.")
+                st.info("💡 The unified reasoning system automatically selects the best approach for your problem, combining mathematical, logical, causal, and advanced reasoning strategies as needed.")
             else:
-                st.info("💡 Enable Phase 3 strategies for advanced reasoning capabilities")
+                st.info("💡 Enable unified reasoning for intelligent problem-solving with automatic mode selection")
         
         # Settings Section (Collapsible)
         with st.expander("⚙️ Settings", expanded=False):
@@ -3282,14 +3249,27 @@ def main():
         else:
             # Check for temporary phase override from sample question buttons
             temp_override = st.session_state.get("temp_phase_override")
+            temp_reasoning_override = st.session_state.get("temp_reasoning_override")
             
             # Debug: Print the override status
             if temp_override:
                 print(f"🔍 DEBUG: Using temp_phase_override: {temp_override}")
                 print(f"🔍 DEBUG: Current settings - Phase3: {st.session_state.use_phase3_reasoning}, Phase2: {st.session_state.use_phase2_reasoning}, Phase1: {st.session_state.use_reasoning_chat}")
+            if temp_reasoning_override:
+                print(f"🔍 DEBUG: Using temp_reasoning_override: {temp_reasoning_override}")
+                print(f"🔍 DEBUG: Current settings - Unified: {st.session_state.use_unified_reasoning}, Mode: {st.session_state.selected_reasoning_mode}")
             
-            # Send message to backend (with Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
-            if temp_override == "phase3":
+            # Send message to backend (with unified reasoning, Phase 3, Phase 2 reasoning, reasoning, RAG, or regular chat)
+            if temp_reasoning_override == "unified":
+                # Force unified reasoning for sample question
+                print(f"🔍 DEBUG: FORCING unified reasoning for sample question")
+                with st.spinner("🧠 Using unified reasoning system..."):
+                    response_data = send_unified_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_reasoning_mode, 
+                        st.session_state.conversation_id
+                    )
+            elif temp_override == "phase3":
                 # Force Phase 3 for sample question
                 print(f"🔍 DEBUG: FORCING Phase 3 reasoning for sample question")
                 # Always use streaming
@@ -3345,6 +3325,14 @@ def main():
                     print(f"🔍 DEBUG: Using non-streaming Phase 1")
                     with st.spinner("🧠 Thinking step by step..."):
                         response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
+            elif st.session_state.use_unified_reasoning:
+                # Use unified reasoning system for intelligent problem-solving
+                with st.spinner("🧠 Using unified reasoning system..."):
+                    response_data = send_unified_reasoning_chat(
+                        prompt, 
+                        st.session_state.selected_reasoning_mode, 
+                        st.session_state.conversation_id
+                    )
             elif st.session_state.use_phase3_reasoning:
                 # Use Phase 3 advanced reasoning strategies for complex problem solving
                 # Always use streaming
@@ -3409,7 +3397,52 @@ def main():
                 response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
             
             # Handle streaming responses differently since they're already displayed
-            if temp_override == "phase1":
+            if temp_reasoning_override == "unified":
+                # Handle unified reasoning response
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Create message data
+                    message_data = {
+                        "role": "assistant", 
+                        "content": response_data["response"],
+                        "unified_reasoning_used": True,
+                        "reasoning_mode": response_data.get("reasoning_mode", "auto"),
+                        "reasoning_type": response_data.get("reasoning_type", "unknown")
+                    }
+                    
+                    # Add validation summary if available
+                    if response_data.get("validation_summary"):
+                        message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    # Add unified reasoning information
+                    if response_data.get("mode_used"):
+                        mode_used = response_data.get("mode_used", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        steps_count = response_data.get("steps_count", 0)
+                        
+                        message_data["mode_used"] = mode_used
+                        message_data["confidence"] = confidence
+                        message_data["steps_count"] = steps_count
+                    
+                    st.session_state.messages.append(message_data)
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Clear temporary reasoning override after processing
+                    if "temp_reasoning_override" in st.session_state:
+                        print(f"🔍 DEBUG: Clearing temp_reasoning_override: {st.session_state.temp_reasoning_override}")
+                        del st.session_state.temp_reasoning_override
+                    
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from unified reasoning system. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+            elif temp_override == "phase1":
                 # For streaming Phase 1 reasoning, handle the generator response
                 print(f"🔍 DEBUG: Handling Phase 1 streaming response")
                 print(f"🔍 DEBUG: response_data type: {type(response_data)}")
@@ -3497,6 +3530,46 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
+            elif st.session_state.use_unified_reasoning:
+                # Handle unified reasoning response
+                if response_data and not response_data.get("response", "").startswith("❌"):
+                    # Update conversation ID if provided
+                    if response_data.get("conversation_id"):
+                        st.session_state.conversation_id = response_data["conversation_id"]
+                    
+                    # Create message data
+                    message_data = {
+                        "role": "assistant", 
+                        "content": response_data["response"],
+                        "unified_reasoning_used": True,
+                        "reasoning_mode": response_data.get("reasoning_mode", "auto"),
+                        "reasoning_type": response_data.get("reasoning_type", "unknown")
+                    }
+                    
+                    # Add validation summary if available
+                    if response_data.get("validation_summary"):
+                        message_data["validation_summary"] = response_data.get("validation_summary")
+                    
+                    # Add unified reasoning information
+                    if response_data.get("mode_used"):
+                        mode_used = response_data.get("mode_used", "unknown")
+                        confidence = response_data.get("confidence", 0.0)
+                        steps_count = response_data.get("steps_count", 0)
+                        
+                        message_data["mode_used"] = mode_used
+                        message_data["confidence"] = confidence
+                        message_data["steps_count"] = steps_count
+                    
+                    st.session_state.messages.append(message_data)
+                    st.session_state.conversations = get_conversations()
+                    
+                    # Reset generating state
+                    st.session_state.is_generating = False
+                else:
+                    error_msg = response_data["response"] if response_data else "❌ Unable to get response from unified reasoning system. Please try again or check the backend logs."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
             elif not st.session_state.use_reasoning_chat and not st.session_state.use_rag:
                 # Handle basic streaming chat response
                 print(f"🔍 DEBUG: Handling basic streaming chat response")

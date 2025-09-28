@@ -378,6 +378,7 @@ class ChatService:
         
         # Apply context awareness if enabled
         enhanced_message = message
+        document_context_available = False
         if enable_context_awareness and conversation_id:
             try:
                 self._ensure_context_service_initialized()
@@ -387,7 +388,8 @@ class ChatService:
                     user_id=user_id,
                     include_memory=include_memory
                 )
-                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original")
+                document_context_available = context_metadata.get("document_context", False)
+                logger.info(f"Enhanced message with context awareness: {len(enhanced_message)} chars vs {len(message)} chars original, documents available: {document_context_available}")
             except Exception as e:
                 logger.error(f"Error applying context awareness: {e}")
                 enhanced_message = message
@@ -457,13 +459,21 @@ class ChatService:
         # Debug: Log the messages being sent to Ollama
         logger.info(f"Messages being sent to Ollama: {[{'role': msg['role'], 'content': msg['content'][:100] + '...' if len(msg['content']) > 100 else msg['content']} for msg in messages]}")
         
-        # Add system prompt to encourage English responses for DeepSeek models
+        # Add system prompt to encourage English responses for DeepSeek models and document awareness
+        system_prompt = "You are a helpful AI assistant."
+        
         if "deepseek" in model.lower():
-            system_message = {
-                "role": "system", 
-                "content": "You are a helpful AI assistant. Please respond in English unless the user specifically asks you to use another language."
-            }
-            messages.insert(0, system_message)
+            system_prompt += " Please respond in English unless the user specifically asks you to use another language."
+        
+        # Add document awareness if documents are available
+        if document_context_available:
+            system_prompt += "\n\nYou have access to documents that have been uploaded to this conversation. When the user asks questions that could be related to these documents (such as asking for summaries, analysis, or information about the content), please use the document information provided in the context to answer their questions. Always cite the source document when you use information from it."
+        
+        system_message = {
+            "role": "system", 
+            "content": system_prompt
+        }
+        messages.insert(0, system_message)
         
         # Prepare request payload
         payload = {
