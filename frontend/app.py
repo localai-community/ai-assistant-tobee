@@ -248,7 +248,6 @@ def get_default_user_settings():
         "context_strategy": "conversation_only",
         "user_id": "leia",
         "selected_model": "deepseek-r1:8b",
-        "use_streaming": True,
         "use_rag": False,
         "use_advanced_rag": False,
         "use_phase2_reasoning": False,
@@ -267,7 +266,6 @@ def save_user_settings():
             "include_memory": st.session_state.include_memory,
             "context_strategy": st.session_state.context_strategy,
             "selected_model": st.session_state.selected_model,
-            "use_streaming": st.session_state.use_streaming,
             "use_rag": st.session_state.use_rag,
             "use_advanced_rag": st.session_state.use_advanced_rag,
             "use_phase2_reasoning": st.session_state.use_phase2_reasoning,
@@ -371,7 +369,7 @@ def init_session_state():
     for key in default_settings.keys():
         if key in query_params:
             value = query_params[key]
-            if key in ["enable_context_awareness", "include_memory", "use_streaming", "use_rag", "use_advanced_rag", "use_phase2_reasoning", "use_reasoning_chat", "use_phase3_reasoning"]:
+            if key in ["enable_context_awareness", "include_memory", "use_rag", "use_advanced_rag", "use_phase2_reasoning", "use_reasoning_chat", "use_phase3_reasoning"]:
                 st.session_state[key] = value.lower() in ['true', '1', 'yes']
             elif key == "temperature":
                 try:
@@ -1476,15 +1474,60 @@ def handle_sample_question(question):
     else:
         # Send message to backend (with reasoning, RAG, or regular chat)
         if st.session_state.use_reasoning_chat:
-            # Use reasoning chat for step-by-step solutions
-            if st.session_state.use_streaming:
-                # Use streaming reasoning response with real-time display
+            # Use reasoning chat for step-by-step solutions (always streaming)
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                # Stream the response chunks
+                for chunk in send_streaming_reasoning_chat(question, st.session_state.conversation_id):
+                    if isinstance(chunk, str):
+                        full_response += chunk
+                        message_placeholder.markdown(full_response + "▌")
+                    elif isinstance(chunk, dict):
+                        # This is the final response data
+                        if chunk.get("response", "").startswith("❌"):
+                            error_msg = chunk["response"]
+                            message_placeholder.error(error_msg)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                            break
+                        else:
+                            # Update conversation ID if provided
+                            if chunk.get("conversation_id"):
+                                st.session_state.conversation_id = chunk["conversation_id"]
+                            
+                            # Update the final message
+                            final_response = chunk.get("response", full_response)
+                            message_placeholder.markdown(final_response)
+                            
+                            # Add to chat history
+                            message_data = {
+                                "role": "assistant", 
+                                "content": final_response,
+                                "reasoning_used": chunk.get("reasoning_used", False),
+                                "steps_count": chunk.get("steps_count"),
+                                "validation_summary": chunk.get("validation_summary")
+                            }
+                            st.session_state.messages.append(message_data)
+                            break
+                
+                # Refresh conversation list to include the new conversation
+                st.session_state.conversations = get_conversations()
+        elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            # Check if advanced RAG is enabled
+            if st.session_state.use_advanced_rag:
+                # Use advanced RAG
+                with st.spinner("🚀 Thinking with Advanced RAG..."):
+                    response_data = send_advanced_rag_chat(question, st.session_state.conversation_id)
+                    process_chat_response(response_data, question)
+            else:
+                # Use basic RAG (always streaming)
                 with st.chat_message("assistant"):
                     message_placeholder = st.empty()
                     full_response = ""
                     
                     # Stream the response chunks
-                    for chunk in send_streaming_reasoning_chat(question, st.session_state.conversation_id):
+                    for chunk in send_streaming_rag_chat(question, st.session_state.conversation_id):
                         if isinstance(chunk, str):
                             full_response += chunk
                             message_placeholder.markdown(full_response + "▌")
@@ -1508,102 +1551,26 @@ def handle_sample_question(question):
                                 message_data = {
                                     "role": "assistant", 
                                     "content": final_response,
-                                    "reasoning_used": chunk.get("reasoning_used", False),
-                                    "steps_count": chunk.get("steps_count"),
-                                    "validation_summary": chunk.get("validation_summary")
+                                    "rag_context": chunk.get("rag_context", ""),
+                                    "has_context": chunk.get("has_context", False),
+                                    "context_awareness_enabled": chunk.get("context_awareness_enabled", False),
+                                    "context_strategy_used": chunk.get("context_strategy_used"),
+                                    "context_entities": chunk.get("context_entities", []),
+                                    "context_topics": chunk.get("context_topics", []),
+                                    "memory_chunks_used": chunk.get("memory_chunks_used", 0),
+                                    "user_preferences_applied": chunk.get("user_preferences_applied", {})
                                 }
                                 st.session_state.messages.append(message_data)
                                 break
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
-            else:
-                # Use regular reasoning response
-                with st.spinner("🧠 Thinking step by step..."):
-                    response_data = send_reasoning_chat(question, st.session_state.conversation_id, use_streaming=False)
-                    process_chat_response(response_data, question)
-        elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
-            # Check if advanced RAG is enabled
-            if st.session_state.use_advanced_rag:
-                # Use advanced RAG
-                with st.spinner("🚀 Thinking with Advanced RAG..."):
-                    response_data = send_advanced_rag_chat(question, st.session_state.conversation_id)
-                    process_chat_response(response_data, question)
-            else:
-                # Use basic RAG
-                if st.session_state.use_streaming:
-                    # Use streaming RAG response with real-time display
-                    with st.chat_message("assistant"):
-                        message_placeholder = st.empty()
-                        full_response = ""
-                        
-                        # Stream the response chunks
-                        for chunk in send_streaming_rag_chat(question, st.session_state.conversation_id):
-                            if isinstance(chunk, str):
-                                full_response += chunk
-                                message_placeholder.markdown(full_response + "▌")
-                            elif isinstance(chunk, dict):
-                                # This is the final response data
-                                if chunk.get("response", "").startswith("❌"):
-                                    error_msg = chunk["response"]
-                                    message_placeholder.error(error_msg)
-                                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                                    break
-                                else:
-                                    # Update conversation ID if provided
-                                    if chunk.get("conversation_id"):
-                                        st.session_state.conversation_id = chunk["conversation_id"]
-                                    
-                                    # Update the final message
-                                    final_response = chunk.get("response", full_response)
-                                    message_placeholder.markdown(final_response)
-                                    
-                                    # Add to chat history
-                                    message_data = {
-                                        "role": "assistant", 
-                                        "content": final_response,
-                                        "rag_context": chunk.get("rag_context", ""),
-                                        "has_context": chunk.get("has_context", False),
-                                        "context_awareness_enabled": chunk.get("context_awareness_enabled", False),
-                                        "context_strategy_used": chunk.get("context_strategy_used"),
-                                        "context_entities": chunk.get("context_entities", []),
-                                        "context_topics": chunk.get("context_topics", []),
-                                        "memory_chunks_used": chunk.get("memory_chunks_used", 0),
-                                        "user_preferences_applied": chunk.get("user_preferences_applied", {})
-                                    }
-                                    st.session_state.messages.append(message_data)
-                                    break
-                        
-                        # Refresh conversation list to include the new conversation
-                        st.session_state.conversations = get_conversations()
-                else:
-                    # Use regular non-streaming RAG response
-                    with st.spinner("Thinking with RAG..."):
-                        response_data = send_rag_chat(question, st.session_state.conversation_id)
-                        process_chat_response(response_data, question)
         else:
-            # Use streaming or regular response based on setting
-            if st.session_state.use_reasoning_chat:
-                # Use reasoning chat
-                if st.session_state.use_streaming:
-                    # Use streaming reasoning response
-                    response_data = send_streaming_reasoning_chat(question, st.session_state.conversation_id)
-                else:
-                    # Use regular non-streaming reasoning response
-                    with st.spinner("Thinking with reasoning..."):
-                        response_data = send_reasoning_chat(question, st.session_state.conversation_id, use_streaming=False)
-            else:
-                # Use regular chat
-                if st.session_state.use_streaming:
-                    # Use streaming response
-                    response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=True)
-                else:
-                    # Use regular non-streaming response
-                    with st.spinner("Thinking..."):
-                        response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=False)
+            # Use streaming chat (always enabled)
+            response_data = send_to_backend(question, st.session_state.conversation_id, use_streaming=True)
             
-            # Handle streaming RAG responses differently since they're already displayed
-            if st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+            # Handle streaming responses differently since they're already displayed
+            if st.session_state.use_phase2_reasoning:
                 # For streaming Phase 2 reasoning, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -1658,7 +1625,7 @@ def handle_sample_question(question):
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
-            elif st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -1735,7 +1702,7 @@ def handle_sample_question(question):
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     with st.chat_message("assistant"):
                         st.error(error_msg)
-            elif st.session_state.use_reasoning_chat and st.session_state.use_streaming:
+            elif st.session_state.use_reasoning_chat:
                 # Handle streaming reasoning responses
                 # Create a placeholder for the assistant message
                 with st.chat_message("assistant"):
@@ -1787,8 +1754,8 @@ def handle_sample_question(question):
                         st.session_state.conversation_id = response_data["conversation_id"]
                     
                     # For streaming responses, the message is already displayed and stored by the streaming function
-                    # Only add to session state for non-streaming responses
-                    if not st.session_state.use_streaming:
+                    # Add to session state (streaming responses are handled separately)
+                    if False:  # This block is no longer needed since streaming is always enabled
                         # Add assistant response to chat history
                         message_data = {"role": "assistant", "content": response_data["response"]}
                     
@@ -1883,15 +1850,15 @@ def handle_sample_question(question):
                         message_data["reasoning_type"] = reasoning_type
                         message_data["confidence"] = confidence
                     
-                    # Only add to session state for non-streaming responses
-                    if not st.session_state.use_streaming:
+                    # Add to session state (streaming responses are handled separately)
+                    if False:  # This block is no longer needed since streaming is always enabled
                         st.session_state.messages.append(message_data)
                     
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
                     
-                    # Display assistant response (if not already displayed via streaming)
-                    if not st.session_state.use_streaming:
+                    # Display assistant response (streaming responses are handled separately)
+                    if False:  # This block is no longer needed since streaming is always enabled
                         with st.chat_message("assistant"):
                             st.markdown(response_data["response"])
                     
@@ -2541,6 +2508,257 @@ def main():
         
         st.markdown("---")
         
+        # RAG Section (Collapsible) - Simplified for document viewing only
+        with st.expander("📚 Conversation Documents", expanded=False):
+            st.markdown('<div class="section-header">Uploaded Documents</div>', unsafe_allow_html=True)
+            st.info("💡 Use the 📄 Upload button in the main chat area to upload documents")
+            
+            if st.session_state.backend_health:
+                # Show conversation documents if we have a current conversation
+                if getattr(st.session_state, 'conversation_id', None):
+                    if st.button("🔄 Refresh Documents"):
+                        st.session_state.conversation_documents = None
+                        st.rerun()
+                    
+                    # Get conversation documents
+                    if not hasattr(st.session_state, 'conversation_documents') or st.session_state.conversation_documents is None:
+                        with st.spinner("Loading conversation documents..."):
+                            docs_result = get_conversation_documents(getattr(st.session_state, 'conversation_id', None))
+                            if docs_result.get("success"):
+                                st.session_state.conversation_documents = docs_result.get("data", {})
+                            else:
+                                st.session_state.conversation_documents = {"documents": []}
+                    
+                    # Display conversation documents
+                    if st.session_state.conversation_documents.get("documents"):
+                        for doc in st.session_state.conversation_documents["documents"]:
+                            with st.expander(f"📄 {doc['filename']} ({doc['file_type']})"):
+                                st.write(f"**Size:** {doc['file_size']} bytes")
+                                st.write(f"**Uploaded:** {doc['upload_timestamp']}")
+                                st.write(f"**Status:** {doc['processing_status']}")
+                                
+                                if doc.get('summary_text'):
+                                    st.write(f"**Summary:** {doc['summary_text']}")
+                                else:
+                                    st.info("💡 Ask 'summarize this document' in chat to generate a summary")
+                    else:
+                        st.info("No documents uploaded to this conversation yet.")
+                else:
+                    st.info("Start a conversation to see uploaded documents here.")
+                
+                # RAG Statistics
+                if st.session_state.rag_stats:
+                    st.markdown('<div class="section-header">Statistics</div>', unsafe_allow_html=True)
+                    stats = st.session_state.rag_stats
+                    st.metric("Total Documents", stats.get("total_documents", 0))
+                    st.metric("Total Chunks", stats.get("total_chunks", 0))
+                    st.metric("Vector DB Size", f"{stats.get('vector_db_size_mb', 0):.1f} MB")
+                    
+                    # Debug info (can be removed later)
+                    if st.checkbox("🔍 Show Debug Info"):
+                        st.json(stats)
+                    
+                    if st.button("🔄 Refresh RAG Stats"):
+                        # RAG service removed
+                        st.session_state.rag_stats = {}
+                        st.success("RAG service has been removed - stats cleared")
+                        st.rerun()
+            else:
+                st.warning("Backend not available for document upload")
+            
+            st.markdown('<div class="section-header">Context Awareness</div>', unsafe_allow_html=True)
+            
+            # Context Awareness Toggle
+            enable_context_awareness = st.checkbox(
+                "🧠 Enable Context Awareness",
+                value=st.session_state.enable_context_awareness,
+                help="Enable advanced context awareness features including conversation memory and user preferences"
+            )
+            if st.session_state.enable_context_awareness != enable_context_awareness:
+                st.session_state.enable_context_awareness = enable_context_awareness
+                save_user_settings()  # Save settings when changed
+            
+            if enable_context_awareness:
+                # User ID Input
+                user_id = st.text_input(
+                    "👤 User ID (Optional)",
+                    value=st.session_state.user_id or "",
+                    help="Enter a user ID for personalized context across conversations"
+                )
+                if st.session_state.user_id != (user_id if user_id else None):
+                    st.session_state.user_id = user_id if user_id else None
+                    save_user_settings()  # Save settings when changed
+                
+                # Context Strategy Selection
+                context_strategy = st.selectbox(
+                    "🎯 Context Strategy",
+                    options=["auto", "conversation_only", "memory_only", "hybrid"],
+                    index=["auto", "conversation_only", "memory_only", "hybrid"].index(st.session_state.context_strategy),
+                    help="Choose how context should be retrieved and used"
+                )
+                if st.session_state.context_strategy != context_strategy:
+                    st.session_state.context_strategy = context_strategy
+                    save_user_settings()  # Save settings when changed
+                
+                # Include Memory Toggle
+                include_memory = st.checkbox(
+                    "💾 Include Long-term Memory",
+                    value=st.session_state.include_memory,
+                    help="Include relevant information from past conversations"
+                )
+                if st.session_state.include_memory != include_memory:
+                    st.session_state.include_memory = include_memory
+                    save_user_settings()  # Save settings when changed
+                
+                # Settings Status (for testing)
+                with st.expander("🔧 Settings Status", expanded=False):
+                    st.json({
+                        "Context Awareness": st.session_state.enable_context_awareness,
+                        "Include Memory": st.session_state.include_memory,
+                        "Context Strategy": st.session_state.context_strategy,
+                        "User ID": st.session_state.user_id,
+                        "Selected Model": st.session_state.selected_model,
+                        "Temperature": st.session_state.temperature,
+                        "Use RAG": st.session_state.use_rag,
+                        "Phase 1 Reasoning": st.session_state.use_reasoning_chat,
+                        "Phase 2 Reasoning": st.session_state.use_phase2_reasoning,
+                        "Phase 2 Engine": st.session_state.selected_phase2_engine,
+                        "Phase 3 Reasoning": st.session_state.use_phase3_reasoning,
+                        "Phase 3 Strategy": st.session_state.selected_phase3_strategy
+                    })
+                
+                # Context Information Display
+                if st.session_state.context_info:
+                    with st.expander("📊 Context Information"):
+                        context = st.session_state.context_info
+                        if context.get("topics"):
+                            st.write("**Topics:**", ", ".join(context["topics"][:5]))
+                        if context.get("entities"):
+                            st.write("**Key Entities:**", ", ".join([e["text"] for e in context["entities"][:5]]))
+                        if context.get("user_preferences"):
+                            st.write("**User Preferences:**", str(context["user_preferences"]))
+            
+            st.markdown('<div class="section-header">RAG Mode</div>', unsafe_allow_html=True)
+            use_rag = st.checkbox(
+                "Enable RAG for responses",
+                value=st.session_state.use_rag,
+                help="When enabled, responses will use document context from uploaded files"
+            )
+            if st.session_state.use_rag != use_rag:
+                st.session_state.use_rag = use_rag
+                save_user_settings()  # Save settings when changed
+            
+            if use_rag:
+                if st.session_state.rag_stats.get("total_documents", 0) == 0:
+                    st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
+                else:
+                    st.success("✅ RAG mode enabled - responses will use document context")
+            
+            # Advanced RAG Section
+            st.markdown('<div class="section-header">🚀 Advanced RAG</div>', unsafe_allow_html=True)
+            
+            # Advanced RAG service removed
+            if st.session_state.backend_health:
+                st.info("ℹ️ Advanced RAG service has been removed - using simplified streaming chat only")
+        
+        # MCP Tools Section (Collapsible)
+        with st.expander("🛠️ MCP Tools", expanded=False):
+            # Get MCP tools and health
+            if st.session_state.backend_health:
+                mcp_tools = get_mcp_tools()
+                mcp_health = get_mcp_health()
+                
+                if mcp_health.get("mcp_enabled", False):
+                    st.success("✅ MCP Tools Available")
+                    
+                    # Show available tools
+                    if mcp_tools:
+                        st.markdown('<div class="section-header">Available Tools</div>', unsafe_allow_html=True)
+                        for tool in mcp_tools:
+                            st.text(f"• {tool.get('name', 'Unknown')}")
+                            st.caption(f"  {tool.get('description', 'No description')}")
+                    
+                    # Show server status
+                    servers = mcp_health.get("servers", {})
+                    if servers:
+                        st.markdown('<div class="section-header">Server Status</div>', unsafe_allow_html=True)
+                        for server_name, status in servers.items():
+                            if status.get("running", False):
+                                st.success(f"✅ {server_name}")
+                            else:
+                                st.error(f"❌ {server_name}")
+                    
+                    # Tool count
+                    st.metric("Total Tools", mcp_health.get("tools_count", 0))
+                    
+                    # Refresh button
+                    if st.button("🔄 Refresh MCP Status"):
+                        st.session_state.mcp_tools = get_mcp_tools()
+                        st.session_state.mcp_health = get_mcp_health()
+                        st.rerun()
+                else:
+                    st.warning("⚠️ MCP Tools not available")
+                    if st.button("🔄 Check MCP Status"):
+                        st.session_state.mcp_health = get_mcp_health()
+                        st.rerun()
+            else:
+                st.warning("Backend not available for MCP tools")
+        
+        # Conversations Section (Collapsible)
+        with st.expander("💬 Conversations", expanded=False):
+            if st.session_state.backend_health and st.session_state.conversations:
+                # Show "New Chat" option
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💬 New Chat", key="new_chat_sidebar"):
+                        st.session_state.messages = []
+                        st.session_state.conversation_id = None
+                        st.session_state.auto_loaded = True  # Prevent auto-loading after manual new chat
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ Delete All", key="delete_all"):
+                        # Clear all conversations from backend
+                        try:
+                            with httpx.Client() as client:
+                                response = client.delete(f"{BACKEND_URL}/api/v1/chat/conversations", timeout=5.0)
+                                if response.status_code == 200:
+                                    data = response.json()
+                                    st.session_state.conversations = []
+                                    st.session_state.messages = []
+                                    st.session_state.conversation_id = None
+                                    st.session_state.auto_loaded = True
+                                    st.success(f"✅ {data.get('message', 'All conversations deleted')}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Failed to delete conversations: {response.status_code}")
+                        except Exception as e:
+                            st.error(f"Failed to delete conversations: {str(e)}")
+                
+                # Show conversation list
+                st.markdown('<div class="section-header">Recent Conversations</div>', unsafe_allow_html=True)
+                for i, conv in enumerate(st.session_state.conversations):
+                    # Create a short title from the first message
+                    first_message = conv['messages'][0]['content'] if conv['messages'] else "Empty conversation"
+                    short_title = first_message[:30] + "..." if len(first_message) > 30 else first_message
+                    
+                    # Highlight current conversation
+                    is_current = (st.session_state.conversation_id == conv['id'])
+                    
+                    # Create clickable text with different styling for current conversation
+                    if is_current:
+                        st.markdown(f"**👈 {short_title}** *(current)*")
+                    else:
+                        # Use a small, minimal button that looks like a link
+                        if st.button(f"📝 {short_title}", key=f"conv_{i}", use_container_width=True):
+                            st.session_state.conversation_id = conv["id"]
+                            st.session_state.messages = conv["messages"]
+                            st.session_state.auto_loaded = True
+                            st.rerun()
+            else:
+                st.info("No conversations available")
+        
+        # Phase 1-3 Reasoning Sections (Moved to bottom)
+        
         # Reasoning System Section (Collapsible)
         with st.expander("🧠 Phase 1: Reasoning System", expanded=False):
             # Reasoning Chat Toggle (Always visible within the expander)
@@ -2856,256 +3074,6 @@ def main():
             else:
                 st.info("💡 Enable Phase 3 strategies for advanced reasoning capabilities")
         
-        # RAG Section (Collapsible) - Simplified for document viewing only
-        with st.expander("📚 Conversation Documents", expanded=False):
-            st.markdown('<div class="section-header">Uploaded Documents</div>', unsafe_allow_html=True)
-            st.info("💡 Use the 📄 Upload button in the main chat area to upload documents")
-            
-            if st.session_state.backend_health:
-                # Show conversation documents if we have a current conversation
-                if getattr(st.session_state, 'conversation_id', None):
-                    if st.button("🔄 Refresh Documents"):
-                        st.session_state.conversation_documents = None
-                        st.rerun()
-                    
-                    # Get conversation documents
-                    if not hasattr(st.session_state, 'conversation_documents') or st.session_state.conversation_documents is None:
-                        with st.spinner("Loading conversation documents..."):
-                            docs_result = get_conversation_documents(getattr(st.session_state, 'conversation_id', None))
-                            if docs_result.get("success"):
-                                st.session_state.conversation_documents = docs_result.get("data", {})
-                            else:
-                                st.session_state.conversation_documents = {"documents": []}
-                    
-                    # Display conversation documents
-                    if st.session_state.conversation_documents.get("documents"):
-                        for doc in st.session_state.conversation_documents["documents"]:
-                            with st.expander(f"📄 {doc['filename']} ({doc['file_type']})"):
-                                st.write(f"**Size:** {doc['file_size']} bytes")
-                                st.write(f"**Uploaded:** {doc['upload_timestamp']}")
-                                st.write(f"**Status:** {doc['processing_status']}")
-                                
-                                if doc.get('summary_text'):
-                                    st.write(f"**Summary:** {doc['summary_text']}")
-                                else:
-                                    st.info("💡 Ask 'summarize this document' in chat to generate a summary")
-                    else:
-                        st.info("No documents uploaded to this conversation yet.")
-                else:
-                    st.info("Start a conversation to see uploaded documents here.")
-                
-                # RAG Statistics
-                if st.session_state.rag_stats:
-                    st.markdown('<div class="section-header">Statistics</div>', unsafe_allow_html=True)
-                    stats = st.session_state.rag_stats
-                    st.metric("Total Documents", stats.get("total_documents", 0))
-                    st.metric("Total Chunks", stats.get("total_chunks", 0))
-                    st.metric("Vector DB Size", f"{stats.get('vector_db_size_mb', 0):.1f} MB")
-                    
-                    # Debug info (can be removed later)
-                    if st.checkbox("🔍 Show Debug Info"):
-                        st.json(stats)
-                    
-                    if st.button("🔄 Refresh RAG Stats"):
-                        # RAG service removed
-                        st.session_state.rag_stats = {}
-                        st.success("RAG service has been removed - stats cleared")
-                        st.rerun()
-            else:
-                st.warning("Backend not available for document upload")
-            
-            st.markdown('<div class="section-header">Context Awareness</div>', unsafe_allow_html=True)
-            
-            # Context Awareness Toggle
-            enable_context_awareness = st.checkbox(
-                "🧠 Enable Context Awareness",
-                value=st.session_state.enable_context_awareness,
-                help="Enable advanced context awareness features including conversation memory and user preferences"
-            )
-            if st.session_state.enable_context_awareness != enable_context_awareness:
-                st.session_state.enable_context_awareness = enable_context_awareness
-                save_user_settings()  # Save settings when changed
-            
-            if enable_context_awareness:
-                # User ID Input
-                user_id = st.text_input(
-                    "👤 User ID (Optional)",
-                    value=st.session_state.user_id or "",
-                    help="Enter a user ID for personalized context across conversations"
-                )
-                if st.session_state.user_id != (user_id if user_id else None):
-                    st.session_state.user_id = user_id if user_id else None
-                    save_user_settings()  # Save settings when changed
-                
-                # Context Strategy Selection
-                context_strategy = st.selectbox(
-                    "🎯 Context Strategy",
-                    options=["auto", "conversation_only", "memory_only", "hybrid"],
-                    index=["auto", "conversation_only", "memory_only", "hybrid"].index(st.session_state.context_strategy),
-                    help="Choose how context should be retrieved and used"
-                )
-                if st.session_state.context_strategy != context_strategy:
-                    st.session_state.context_strategy = context_strategy
-                    save_user_settings()  # Save settings when changed
-                
-                # Include Memory Toggle
-                include_memory = st.checkbox(
-                    "💾 Include Long-term Memory",
-                    value=st.session_state.include_memory,
-                    help="Include relevant information from past conversations"
-                )
-                if st.session_state.include_memory != include_memory:
-                    st.session_state.include_memory = include_memory
-                    save_user_settings()  # Save settings when changed
-                
-                # Settings Status (for testing)
-                with st.expander("🔧 Settings Status", expanded=False):
-                    st.json({
-                        "Context Awareness": st.session_state.enable_context_awareness,
-                        "Include Memory": st.session_state.include_memory,
-                        "Context Strategy": st.session_state.context_strategy,
-                        "User ID": st.session_state.user_id,
-                        "Selected Model": st.session_state.selected_model,
-                        "Temperature": st.session_state.temperature,
-                        "Use Streaming": st.session_state.use_streaming,
-                        "Use RAG": st.session_state.use_rag,
-                        "Phase 1 Reasoning": st.session_state.use_reasoning_chat,
-                        "Phase 2 Reasoning": st.session_state.use_phase2_reasoning,
-                        "Phase 2 Engine": st.session_state.selected_phase2_engine,
-                        "Phase 3 Reasoning": st.session_state.use_phase3_reasoning,
-                        "Phase 3 Strategy": st.session_state.selected_phase3_strategy
-                    })
-                
-                # Context Information Display
-                if st.session_state.context_info:
-                    with st.expander("📊 Context Information"):
-                        context = st.session_state.context_info
-                        if context.get("topics"):
-                            st.write("**Topics:**", ", ".join(context["topics"][:5]))
-                        if context.get("entities"):
-                            st.write("**Key Entities:**", ", ".join([e["text"] for e in context["entities"][:5]]))
-                        if context.get("user_preferences"):
-                            st.write("**User Preferences:**", str(context["user_preferences"]))
-            
-            st.markdown('<div class="section-header">RAG Mode</div>', unsafe_allow_html=True)
-            use_rag = st.checkbox(
-                "Enable RAG for responses",
-                value=st.session_state.use_rag,
-                help="When enabled, responses will use document context from uploaded files"
-            )
-            if st.session_state.use_rag != use_rag:
-                st.session_state.use_rag = use_rag
-                save_user_settings()  # Save settings when changed
-            
-            if use_rag:
-                if st.session_state.rag_stats.get("total_documents", 0) == 0:
-                    st.warning("⚠️ No documents uploaded. Upload documents to use RAG mode.")
-                else:
-                    st.success("✅ RAG mode enabled - responses will use document context")
-            
-            # Advanced RAG Section
-            st.markdown('<div class="section-header">🚀 Advanced RAG</div>', unsafe_allow_html=True)
-            
-            # Advanced RAG service removed
-            if st.session_state.backend_health:
-                st.info("ℹ️ Advanced RAG service has been removed - using simplified streaming chat only")
-        
-        # MCP Tools Section (Collapsible)
-        with st.expander("🛠️ MCP Tools", expanded=False):
-            # Get MCP tools and health
-            if st.session_state.backend_health:
-                mcp_tools = get_mcp_tools()
-                mcp_health = get_mcp_health()
-                
-                if mcp_health.get("mcp_enabled", False):
-                    st.success("✅ MCP Tools Available")
-                    
-                    # Show available tools
-                    if mcp_tools:
-                        st.markdown('<div class="section-header">Available Tools</div>', unsafe_allow_html=True)
-                        for tool in mcp_tools:
-                            st.text(f"• {tool.get('name', 'Unknown')}")
-                            st.caption(f"  {tool.get('description', 'No description')}")
-                    
-                    # Show server status
-                    servers = mcp_health.get("servers", {})
-                    if servers:
-                        st.markdown('<div class="section-header">Server Status</div>', unsafe_allow_html=True)
-                        for server_name, status in servers.items():
-                            if status.get("running", False):
-                                st.success(f"✅ {server_name}")
-                            else:
-                                st.error(f"❌ {server_name}")
-                    
-                    # Tool count
-                    st.metric("Total Tools", mcp_health.get("tools_count", 0))
-                    
-                    # Refresh button
-                    if st.button("🔄 Refresh MCP Status"):
-                        st.session_state.mcp_tools = get_mcp_tools()
-                        st.session_state.mcp_health = get_mcp_health()
-                        st.rerun()
-                else:
-                    st.warning("⚠️ MCP Tools not available")
-                    if st.button("🔄 Check MCP Status"):
-                        st.session_state.mcp_health = get_mcp_health()
-                        st.rerun()
-            else:
-                st.warning("Backend not available for MCP tools")
-        
-        # Conversations Section (Collapsible)
-        with st.expander("💬 Conversations", expanded=False):
-            if st.session_state.backend_health and st.session_state.conversations:
-                # Show "New Chat" option
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💬 New Chat", key="new_chat_sidebar"):
-                        st.session_state.messages = []
-                        st.session_state.conversation_id = None
-                        st.session_state.auto_loaded = True  # Prevent auto-loading after manual new chat
-                        st.rerun()
-                with col2:
-                    if st.button("🗑️ Delete All", key="delete_all"):
-                        # Clear all conversations from backend
-                        try:
-                            with httpx.Client() as client:
-                                response = client.delete(f"{BACKEND_URL}/api/v1/chat/conversations", timeout=5.0)
-                                if response.status_code == 200:
-                                    data = response.json()
-                                    st.session_state.conversations = []
-                                    st.session_state.messages = []
-                                    st.session_state.conversation_id = None
-                                    st.session_state.auto_loaded = True
-                                    st.success(f"✅ {data.get('message', 'All conversations deleted')}")
-                                    st.rerun()
-                                else:
-                                    st.error(f"Failed to delete conversations: {response.status_code}")
-                        except Exception as e:
-                            st.error(f"Failed to delete conversations: {str(e)}")
-                
-                # Show conversation list
-                st.markdown('<div class="section-header">Recent Conversations</div>', unsafe_allow_html=True)
-                for i, conv in enumerate(st.session_state.conversations):
-                    # Create a short title from the first message
-                    first_message = conv['messages'][0]['content'] if conv['messages'] else "Empty conversation"
-                    short_title = first_message[:30] + "..." if len(first_message) > 30 else first_message
-                    
-                    # Highlight current conversation
-                    is_current = (st.session_state.conversation_id == conv['id'])
-                    
-                    # Create clickable text with different styling for current conversation
-                    if is_current:
-                        st.markdown(f"**👈 {short_title}** *(current)*")
-                    else:
-                        # Use a small, minimal button that looks like a link
-                        if st.button(f"📝 {short_title}", key=f"conv_{i}", use_container_width=True):
-                            st.session_state.conversation_id = conv["id"]
-                            st.session_state.messages = conv["messages"]
-                            st.session_state.auto_loaded = True
-                            st.rerun()
-            else:
-                st.info("No conversations available")
-        
         # Settings Section (Collapsible)
         with st.expander("⚙️ Settings", expanded=False):
             # Temperature slider
@@ -3116,19 +3084,8 @@ def main():
             
             # Chat settings
             st.markdown('<div class="section-header">Chat Settings</div>', unsafe_allow_html=True)
-            use_streaming = st.checkbox(
-                "Enable Streaming Responses",
-                value=st.session_state.use_streaming,
-                help="When enabled, responses will stream in real-time as they're generated"
-            )
-            if st.session_state.use_streaming != use_streaming:
-                st.session_state.use_streaming = use_streaming
-                save_user_settings()  # Save settings when changed
-            
-            if use_streaming:
-                st.success("✅ Streaming enabled - responses will appear in real-time")
-            else:
-                st.info("⏳ Streaming disabled - responses will appear all at once")
+            st.success("✅ Streaming enabled - responses appear in real-time")
+            st.info("💡 All responses use streaming for optimal user experience")
             
             # Backend status
             st.markdown('<div class="section-header">Backend Status</div>', unsafe_allow_html=True)
@@ -3335,7 +3292,8 @@ def main():
             if temp_override == "phase3":
                 # Force Phase 3 for sample question
                 print(f"🔍 DEBUG: FORCING Phase 3 reasoning for sample question")
-                if st.session_state.use_streaming:
+                # Always use streaming
+                if True:
                     # Use streaming Phase 3 reasoning response
                     response_data = send_streaming_phase3_reasoning_chat(
                         prompt, 
@@ -3354,7 +3312,8 @@ def main():
             elif temp_override == "phase2":
                 # Force Phase 2 for sample question
                 print(f"🔍 DEBUG: FORCING Phase 2 reasoning for sample question")
-                if st.session_state.use_streaming:
+                # Always use streaming
+                if True:
                     # Use streaming Phase 2 reasoning response
                     response_data = send_streaming_phase2_reasoning_chat(
                         prompt, 
@@ -3373,8 +3332,9 @@ def main():
             elif temp_override == "phase1":
                 # Force Phase 1 for sample question
                 print(f"🔍 DEBUG: FORCING Phase 1 reasoning for sample question")
-                print(f"🔍 DEBUG: streaming enabled: {st.session_state.use_streaming}")
-                if st.session_state.use_streaming:
+                print(f"🔍 DEBUG: streaming always enabled")
+                # Always use streaming
+                if True:
                     # Use streaming reasoning response
                     print(f"🔍 DEBUG: Calling send_streaming_reasoning_chat for Phase 1")
                     with st.spinner("🧠 Thinking step by step..."):
@@ -3387,7 +3347,8 @@ def main():
                         response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
             elif st.session_state.use_phase3_reasoning:
                 # Use Phase 3 advanced reasoning strategies for complex problem solving
-                if st.session_state.use_streaming:
+                # Always use streaming
+                if True:
                     # Use streaming Phase 3 reasoning response
                     response_data = send_streaming_phase3_reasoning_chat(
                         prompt, 
@@ -3405,7 +3366,8 @@ def main():
                         )
             elif st.session_state.use_phase2_reasoning:
                 # Use Phase 2 reasoning engines for specialized problem solving
-                if st.session_state.use_streaming:
+                # Always use streaming
+                if True:
                     # Use streaming Phase 2 reasoning response
                     response_data = send_streaming_phase2_reasoning_chat(
                         prompt, 
@@ -3423,7 +3385,8 @@ def main():
                         )
             elif st.session_state.use_reasoning_chat:
                 # Use reasoning chat for step-by-step solutions
-                if st.session_state.use_streaming:
+                # Always use streaming
+                if True:
                     # Use streaming reasoning response
                     with st.spinner("🧠 Thinking step by step..."):
                         response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
@@ -3438,38 +3401,15 @@ def main():
                     with st.spinner("🚀 Thinking with Advanced RAG..."):
                         response_data = send_advanced_rag_chat(prompt, st.session_state.conversation_id)
                 else:
-                    # Use basic RAG
-                    if st.session_state.use_streaming:
-                        # Use streaming RAG response
-                        with st.spinner("Thinking with RAG..."):
-                            response_data = send_streaming_rag_chat(prompt, st.session_state.conversation_id)
-                    else:
-                        # Use regular non-streaming RAG response
-                        with st.spinner("Thinking with RAG..."):
-                            response_data = send_rag_chat(prompt, st.session_state.conversation_id)
+                    # Use basic RAG (always streaming)
+                    with st.spinner("Thinking with RAG..."):
+                        response_data = send_streaming_rag_chat(prompt, st.session_state.conversation_id)
             else:
-                # Use streaming or regular response based on setting
-                if st.session_state.use_reasoning_chat:
-                    # Use reasoning chat
-                    if st.session_state.use_streaming:
-                        # Use streaming reasoning response
-                        response_data = send_streaming_reasoning_chat(prompt, st.session_state.conversation_id)
-                    else:
-                        # Use regular non-streaming reasoning response
-                        with st.spinner("Thinking with reasoning..."):
-                            response_data = send_reasoning_chat(prompt, st.session_state.conversation_id, use_streaming=False)
-                else:
-                    # Use regular chat
-                    if st.session_state.use_streaming:
-                        # Use streaming response
-                        response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
-                    else:
-                        # Use regular non-streaming response
-                        with st.spinner("Thinking..."):
-                            response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=False)
+                # Use streaming chat (always enabled)
+                response_data = send_to_backend(prompt, st.session_state.conversation_id, use_streaming=True)
             
             # Handle streaming responses differently since they're already displayed
-            if temp_override == "phase1" and st.session_state.use_streaming:
+            if temp_override == "phase1":
                 # For streaming Phase 1 reasoning, handle the generator response
                 print(f"🔍 DEBUG: Handling Phase 1 streaming response")
                 print(f"🔍 DEBUG: response_data type: {type(response_data)}")
@@ -3557,7 +3497,7 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-            elif st.session_state.use_streaming and not st.session_state.use_reasoning_chat and not st.session_state.use_rag:
+            elif not st.session_state.use_reasoning_chat and not st.session_state.use_rag:
                 # Handle basic streaming chat response
                 print(f"🔍 DEBUG: Handling basic streaming chat response")
                 if response_data and not response_data.get("response", "").startswith("❌"):
@@ -3585,7 +3525,7 @@ def main():
                     
                     # Reset generating state on error
                     st.session_state.is_generating = False
-            elif temp_override == "phase2" and st.session_state.use_streaming:
+            elif temp_override == "phase2":
                 # For streaming Phase 2 reasoning, the function handles its own display
                 print(f"🔍 DEBUG: Handling Phase 2 streaming response")
                 
@@ -3628,7 +3568,7 @@ def main():
                     
                     # Force rerun to update sidebar
                     st.rerun()
-            elif temp_override == "phase3" and st.session_state.use_streaming:
+            elif temp_override == "phase3":
                 # For streaming Phase 3 reasoning, the function handles its own display
                 print(f"🔍 DEBUG: Handling Phase 3 streaming response")
                 print(f"🔍 DEBUG: response_data = {response_data}")
@@ -3679,7 +3619,7 @@ def main():
                     
                     # Reset generating state
                     st.session_state.is_generating = False
-            elif st.session_state.use_phase2_reasoning and st.session_state.use_streaming:
+            elif st.session_state.use_phase2_reasoning:
                 # For streaming Phase 2 reasoning, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -3737,7 +3677,7 @@ def main():
                     
                     # Reset generating state on error
                     st.session_state.is_generating = False
-            elif st.session_state.use_rag and st.session_state.use_streaming and st.session_state.rag_stats.get("total_documents", 0) > 0:
+            elif st.session_state.use_rag and st.session_state.rag_stats.get("total_documents", 0) > 0:
                 # For streaming RAG, the response is already displayed in real-time
                 if response_data and not response_data.get("response", "").startswith("❌"):
                     # Update conversation ID if provided
@@ -3817,7 +3757,7 @@ def main():
                     
                     # Reset generating state on error
                     st.session_state.is_generating = False
-            elif st.session_state.use_reasoning_chat and st.session_state.use_streaming:
+            elif st.session_state.use_reasoning_chat:
                 # Handle streaming reasoning responses
                 # Create a placeholder for the assistant message
                 with st.chat_message("assistant"):
@@ -3971,8 +3911,8 @@ def main():
                     # Refresh conversation list to include the new conversation
                     st.session_state.conversations = get_conversations()
                     
-                    # Display assistant response (if not already displayed via streaming)
-                    if not st.session_state.use_streaming:
+                    # Display assistant response (streaming responses are handled separately)
+                    if False:  # This block is no longer needed since streaming is always enabled
                         with st.chat_message("assistant"):
                             st.markdown(response_data["response"])
                     
