@@ -41,10 +41,12 @@ async def startup_event():
         # Auto-run migrations (can be disabled with AUTO_MIGRATE=false)
         auto_migrate = os.getenv("AUTO_MIGRATE", "true").lower() == "true"
         if auto_migrate:
-            print("🔄 Running database migrations...")
             from alembic.config import Config
             from alembic import command
+            from alembic.script import ScriptDirectory
+            from alembic.runtime.migration import MigrationContext
             from pathlib import Path
+            from sqlalchemy import create_engine
             
             # Get the backend directory path
             backend_dir = Path(__file__).parent.parent
@@ -55,8 +57,22 @@ async def startup_event():
             alembic_cfg.set_main_option("script_location", str(alembic_dir))
             
             try:
-                command.upgrade(alembic_cfg, "head")
-                print("✅ Database migrations completed successfully")
+                # Check if migrations are needed
+                script = ScriptDirectory.from_config(alembic_cfg)
+                
+                # Get database engine
+                from app.core.database import engine
+                with engine.connect() as connection:
+                    context = MigrationContext.configure(connection)
+                    current_rev = context.get_current_revision()
+                    head_rev = script.get_current_head()
+                    
+                    if current_rev == head_rev:
+                        print("✅ Database schema is up to date")
+                    else:
+                        print(f"🔄 Running database migrations ({current_rev or 'empty'} → {head_rev})...")
+                        command.upgrade(alembic_cfg, "head")
+                        print("✅ Database migrations completed successfully")
             except Exception as migration_error:
                 print(f"⚠️  Migration warning: {migration_error}")
                 print("💡 Tip: Run 'python migrate_db.py' to manually migrate or set AUTO_MIGRATE=false to disable")
