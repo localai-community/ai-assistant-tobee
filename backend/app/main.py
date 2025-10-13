@@ -37,6 +37,31 @@ async def startup_event():
     try:
         init_db()
         print("✅ Database initialized successfully")
+        
+        # Auto-run migrations (can be disabled with AUTO_MIGRATE=false)
+        auto_migrate = os.getenv("AUTO_MIGRATE", "true").lower() == "true"
+        if auto_migrate:
+            print("🔄 Running database migrations...")
+            from alembic.config import Config
+            from alembic import command
+            from pathlib import Path
+            
+            # Get the backend directory path
+            backend_dir = Path(__file__).parent.parent
+            alembic_ini = backend_dir / "alembic.ini"
+            alembic_dir = backend_dir / "alembic"
+            
+            alembic_cfg = Config(str(alembic_ini))
+            alembic_cfg.set_main_option("script_location", str(alembic_dir))
+            
+            try:
+                command.upgrade(alembic_cfg, "head")
+                print("✅ Database migrations completed successfully")
+            except Exception as migration_error:
+                print(f"⚠️  Migration warning: {migration_error}")
+                print("💡 Tip: Run 'python migrate_db.py' to manually migrate or set AUTO_MIGRATE=false to disable")
+        else:
+            print("ℹ️  Auto-migration disabled (AUTO_MIGRATE=false)")
     except Exception as e:
         print(f"❌ Failed to initialize database: {e}")
 
