@@ -255,12 +255,17 @@ def get_default_user_settings():
         "use_phase3_reasoning": False,
         "selected_phase2_engine": "auto",
         "selected_phase3_strategy": "auto",
+        "use_unified_reasoning": False,
+        "selected_reasoning_mode": "auto",
         "temperature": 0.7
     }
 
 def save_user_settings():
     """Save current user settings to database."""
     try:
+        # Sync user_id to URL for persistence across page refreshes
+        sync_user_id_to_url()
+        
         settings = {
             "enable_context_awareness": st.session_state.enable_context_awareness,
             "include_memory": st.session_state.include_memory,
@@ -317,6 +322,15 @@ def load_user_settings_from_database(user_id: str):
         st.error(f"Error loading settings: {str(e)}")
         return get_default_user_settings()
 
+def sync_user_id_to_url():
+    """Sync user_id to URL query params for persistence across refreshes."""
+    if "user_id" in st.session_state and st.session_state.user_id:
+        # Update URL to include user_id
+        current_params = dict(st.query_params)
+        if current_params.get("uid") != st.session_state.user_id:
+            current_params["uid"] = st.session_state.user_id
+            st.query_params.update(current_params)
+
 def init_session_state():
     """Initialize session state variables with persistent settings."""
     default_settings = get_default_user_settings()
@@ -351,10 +365,19 @@ def init_session_state():
     if "context_info" not in st.session_state:
         st.session_state.context_info = {}
     
-    # Initialize user settings with defaults first
+    # Initialize user_id from URL query params if available
+    # This needs to happen before loading other settings
+    query_params = st.query_params
+    stored_user_id = query_params.get("uid", None)
+    
+    # Initialize user settings with defaults first, but use stored_user_id if available
     for key, default_value in default_settings.items():
         if key not in st.session_state:
-            st.session_state[key] = default_value
+            # Use stored user_id from URL if available, otherwise use default
+            if key == "user_id" and stored_user_id:
+                st.session_state[key] = stored_user_id
+            else:
+                st.session_state[key] = default_value
     
     # Load settings from database if not already loaded
     if "settings_loaded" not in st.session_state:
@@ -2582,6 +2605,34 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
+        # User ID Input - at the top for easy access
+        st.markdown("---")
+        st.markdown("### 👤 User ID")
+        user_id = st.text_input(
+            "Enter your User ID:",
+            value=st.session_state.user_id or "",
+            help="Your user ID for personalized settings and context across conversations",
+            key="navbar_user_id"
+        )
+        if st.session_state.user_id != (user_id if user_id else None):
+            # User ID changed - load the new user's settings
+            old_user_id = st.session_state.user_id
+            st.session_state.user_id = user_id if user_id else None
+            
+            # Sync to URL
+            sync_user_id_to_url()
+            
+            # Load settings for the new user from database
+            db_settings = load_user_settings_from_database(st.session_state.user_id)
+            
+            # Apply the new user's settings to session state
+            for key, value in db_settings.items():
+                if key != "user_id" and key in st.session_state:
+                    st.session_state[key] = value
+            
+            st.success(f"✅ Switched to user: {st.session_state.user_id}")
+            st.rerun()
+        
         # Model Selection at the top
         st.markdown("---")
         st.markdown("### 🤖 Model Selection")
@@ -2691,16 +2742,6 @@ def main():
                 save_user_settings()  # Save settings when changed
             
             if enable_context_awareness:
-                # User ID Input
-                user_id = st.text_input(
-                    "👤 User ID (Optional)",
-                    value=st.session_state.user_id or "",
-                    help="Enter a user ID for personalized context across conversations"
-                )
-                if st.session_state.user_id != (user_id if user_id else None):
-                    st.session_state.user_id = user_id if user_id else None
-                    save_user_settings()  # Save settings when changed
-                
                 # Context Strategy Selection
                 context_strategy = st.selectbox(
                     "🎯 Context Strategy",
