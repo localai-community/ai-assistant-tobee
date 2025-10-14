@@ -148,6 +148,8 @@ class UserSettingsBase(BaseModel):
     use_phase3_reasoning: bool = False
     selected_phase2_engine: str = "auto"
     selected_phase3_strategy: str = "auto"
+    use_unified_reasoning: bool = False
+    selected_reasoning_mode: str = "auto"
     temperature: float = 0.7
 
 class UserSettingsCreate(UserSettingsBase):
@@ -166,6 +168,8 @@ class UserSettingsUpdate(BaseModel):
     use_phase3_reasoning: Optional[bool] = None
     selected_phase2_engine: Optional[str] = None
     selected_phase3_strategy: Optional[str] = None
+    use_unified_reasoning: Optional[bool] = None
+    selected_reasoning_mode: Optional[str] = None
     temperature: Optional[float] = None
 
 class UserSettingsResponse(UserSettingsBase):

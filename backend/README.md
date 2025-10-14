@@ -40,6 +40,8 @@ uvicorn app.main:app --reload
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+**Note:** Database migrations run automatically on startup. See [MIGRATIONS.md](MIGRATIONS.md) for manual migration options.
+
 ### Docker
 
 ```bash

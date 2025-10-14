@@ -18,6 +18,8 @@ class UserSettings(Base):
     use_phase3_reasoning = Column(Boolean, default=False)
     selected_phase2_engine = Column(String(50), default="auto")
     selected_phase3_strategy = Column(String(50), default="auto")
+    use_unified_reasoning = Column(Boolean, default=False)
+    selected_reasoning_mode = Column(String(50), default="auto")
     temperature = Column(Float, default=0.7)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -38,6 +40,8 @@ class UserSettings(Base):
             "use_phase3_reasoning": self.use_phase3_reasoning,
             "selected_phase2_engine": self.selected_phase2_engine,
             "selected_phase3_strategy": self.selected_phase3_strategy,
+            "use_unified_reasoning": self.use_unified_reasoning,
+            "selected_reasoning_mode": self.selected_reasoning_mode,
             "temperature": self.temperature,
             "created_at": self.created_at,
             "updated_at": self.updated_at
