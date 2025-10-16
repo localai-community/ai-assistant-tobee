@@ -174,7 +174,10 @@ export default function Sidebar({
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'conversations' ? styles.active : ''}`}
-          onClick={() => setActiveTab('conversations')}
+          onClick={() => {
+            setActiveTab('conversations');
+            refreshConversations();
+          }}
         >
           💬 Conversations
         </button>

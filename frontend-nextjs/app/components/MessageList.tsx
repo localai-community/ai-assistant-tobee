@@ -10,9 +10,10 @@ interface MessageListProps {
   currentMessage: string;
   isLoading: boolean;
   error: string | null;
+  onSendMessage?: (message: string) => void;
 }
 
-export default function MessageList({ messages, currentMessage, isLoading, error }: MessageListProps) {
+export default function MessageList({ messages, currentMessage, isLoading, error, onSendMessage }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -32,16 +33,32 @@ export default function MessageList({ messages, currentMessage, isLoading, error
         <div className={styles.samplePrompts}>
           <h4>Try these sample prompts:</h4>
           <div className={styles.promptGrid}>
-            <button className={styles.samplePrompt}>
+            <button 
+              className={styles.samplePrompt}
+              onClick={() => onSendMessage?.("Explain quantum computing in simple terms")}
+              disabled={isLoading}
+            >
               "Explain quantum computing in simple terms"
             </button>
-            <button className={styles.samplePrompt}>
+            <button 
+              className={styles.samplePrompt}
+              onClick={() => onSendMessage?.("Help me write a Python function")}
+              disabled={isLoading}
+            >
               "Help me write a Python function"
             </button>
-            <button className={styles.samplePrompt}>
+            <button 
+              className={styles.samplePrompt}
+              onClick={() => onSendMessage?.("What are the latest trends in AI?")}
+              disabled={isLoading}
+            >
               "What are the latest trends in AI?"
             </button>
-            <button className={styles.samplePrompt}>
+            <button 
+              className={styles.samplePrompt}
+              onClick={() => onSendMessage?.("Summarize this document")}
+              disabled={isLoading}
+            >
               "Summarize this document" (after uploading)
             </button>
           </div>

@@ -140,12 +140,13 @@ export default function ChatInterface() {
 
         {/* Messages */}
         <div className={styles.messagesContainer}>
-          <MessageList
-            messages={messages}
-            currentMessage={currentMessage}
-            isLoading={isLoading}
-            error={error}
-          />
+        <MessageList 
+          messages={messages}
+          currentMessage={currentMessage}
+          isLoading={isLoading}
+          error={error}
+          onSendMessage={handleSendMessage}
+        />
         </div>
 
         {/* Input */}
