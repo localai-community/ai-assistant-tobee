@@ -68,7 +68,8 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
             from datetime import datetime
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                model=request.model
+                model=request.model,
+                user_id=request.user_id
             )
             conversation = chat_service.conversation_repo.create_conversation(conversation_data)
             conversation_id = conversation.id
@@ -181,20 +182,21 @@ async def chat_health(db: Session = Depends(get_db)):
         }
 
 @router.get("/conversations", response_model=List[Conversation])
-async def list_conversations(db: Session = Depends(get_db)):
+async def list_conversations(user_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    List all conversations.
+    List conversations, optionally filtered by user.
     
     Args:
+        user_id: Optional user ID to filter conversations
         db: Database session
         
     Returns:
-        List[Conversation]: All conversations
+        List[Conversation]: Conversations for the specified user (or all if no user_id)
     """
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         chat_service = ChatService(ollama_url=ollama_url, db=db)
-        return chat_service.list_conversations()
+        return chat_service.list_conversations(user_id=user_id)
     except Exception as e:
         logger.error(f"Failed to list conversations: {e}")
         raise HTTPException(status_code=500, detail=str(e))

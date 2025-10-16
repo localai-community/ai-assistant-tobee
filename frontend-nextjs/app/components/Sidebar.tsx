@@ -17,6 +17,7 @@ interface SidebarProps {
   onNewConversation?: () => void;
   onUserIdChange?: (userId: string) => void;
   currentConversationId?: string | null;
+  currentUserId?: string;
   isOpen: boolean;
 }
 
@@ -29,6 +30,7 @@ export default function Sidebar({
   onNewConversation,
   onUserIdChange,
   currentConversationId,
+  currentUserId,
   isOpen 
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'settings' | 'conversations'>('settings');
@@ -36,7 +38,7 @@ export default function Sidebar({
   const [isManualInput, setIsManualInput] = useState(false);
   const [manualUserId, setManualUserId] = useState('');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const { conversations, isLoading, error, refreshConversations } = useConversations();
+  const { conversations, isLoading, error, refreshConversations } = useConversations(currentUserId);
   const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
@@ -65,7 +67,7 @@ export default function Sidebar({
     const newUserId = event.target.value;
     if (onUserIdChange && newUserId !== settings.user_id) {
       onUserIdChange(newUserId);
-      setUserIdChangeMessage(`✅ Switched to user: ${newUserId || 'default-user'}`);
+      setUserIdChangeMessage(`✅ Switched to user: ${newUserId || 'guest'}`);
       // Clear message after 3 seconds
       setTimeout(() => setUserIdChangeMessage(null), 3000);
     }

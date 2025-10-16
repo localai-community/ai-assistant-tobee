@@ -100,6 +100,7 @@ export interface ChatRequest {
   message: string;
   model?: string;
   temperature?: number;
+  user_id?: string;
   use_rag?: boolean;
   use_advanced_rag?: boolean;
   use_phase2_reasoning?: boolean;

@@ -6,10 +6,11 @@ interface UseChatOptions {
   initialMessages?: Message[];
   conversationId?: string;
   userSettings?: UserSettings;
+  userId?: string;
 }
 
 export function useChat(options: UseChatOptions = {}) {
-  const { initialMessages = [], conversationId: initialConversationId, userSettings } = options;
+  const { initialMessages = [], conversationId: initialConversationId, userSettings, userId } = options;
   
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId || null);
@@ -151,10 +152,11 @@ export function useChat(options: UseChatOptions = {}) {
 
       // Prepare chat request
       const chatRequest: ChatRequest = {
-        conversation_id: currentConversationId,
+        conversation_id: currentConversationId || undefined,
         message,
         model: userSettings?.selected_model || 'llama3.2',
         temperature: userSettings?.temperature || 0.7,
+        user_id: userId,
         use_rag: userSettings?.use_rag || false,
         use_advanced_rag: userSettings?.use_advanced_rag || false,
         use_phase2_reasoning: userSettings?.use_phase2_reasoning || false,

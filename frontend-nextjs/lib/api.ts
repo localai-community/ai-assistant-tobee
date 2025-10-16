@@ -71,6 +71,23 @@ export async function getConversation(conversationId: string): Promise<Conversat
   return response.data;
 }
 
+// User Session operations
+export async function getCurrentUser(sessionKey: string = 'default_session'): Promise<string | null> {
+  try {
+    const response: AxiosResponse<{ current_user_id: string }> = await api.get(`/api/user-sessions/${sessionKey}`);
+    return response.data.current_user_id;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return null; // Session not found
+    }
+    throw error;
+  }
+}
+
+export async function setCurrentUser(userId: string, sessionKey: string = 'default_session'): Promise<void> {
+  await api.post(`/api/user-sessions/${sessionKey}/set-user/${userId}`);
+}
+
 export async function updateConversation(conversationId: string, data: Partial<Conversation>): Promise<Conversation> {
   const response: AxiosResponse<Conversation> = await api.put(`/api/chat/conversations/${conversationId}`, data);
   return response.data;

@@ -36,7 +36,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, description="Model temperature (0.0-1.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     conversation_id: Optional[str] = Field(default=None, description="Conversation ID for context")
-    user_id: Optional[str] = Field(default="leia", description="User ID for personalized context")
+    user_id: Optional[str] = Field(default="00000000-0000-0000-0000-000000000001", description="User ID for personalized context")
     # RAG parameters
     k: Optional[int] = Field(default=None, description="Number of documents to retrieve for RAG")
     filter_dict: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filter for RAG")
@@ -351,7 +351,7 @@ class ChatService:
         enable_context_awareness: bool = True,
         include_memory: bool = False,
         context_strategy: str = "conversation_only",
-        user_id: Optional[str] = "leia"
+        user_id: Optional[str] = "00000000-0000-0000-0000-000000000001"
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from Ollama."""
         
@@ -614,10 +614,10 @@ class ChatService:
         # Return True if any indicator suggests incompleteness
         return any(incomplete_indicators)
     
-    def list_conversations(self) -> List[Conversation]:
-        """List all conversations."""
+    def list_conversations(self, user_id: Optional[str] = None) -> List[Conversation]:
+        """List conversations, optionally filtered by user."""
         if self.conversation_repo:
-            return self.conversation_repo.get_conversations()
+            return self.conversation_repo.get_conversations(user_id=user_id)
         return []
     
     def delete_conversation(self, conversation_id: str) -> bool:

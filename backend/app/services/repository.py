@@ -8,8 +8,8 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk
-from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate
+from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk, UserSession
+from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate, UserSessionCreate, UserSessionUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -287,4 +287,72 @@ class DocumentChunkRepository:
         except Exception as e:
             self.db.rollback()
             logger.error(f"Error deleting document chunks: {e}")
+            raise
+
+class UserSessionRepository:
+    """Repository for user session operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def create_session(self, session: UserSessionCreate) -> UserSession:
+        """Create a new user session."""
+        db_session = UserSession(
+            session_key=session.session_key,
+            current_user_id=session.current_user_id
+        )
+        self.db.add(db_session)
+        self.db.commit()
+        self.db.refresh(db_session)
+        return db_session
+    
+    def get_session(self, session_key: str) -> Optional[UserSession]:
+        """Get a user session by session key."""
+        return self.db.query(UserSession).filter(
+            UserSession.session_key == session_key
+        ).first()
+    
+    def update_session(self, session_key: str, update_data: UserSessionUpdate) -> Optional[UserSession]:
+        """Update a user session."""
+        try:
+            session = self.get_session(session_key)
+            if not session:
+                return None
+            
+            if update_data.current_user_id is not None:
+                session.current_user_id = update_data.current_user_id
+            
+            session.updated_at = datetime.now()
+            self.db.commit()
+            self.db.refresh(session)
+            return session
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating user session: {e}")
+            raise
+    
+    def upsert_session(self, session_key: str, current_user_id: str) -> UserSession:
+        """Create or update a user session."""
+        try:
+            session = self.get_session(session_key)
+            if session:
+                # Update existing session
+                session.current_user_id = current_user_id
+                session.updated_at = datetime.now()
+                self.db.commit()
+                self.db.refresh(session)
+                return session
+            else:
+                # Create new session
+                new_session = UserSession(
+                    session_key=session_key,
+                    current_user_id=current_user_id
+                )
+                self.db.add(new_session)
+                self.db.commit()
+                self.db.refresh(new_session)
+                return new_session
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error upserting user session: {e}")
             raise 

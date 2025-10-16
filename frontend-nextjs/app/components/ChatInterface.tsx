@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useChat } from '../../lib/hooks/useChat';
 import { useSettings } from '../../lib/hooks/useSettings';
+import { useCurrentUser } from '../../lib/hooks/useCurrentUser';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import Sidebar from './Sidebar';
 import styles from './ChatInterface.module.css';
 
 export default function ChatInterface() {
-  const [currentUserId, setCurrentUserId] = useState('default-user');
+  const { currentUserId, saveCurrentUser, isLoading: userLoading } = useCurrentUser();
   const { settings, updateSetting } = useSettings(currentUserId);
   const {
     messages,
@@ -23,7 +24,7 @@ export default function ChatInterface() {
     loadMessages,
     stopGeneration,
     setConversationId
-  } = useChat({ userSettings: settings });
+  } = useChat({ userSettings: settings, userId: currentUserId });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -53,8 +54,8 @@ export default function ChatInterface() {
 
   const handleUserIdChange = async (newUserId: string) => {
     if (newUserId !== currentUserId) {
-      // Update the current user ID state
-      setCurrentUserId(newUserId);
+      // Save the new user to the database
+      await saveCurrentUser(newUserId);
       
       // Clear current conversation to start fresh with new user
       setConversationId(null);
@@ -69,6 +70,24 @@ export default function ChatInterface() {
     }
   };
 
+  // Show loading state while user is being loaded
+  if (userLoading) {
+    return (
+      <div className={styles.container}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          fontSize: '18px',
+          color: '#666'
+        }}>
+          Loading user session...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       {/* Sidebar */}
@@ -82,6 +101,7 @@ export default function ChatInterface() {
           onNewConversation={handleNewConversation}
           onUserIdChange={handleUserIdChange}
           currentConversationId={conversationId}
+          currentUserId={currentUserId}
           isOpen={sidebarOpen}
         />
       </div>

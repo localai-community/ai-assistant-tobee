@@ -109,4 +109,20 @@ class DocumentChunk(Base):
     document = relationship("ChatDocument", backref="chunks")
     
     def __repr__(self):
-        return f"<DocumentChunk(id={self.id}, document_id='{self.document_id}', chunk_index={self.chunk_index})>" 
+        return f"<DocumentChunk(id={self.id}, document_id='{self.document_id}', chunk_index={self.chunk_index})>"
+
+class UserSession(Base):
+    """User session model for storing current user state."""
+    __tablename__ = "user_sessions"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    session_key = Column(String(100), unique=True, nullable=False, index=True)  # e.g., "default_session"
+    current_user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    user = relationship("User", backref="sessions")
+    
+    def __repr__(self):
+        return f"<UserSession(id={self.id}, session_key='{self.session_key}', current_user_id='{self.current_user_id}')>" 

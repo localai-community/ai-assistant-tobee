@@ -155,6 +155,24 @@ class UserSettingsBase(BaseModel):
 class UserSettingsCreate(UserSettingsBase):
     pass
 
+class UserSessionBase(BaseModel):
+    session_key: str = Field(..., max_length=100)
+    current_user_id: str = Field(..., max_length=36)
+
+class UserSessionCreate(UserSessionBase):
+    pass
+
+class UserSessionUpdate(BaseModel):
+    current_user_id: Optional[str] = Field(None, max_length=36)
+
+class UserSession(UserSessionBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 class UserSettingsUpdate(BaseModel):
     enable_context_awareness: Optional[bool] = None
     include_memory: Optional[bool] = None
