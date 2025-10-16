@@ -47,7 +47,7 @@ export default function Sidebar({
   const [usernameExists, setUsernameExists] = useState<boolean>(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState<boolean>(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { conversations, isLoading, error, refreshConversations } = useConversations(currentUserId);
+  const { conversations, isLoading, error, refreshConversations, deleteConversation } = useConversations(currentUserId);
   const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
 
   // Cleanup timeout on unmount
@@ -255,6 +255,29 @@ export default function Sidebar({
   const handleDeleteModalClose = () => {
     setDeleteModalOpen(false);
     setUserToDelete(null);
+  };
+
+  const handleDeleteConversation = async (conversationId: string, event: React.MouseEvent) => {
+    console.log('Delete button clicked for conversation:', conversationId);
+    event.stopPropagation(); // Prevent conversation selection
+    
+    const conversation = conversations.find(c => c.id === conversationId);
+    const conversationTitle = conversation ? formatConversationTitle(conversation) : 'this conversation';
+    
+    console.log('Attempting to delete conversation:', conversationTitle);
+    
+    if (confirm(`Are you sure you want to delete "${conversationTitle}"? This action cannot be undone.`)) {
+      try {
+        console.log('User confirmed deletion, calling deleteConversation API...');
+        await deleteConversation(conversationId);
+        console.log('Conversation deleted successfully');
+      } catch (error) {
+        console.error('Failed to delete conversation:', error);
+        alert('Failed to delete conversation. Please try again.');
+      }
+    } else {
+      console.log('User cancelled deletion');
+    }
   };
 
   const formatConversationTitle = (conversation: Conversation) => {
@@ -590,8 +613,20 @@ export default function Sidebar({
                         className={`${styles.conversationItem} ${isCurrent ? styles.currentConversation : ''}`}
                         onClick={() => handleConversationSelect(conversation.id)}
                       >
-                        <div className={styles.conversationTitle}>
-                          {formatConversationTitle(conversation)}
+                        <div className={styles.conversationHeader}>
+                          <div className={styles.conversationTitle}>
+                            {formatConversationTitle(conversation)}
+                          </div>
+                          {!isCurrent && (
+                            <button
+                              className={styles.deleteConversationButton}
+                              onClick={(e) => handleDeleteConversation(conversation.id, e)}
+                              title="Delete conversation"
+                              aria-label="Delete conversation"
+                            >
+                              🗑️
+                            </button>
+                          )}
                         </div>
                         <div className={styles.conversationMeta}>
                           <span className={styles.conversationModel}>

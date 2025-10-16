@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '../types';
-import { getConversations } from '../api';
+import { getConversations, deleteConversation } from '../api';
 
 export function useConversations(userId?: string) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -26,6 +26,26 @@ export function useConversations(userId?: string) {
     fetchConversations();
   }, [fetchConversations]);
 
+  const removeConversation = useCallback(async (conversationId: string) => {
+    try {
+      console.log('useConversations: Calling deleteConversation API for:', conversationId);
+      await deleteConversation(conversationId);
+      console.log('useConversations: API call successful, updating local state');
+      // Remove the conversation from local state
+      setConversations(prev => {
+        const filtered = prev.filter(conv => conv.id !== conversationId);
+        console.log('useConversations: Updated conversations count:', filtered.length);
+        return filtered;
+      });
+      // Clear any error state after successful deletion
+      setError(null);
+    } catch (err) {
+      console.error('useConversations: Error deleting conversation:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete conversation');
+      throw err; // Re-throw so the UI can handle the error
+    }
+  }, []);
+
   // Fetch conversations on mount and when userId changes
   useEffect(() => {
     fetchConversations();
@@ -35,6 +55,7 @@ export function useConversations(userId?: string) {
     conversations,
     isLoading,
     error,
-    refreshConversations
+    refreshConversations,
+    deleteConversation: removeConversation
   };
 }

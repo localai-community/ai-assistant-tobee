@@ -450,6 +450,14 @@
   border-color: var(--accent-color);
 }
 
+.conversationHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
 .conversationTitle {
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -460,6 +468,8 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  flex: 1;
+  min-width: 0;
 }
 
 .conversationMeta {
@@ -486,6 +496,34 @@
   top: var(--spacing-xs);
   right: var(--spacing-xs);
   font-size: var(--font-size-sm);
+}
+
+/* Delete button - only shown for inactive conversations */
+.deleteConversationButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  opacity: 0.6;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+}
+
+.deleteConversationButton:hover {
+  opacity: 1;
+  background-color: var(--error-color-light, rgba(220, 53, 69, 0.1));
+  transform: scale(1.1);
+}
+
+.deleteConversationButton:active {
+  transform: scale(0.95);
 }
 
 /* Mobile responsiveness */
@@ -544,6 +582,12 @@
   .rangeValue {
     font-size: var(--font-size-xs);
     min-width: 25px;
+  }
+
+  .deleteConversationButton {
+    min-width: 20px;
+    height: 20px;
+    font-size: var(--font-size-xs);
   }
 }
 
