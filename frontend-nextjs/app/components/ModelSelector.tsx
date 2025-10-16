@@ -1,0 +1,92 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { getAvailableModels } from '../../lib/api';
+import styles from './ModelSelector.module.css';
+
+interface ModelSelectorProps {
+  selectedModel: string;
+  onModelChange: (model: string) => void;
+}
+
+export default function ModelSelector({ selectedModel, onModelChange }: ModelSelectorProps) {
+  const [models, setModels] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const availableModels = await getAvailableModels();
+        setModels(availableModels);
+        
+        // If selected model is not in the list, add it
+        if (selectedModel && !availableModels.includes(selectedModel)) {
+          setModels(prev => [selectedModel, ...prev]);
+        }
+      } catch (err) {
+        console.error('Error loading models:', err);
+        setError('Failed to load models');
+        // Fallback to common models
+        setModels(['llama3.2', 'llama2', 'codellama', 'mistral']);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadModels();
+  }, [selectedModel]);
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onModelChange(e.target.value);
+  };
+
+  if (isLoading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loading}>
+          <span className={styles.spinner}>⏳</span>
+          <span>Loading models...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.error}>
+          <span>⚠️</span>
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.container}>
+      <select
+        value={selectedModel}
+        onChange={handleModelChange}
+        className={styles.select}
+        disabled={models.length === 0}
+      >
+        {models.map((model) => (
+          <option key={model} value={model}>
+            {model}
+          </option>
+        ))}
+      </select>
+      
+      {models.length > 0 && (
+        <div className={styles.modelInfo}>
+          <small>
+            {models.length} model{models.length !== 1 ? 's' : ''} available
+          </small>
+        </div>
+      )}
+    </div>
+  );
+}

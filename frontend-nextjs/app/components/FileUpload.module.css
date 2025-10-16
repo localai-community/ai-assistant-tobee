@@ -1,0 +1,115 @@
+.container {
+  position: relative;
+}
+
+.uploadButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: var(--font-size-lg);
+}
+
+.uploadButton:hover:not(.disabled) {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  transform: translateY(-1px);
+}
+
+.uploadButton.dragOver {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  transform: scale(1.05);
+}
+
+.uploadButton.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.uploadIcon {
+  font-size: var(--font-size-base);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.dragOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.dragMessage {
+  background-color: var(--bg-primary);
+  border: 2px dashed var(--accent-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  max-width: 400px;
+  margin: var(--spacing-md);
+}
+
+.dragIcon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: var(--spacing-md);
+}
+
+.dragMessage p {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.dragMessage small {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .uploadButton {
+    width: 32px;
+    height: 32px;
+    font-size: var(--font-size-base);
+  }
+
+  .uploadIcon {
+    font-size: var(--font-size-sm);
+  }
+
+  .dragMessage {
+    padding: var(--spacing-lg);
+    margin: var(--spacing-sm);
+  }
+
+  .dragIcon {
+    font-size: 2rem;
+  }
+
+  .dragMessage p {
+    font-size: var(--font-size-base);
+  }
+}

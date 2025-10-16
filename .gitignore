@@ -231,3 +231,6 @@ docs/*.pdf
 
 # Git workflow helper (optional - can be committed if desired)
 # git_workflow.sh
+
+node_modules/
+.next/
