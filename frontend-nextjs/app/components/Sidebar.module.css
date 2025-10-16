@@ -295,6 +295,18 @@
   animation: fadeIn 0.3s ease-in;
 }
 
+.warningMessage {
+  color: var(--warning-color, #f59e0b);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  padding: var(--spacing-xs);
+  background-color: rgba(245, 158, 11, 0.1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warning-color, #f59e0b);
+  animation: fadeIn 0.3s ease-in;
+  margin-top: var(--spacing-xs);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

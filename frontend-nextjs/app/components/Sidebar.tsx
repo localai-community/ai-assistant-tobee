@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserSettings, Conversation, User } from '../../lib/types';
 import { useConversations } from '../../lib/hooks/useConversations';
 import { useUsers } from '../../lib/hooks/useUsers';
-import { createUser, deleteUser } from '../../lib/api';
+import { createUser, deleteUser, checkUsernameExists } from '../../lib/api';
 import ModelSelector from './ModelSelector';
 import DeleteUserModal from './DeleteUserModal';
 import styles from './Sidebar.module.css';
@@ -44,8 +44,20 @@ export default function Sidebar({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [usernameExists, setUsernameExists] = useState<boolean>(false);
+  const [isCheckingUsername, setIsCheckingUsername] = useState<boolean>(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { conversations, isLoading, error, refreshConversations } = useConversations(currentUserId);
   const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
     onUpdateSetting(key, value);
@@ -98,12 +110,52 @@ export default function Sidebar({
   };
 
   const handleManualUserIdChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setManualUserId(event.target.value);
+    const newValue = event.target.value;
+    setManualUserId(newValue);
+    
+    // Clear existing timeout
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+    
+    // Check if username exists when user types (with debouncing)
+    if (newValue.trim()) {
+      checkTimeoutRef.current = setTimeout(() => {
+        checkUsernameExistence(newValue.trim());
+      }, 500); // Wait 500ms after user stops typing
+    } else {
+      setUsernameExists(false);
+    }
+  };
+
+  const checkUsernameExistence = async (username: string) => {
+    if (!username.trim()) {
+      setUsernameExists(false);
+      return;
+    }
+
+    setIsCheckingUsername(true);
+    try {
+      const result = await checkUsernameExists(username);
+      setUsernameExists(result.exists);
+    } catch (error) {
+      console.error('Error checking username existence:', error);
+      setUsernameExists(false);
+    } finally {
+      setIsCheckingUsername(false);
+    }
   };
 
   const handleCreateUser = async () => {
     if (!manualUserId.trim()) {
       setUserIdChangeMessage('❌ Please enter a user ID');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      return;
+    }
+
+    // Prevent creation if username already exists
+    if (usernameExists) {
+      setUserIdChangeMessage('❌ Username already exists. Please choose a different username.');
       setTimeout(() => setUserIdChangeMessage(null), 3000);
       return;
     }
@@ -125,6 +177,7 @@ export default function Sidebar({
         setUserIdChangeMessage(`✅ Created and switched to user: ${newUser.username}`);
         setIsManualInput(false);
         setManualUserId('');
+        setUsernameExists(false);
       }
       
       // Clear message after 3 seconds
@@ -314,10 +367,10 @@ export default function Sidebar({
                       type="button"
                       onClick={handleCreateUser}
                       className={styles.submitButton}
-                      disabled={isCreatingUser || !manualUserId.trim()}
-                      title="Create new user"
+                      disabled={isCreatingUser || !manualUserId.trim() || usernameExists}
+                      title={usernameExists ? "Username already exists" : "Create new user"}
                     >
-                      {isCreatingUser ? '⏳' : '✅'}
+                      {isCreatingUser ? '⏳' : (usernameExists ? '❌' : '✅')}
                     </button>
                   </div>
                 )}
@@ -328,6 +381,19 @@ export default function Sidebar({
                     : "Select an existing user or enter a new user ID manually"
                   }
                 </small>
+
+                {/* Username existence warning */}
+                {isManualInput && manualUserId.trim() && (
+                  <div className={styles.warningMessage}>
+                    {isCheckingUsername ? (
+                      <span>⏳ Checking username availability...</span>
+                    ) : usernameExists ? (
+                      <span>⚠️ Username "{manualUserId}" already exists. Please choose a different username.</span>
+                    ) : (
+                      <span>✅ Username "{manualUserId}" is available.</span>
+                    )}
+                  </div>
+                )}
 
                 {usersError && (
                   <div className={styles.errorMessage}>

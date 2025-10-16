@@ -63,6 +63,31 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
         logger.error(f"Failed to get user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/check-username/{username}")
+async def check_username_exists(username: str, db: Session = Depends(get_db)):
+    """
+    Check if a username already exists.
+    
+    Args:
+        username: Username to check
+        db: Database session
+        
+    Returns:
+        dict: Username existence status
+    """
+    try:
+        user_repo = UserRepository(db)
+        existing_user = user_repo.get_user_by_username(username)
+        
+        return {
+            "username": username,
+            "exists": existing_user is not None,
+            "user_id": existing_user.id if existing_user else None
+        }
+    except Exception as e:
+        logger.error(f"Failed to check username {username}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/", response_model=User)
 async def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """

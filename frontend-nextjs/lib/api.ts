@@ -193,6 +193,11 @@ export async function createUser(userData: { username: string; email?: string })
   return response.data;
 }
 
+export async function checkUsernameExists(username: string): Promise<{ username: string; exists: boolean; user_id?: string }> {
+  const response: AxiosResponse<{ username: string; exists: boolean; user_id?: string }> = await api.get(`/api/users/check-username/${encodeURIComponent(username)}`);
+  return response.data;
+}
+
 export async function deleteUser(userId: string): Promise<{ message: string }> {
   try {
     const response: AxiosResponse<{ message: string }> = await api.delete(`/api/users/${userId}`);
