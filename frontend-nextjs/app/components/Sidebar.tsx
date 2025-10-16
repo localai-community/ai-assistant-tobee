@@ -98,7 +98,10 @@ export default function Sidebar({
       setIsManualInput(true);
     } else if (selectedUserId && onUserIdChange) {
       onUserIdChange(selectedUserId);
-      setUserIdChangeMessage(`✅ Switched to user: ${selectedUserId}`);
+      // Find the selected user to get their username
+      const selectedUser = users.find(user => user.id === selectedUserId);
+      const displayName = selectedUser ? selectedUser.username : selectedUserId;
+      setUserIdChangeMessage(`✅ Switched to user: ${displayName}`);
       setIsManualInput(false);
       // Clear message after 3 seconds
       setTimeout(() => setUserIdChangeMessage(null), 3000);
@@ -317,7 +320,7 @@ export default function Sidebar({
                     <option value="">Select a user...</option>
                     {users.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.username} ({user.id.slice(0, 8)}...)
+                        {user.username}
                       </option>
                     ))}
                     <option value="manual">➕ Enter manually</option>
