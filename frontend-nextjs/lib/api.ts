@@ -121,9 +121,7 @@ export async function updateConversation(conversationId: string, data: Partial<C
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
-  console.log('API: Making DELETE request to:', `/api/chat/conversations/${conversationId}`);
-  const response = await api.delete(`/api/chat/conversations/${conversationId}`);
-  console.log('API: Delete response:', response);
+  await api.delete(`/api/chat/conversations/${conversationId}`);
 }
 
 // Message operations

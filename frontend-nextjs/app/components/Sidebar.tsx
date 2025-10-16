@@ -7,6 +7,7 @@ import { useUsers } from '../../lib/hooks/useUsers';
 import { createUser, deleteUser, checkUsernameExists } from '../../lib/api';
 import ModelSelector from './ModelSelector';
 import DeleteUserModal from './DeleteUserModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 import styles from './Sidebar.module.css';
 
 const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -44,6 +45,8 @@ export default function Sidebar({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [usernameExists, setUsernameExists] = useState<boolean>(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState<boolean>(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -257,27 +260,32 @@ export default function Sidebar({
     setUserToDelete(null);
   };
 
-  const handleDeleteConversation = async (conversationId: string, event: React.MouseEvent) => {
-    console.log('Delete button clicked for conversation:', conversationId);
+  const handleDeleteConversation = (conversationId: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent conversation selection
     
     const conversation = conversations.find(c => c.id === conversationId);
-    const conversationTitle = conversation ? formatConversationTitle(conversation) : 'this conversation';
-    
-    console.log('Attempting to delete conversation:', conversationTitle);
-    
-    if (confirm(`Are you sure you want to delete "${conversationTitle}"? This action cannot be undone.`)) {
-      try {
-        console.log('User confirmed deletion, calling deleteConversation API...');
-        await deleteConversation(conversationId);
-        console.log('Conversation deleted successfully');
-      } catch (error) {
-        console.error('Failed to delete conversation:', error);
-        alert('Failed to delete conversation. Please try again.');
-      }
-    } else {
-      console.log('User cancelled deletion');
+    if (conversation) {
+      setConversationToDelete(conversation);
+      setDeleteConfirmationOpen(true);
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!conversationToDelete) return;
+    
+    try {
+      await deleteConversation(conversationToDelete.id);
+      setDeleteConfirmationOpen(false);
+      setConversationToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      alert('Failed to delete conversation. Please try again.');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmationOpen(false);
+    setConversationToDelete(null);
   };
 
   const formatConversationTitle = (conversation: Conversation) => {
@@ -656,6 +664,14 @@ export default function Sidebar({
         onClose={handleDeleteModalClose}
         onConfirm={handleDeleteUserConfirm}
         isDeleting={isDeletingUser}
+      />
+
+      {/* Delete Conversation Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmationOpen}
+        conversationTitle={conversationToDelete ? formatConversationTitle(conversationToDelete) : ''}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
       />
     </div>
   );

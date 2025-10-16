@@ -28,19 +28,13 @@ export function useConversations(userId?: string) {
 
   const removeConversation = useCallback(async (conversationId: string) => {
     try {
-      console.log('useConversations: Calling deleteConversation API for:', conversationId);
       await deleteConversation(conversationId);
-      console.log('useConversations: API call successful, updating local state');
       // Remove the conversation from local state
-      setConversations(prev => {
-        const filtered = prev.filter(conv => conv.id !== conversationId);
-        console.log('useConversations: Updated conversations count:', filtered.length);
-        return filtered;
-      });
+      setConversations(prev => prev.filter(conv => conv.id !== conversationId));
       // Clear any error state after successful deletion
       setError(null);
     } catch (err) {
-      console.error('useConversations: Error deleting conversation:', err);
+      console.error('Error deleting conversation:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete conversation');
       throw err; // Re-throw so the UI can handle the error
     }

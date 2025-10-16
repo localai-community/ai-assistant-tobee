@@ -1,0 +1,202 @@
+/* Delete Confirmation Modal Styles */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal {
+  background: var(--background-color, #ffffff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-xl, 0 25px 50px -12px rgba(0, 0, 0, 0.25));
+  max-width: 400px;
+  width: 90%;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 12px);
+  padding: var(--spacing-lg, 24px) var(--spacing-lg, 24px) var(--spacing-md, 16px);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg, 18px);
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.content {
+  padding: var(--spacing-lg, 24px);
+}
+
+.message {
+  margin: 0 0 var(--spacing-md, 16px);
+  font-size: var(--font-size-base, 16px);
+  color: var(--text-primary, #111827);
+  line-height: 1.5;
+}
+
+.warning {
+  margin: 0;
+  font-size: var(--font-size-sm, 14px);
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-sm, 12px);
+  padding: var(--spacing-md, 16px) var(--spacing-lg, 24px) var(--spacing-lg, 24px);
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.cancelButton {
+  background: var(--background-secondary, #f9fafb);
+  border: 1px solid var(--border-color, #d1d5db);
+  color: var(--text-primary, #374151);
+  padding: var(--spacing-sm, 12px) var(--spacing-lg, 20px);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+
+.cancelButton:hover {
+  background: var(--background-hover, #f3f4f6);
+  border-color: var(--border-hover, #9ca3af);
+}
+
+.cancelButton:active {
+  transform: translateY(1px);
+}
+
+.confirmButton {
+  background: var(--error-color, #dc2626);
+  border: 1px solid var(--error-color, #dc2626);
+  color: white;
+  padding: var(--spacing-sm, 12px) var(--spacing-lg, 20px);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+
+.confirmButton:hover {
+  background: var(--error-color-hover, #b91c1c);
+  border-color: var(--error-color-hover, #b91c1c);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.confirmButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .modal {
+    background: var(--background-color-dark, #1f2937);
+    border-color: var(--border-color-dark, #374151);
+  }
+  
+  .title {
+    color: var(--text-primary-dark, #f9fafb);
+  }
+  
+  .message {
+    color: var(--text-primary-dark, #f9fafb);
+  }
+  
+  .warning {
+    color: var(--text-secondary-dark, #9ca3af);
+  }
+  
+  .header,
+  .actions {
+    border-color: var(--border-color-dark, #374151);
+  }
+  
+  .cancelButton {
+    background: var(--background-secondary-dark, #374151);
+    border-color: var(--border-color-dark, #4b5563);
+    color: var(--text-primary-dark, #f9fafb);
+  }
+  
+  .cancelButton:hover {
+    background: var(--background-hover-dark, #4b5563);
+    border-color: var(--border-hover-dark, #6b7280);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .modal {
+    width: 95%;
+    margin: var(--spacing-md, 16px);
+  }
+  
+  .header,
+  .content,
+  .actions {
+    padding-left: var(--spacing-md, 16px);
+    padding-right: var(--spacing-md, 16px);
+  }
+  
+  .actions {
+    flex-direction: column;
+  }
+  
+  .cancelButton,
+  .confirmButton {
+    width: 100%;
+    justify-content: center;
+  }
+}
