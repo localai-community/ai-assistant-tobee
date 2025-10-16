@@ -47,16 +47,18 @@ export default function ChatInput({ onSendMessage, onFileUploaded, conversationI
   };
 
   const handleFileUpload = async (file: File) => {
-    if (!conversationId) {
-      console.error('No conversation ID provided for file upload');
-      return;
-    }
-
     setIsUploading(true);
     
     try {
+      // Generate a temporary conversation ID if none exists
+      let currentConversationId = conversationId;
+      if (!currentConversationId) {
+        currentConversationId = `temp-${Date.now()}`;
+        console.log('Created temporary conversation ID for file upload:', currentConversationId);
+      }
+
       console.log('Uploading file:', file.name);
-      const result = await uploadDocument(file, conversationId);
+      const result = await uploadDocument(file, currentConversationId);
       console.log('File upload successful:', result);
       
       // Notify parent component about successful upload

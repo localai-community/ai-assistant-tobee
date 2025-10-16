@@ -56,6 +56,13 @@ export default function ChatInterface() {
     }
   };
 
+  const handleFileUploaded = (document: any) => {
+    // If we don't have a conversation ID yet, set it from the uploaded document
+    if (!conversationId && document.conversation_id) {
+      setConversationId(document.conversation_id);
+    }
+  };
+
   return (
     <div className={styles.container}>
       {/* Sidebar */}
@@ -118,6 +125,7 @@ export default function ChatInterface() {
         <div className={styles.inputContainer}>
           <ChatInput
             onSendMessage={handleSendMessage}
+            onFileUploaded={handleFileUploaded}
             conversationId={conversationId}
             disabled={isLoading}
             placeholder="Type your message here..."
