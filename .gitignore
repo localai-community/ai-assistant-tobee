@@ -233,3 +233,7 @@ docs/*.pdf
 
 node_modules/
 .next/
+
+# macOS system files
+.DS_Store
+**/.DS_Store
