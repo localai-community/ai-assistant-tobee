@@ -125,8 +125,7 @@ frontend-nextjs/
 │   ├── api.ts                     # Backend API client
 │   ├── types.ts                   # TypeScript types
 │   └── hooks/
-│       ├── useChat.ts             # Chat state management
-│       ├── useSSE.ts              # SSE streaming
+│       ├── useChat.ts             # Chat functionality with streaming
 │       └── useSettings.ts         # User settings
 ├── package.json
 ├── tsconfig.json
