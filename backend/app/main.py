@@ -9,6 +9,7 @@ from app.core.database import get_db, init_db
 from app.api.chat import router as chat_router
 from app.api.reasoning import router as reasoning_router
 from app.api.user_settings import router as user_settings_router
+from app.api.users import router as users_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -96,6 +97,7 @@ async def shutdown_event():
 app.include_router(chat_router)
 app.include_router(reasoning_router)
 app.include_router(user_settings_router)
+app.include_router(users_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():

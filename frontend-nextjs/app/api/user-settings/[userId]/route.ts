@@ -39,8 +39,8 @@ export async function PUT(
     const { userId } = await params;
     const body = await request.json();
     
-    const response = await fetch(`${BACKEND_URL}/api/v1/user-settings/${userId}/upsert`, {
-      method: 'POST',
+    const response = await fetch(`${BACKEND_URL}/api/v1/user-settings/${userId}`, {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },

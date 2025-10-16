@@ -8,15 +8,15 @@ const defaultSettings: UserSettings = {
   user_id: DEFAULT_USER_ID,
   enable_context_awareness: true,
   include_memory: true,
-  context_strategy: 'auto',
-  selected_model: 'llama3.2',
+  context_strategy: 'conversation_only',
+  selected_model: 'deepseek-r1:8b',
   use_streaming: true,
   use_rag: false,
   use_advanced_rag: false,
   use_phase2_reasoning: false,
   use_reasoning_chat: false,
   use_phase3_reasoning: false,
-  selected_phase2_engine: 'ollama',
+  selected_phase2_engine: 'auto',
   selected_phase3_strategy: 'auto',
   temperature: 0.7,
   use_unified_reasoning: false,
@@ -24,18 +24,39 @@ const defaultSettings: UserSettings = {
 };
 
 export function useSettings(userId: string = DEFAULT_USER_ID) {
-  const [settings, setSettings] = useState<UserSettings>(defaultSettings);
+  const [settings, setSettings] = useState<UserSettings>({ ...defaultSettings, user_id: userId });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Load settings from backend
   const loadSettings = useCallback(async () => {
+    // Don't reload settings if we're currently updating
+    if (isUpdating) {
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
       const userSettings = await getUserSettings(userId);
-      setSettings({ ...defaultSettings, ...userSettings });
+      // Only update settings if we don't have any current settings or if this is a new user
+      setSettings(prev => {
+        // If this is the first load (no user_id set), use backend settings
+        if (!prev.user_id || prev.user_id !== userId) {
+          return { ...defaultSettings, ...userSettings };
+        }
+        // Otherwise, merge backend settings with current settings to preserve local changes
+        const mergedSettings = { ...prev, ...userSettings };
+        
+        // CRITICAL: Don't override the selected_model if it's already set and different from backend
+        if (prev.selected_model && prev.selected_model !== userSettings.selected_model) {
+          mergedSettings.selected_model = prev.selected_model;
+        }
+        
+        return mergedSettings;
+      });
     } catch (err) {
       console.error('Error loading user settings:', err);
       // Use default settings if loading fails
@@ -44,21 +65,26 @@ export function useSettings(userId: string = DEFAULT_USER_ID) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, isUpdating]);
 
   // Save settings to backend
   const saveSettings = useCallback(async (newSettings: Partial<UserSettings>) => {
+    setIsUpdating(true);
     setIsLoading(true);
     setError(null);
     
     try {
-      const updatedSettings = await updateUserSettings(userId, newSettings);
-      setSettings(prev => ({ ...prev, ...updatedSettings }));
+      // Update local state immediately for better UX
+      setSettings(prev => ({ ...prev, ...newSettings }));
+      
+      // Then save to backend (don't update local state with response)
+      await updateUserSettings(userId, newSettings);
     } catch (err) {
       console.error('Error saving user settings:', err);
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setIsLoading(false);
+      setIsUpdating(false);
     }
   }, [userId]);
 
@@ -73,10 +99,12 @@ export function useSettings(userId: string = DEFAULT_USER_ID) {
     await saveSettings(defaultSettings);
   }, [saveSettings]);
 
-  // Load settings on mount
+  // Load settings on mount and when userId changes
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+  }, [userId, loadSettings]); // Include loadSettings in dependencies
+
+  // Don't reload settings when settings change - this was causing the issue
 
   return {
     settings,

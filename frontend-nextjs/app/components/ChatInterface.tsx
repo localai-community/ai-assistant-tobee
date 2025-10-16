@@ -9,7 +9,8 @@ import Sidebar from './Sidebar';
 import styles from './ChatInterface.module.css';
 
 export default function ChatInterface() {
-  const { settings, updateSetting } = useSettings();
+  const [currentUserId, setCurrentUserId] = useState('default-user');
+  const { settings, updateSetting } = useSettings(currentUserId);
   const {
     messages,
     conversationId,
@@ -44,6 +45,17 @@ export default function ChatInterface() {
     await loadMessages(conversationId);
   };
 
+  const handleUserIdChange = async (newUserId: string) => {
+    if (newUserId !== currentUserId) {
+      // Update the current user ID state
+      setCurrentUserId(newUserId);
+      
+      // Clear current conversation to start fresh with new user
+      setConversationId(null);
+      clearMessages();
+    }
+  };
+
   return (
     <div className={styles.container}>
       {/* Sidebar */}
@@ -54,6 +66,7 @@ export default function ChatInterface() {
           onClearMessages={handleClearMessages}
           onToggleSidebar={toggleSidebar}
           onSelectConversation={handleSelectConversation}
+          onUserIdChange={handleUserIdChange}
           currentConversationId={conversationId}
           isOpen={sidebarOpen}
         />

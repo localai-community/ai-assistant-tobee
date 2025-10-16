@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { UserSettings, Conversation } from '../../lib/types';
 import { useConversations } from '../../lib/hooks/useConversations';
+import { useUsers } from '../../lib/hooks/useUsers';
+import { createUser } from '../../lib/api';
 import ModelSelector from './ModelSelector';
 import styles from './Sidebar.module.css';
 
@@ -12,6 +14,7 @@ interface SidebarProps {
   onClearMessages: () => void;
   onToggleSidebar: () => void;
   onSelectConversation?: (conversationId: string) => void;
+  onUserIdChange?: (userId: string) => void;
   currentConversationId?: string | null;
   isOpen: boolean;
 }
@@ -22,11 +25,17 @@ export default function Sidebar({
   onClearMessages, 
   onToggleSidebar,
   onSelectConversation,
+  onUserIdChange,
   currentConversationId,
   isOpen 
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'settings' | 'conversations'>('settings');
+  const [userIdChangeMessage, setUserIdChangeMessage] = useState<string | null>(null);
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [manualUserId, setManualUserId] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const { conversations, isLoading, error, refreshConversations } = useConversations();
+  const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
     onUpdateSetting(key, value);
@@ -41,6 +50,81 @@ export default function Sidebar({
   const handleConversationSelect = (conversationId: string) => {
     if (onSelectConversation) {
       onSelectConversation(conversationId);
+    }
+  };
+
+  const handleUserIdChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newUserId = event.target.value;
+    if (onUserIdChange && newUserId !== settings.user_id) {
+      onUserIdChange(newUserId);
+      setUserIdChangeMessage(`✅ Switched to user: ${newUserId || 'default-user'}`);
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    }
+  };
+
+  const handleUserSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedUserId = event.target.value;
+    
+    if (selectedUserId === 'manual') {
+      setIsManualInput(true);
+    } else if (selectedUserId && onUserIdChange) {
+      onUserIdChange(selectedUserId);
+      setUserIdChangeMessage(`✅ Switched to user: ${selectedUserId}`);
+      setIsManualInput(false);
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    }
+  };
+
+  const handleManualInputToggle = () => {
+    setIsManualInput(!isManualInput);
+  };
+
+  const handleManualUserIdChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setManualUserId(event.target.value);
+  };
+
+  const handleCreateUser = async () => {
+    if (!manualUserId.trim()) {
+      setUserIdChangeMessage('❌ Please enter a user ID');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      // Create the user via API
+      const newUser = await createUser({
+        username: manualUserId,
+        email: `${manualUserId}@localai.com`
+      });
+      
+      // Refresh the user list
+      await refreshUsers();
+      
+      // Switch to the new user
+      if (onUserIdChange) {
+        onUserIdChange(newUser.id);
+        setUserIdChangeMessage(`✅ Created and switched to user: ${newUser.username}`);
+        setIsManualInput(false);
+        setManualUserId('');
+      }
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      setUserIdChangeMessage('❌ Failed to create user');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const handleManualInputKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      handleCreateUser();
     }
   };
 
@@ -89,11 +173,88 @@ export default function Sidebar({
       <div className={styles.content}>
         {activeTab === 'settings' && (
           <div className={styles.settingsTab}>
+            {/* User ID Input */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>👤 User ID</h3>
+              <div className={styles.inputGroup}>
+                {/* User Selection Dropdown */}
+                <div className={styles.selectGroup}>
+                  <select
+                    value={isManualInput ? 'manual' : (settings.user_id || '')}
+                    onChange={handleUserSelect}
+                    className={styles.selectInput}
+                    title="Select an existing user or choose manual input"
+                  >
+                    <option value="">Select a user...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.username} ({user.id.slice(0, 8)}...)
+                      </option>
+                    ))}
+                    <option value="manual">➕ Enter manually</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={refreshUsers}
+                    className={styles.refreshButton}
+                    title="Refresh user list"
+                    disabled={usersLoading}
+                  >
+                    {usersLoading ? '⏳' : '🔄'}
+                  </button>
+                </div>
+
+                {/* Manual Input Field */}
+                {isManualInput && (
+                  <div className={styles.manualInputGroup}>
+                    <input
+                      type="text"
+                      value={manualUserId}
+                      onChange={handleManualUserIdChange}
+                      onKeyPress={handleManualInputKeyPress}
+                      placeholder="Enter new username"
+                      className={styles.textInput}
+                      title="Enter a new username to create a user"
+                      disabled={isCreatingUser}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateUser}
+                      className={styles.submitButton}
+                      disabled={isCreatingUser || !manualUserId.trim()}
+                      title="Create new user"
+                    >
+                      {isCreatingUser ? '⏳' : '✅'}
+                    </button>
+                  </div>
+                )}
+
+                <small className={styles.helpText}>
+                  {isManualInput 
+                    ? "Enter a new username and click submit to create a new user"
+                    : "Select an existing user or enter a new user ID manually"
+                  }
+                </small>
+
+                {usersError && (
+                  <div className={styles.errorMessage}>
+                    Error loading users: {usersError}
+                  </div>
+                )}
+
+                {userIdChangeMessage && (
+                  <div className={styles.successMessage}>
+                    {userIdChangeMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Model Selection */}
             <div className={styles.section}>
-              <h3 className={styles.sectionTitle}>Model</h3>
+              <h3 className={styles.sectionTitle}>🤖 Model</h3>
               <ModelSelector
-                selectedModel={settings.selected_model || 'llama3.2'}
+                selectedModel={settings.selected_model || 'deepseek-r1:8b'}
                 onModelChange={(model) => handleSettingChange('selected_model', model)}
               />
             </div>

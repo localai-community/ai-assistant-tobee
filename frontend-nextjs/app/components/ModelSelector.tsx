@@ -36,7 +36,7 @@ export default function ModelSelector({ selectedModel, onModelChange }: ModelSel
     } finally {
       setIsLoading(false);
     }
-  }, [selectedModel]);
+  }, []); // Removed selectedModel dependency to prevent unnecessary reloads
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
@@ -46,6 +46,13 @@ export default function ModelSelector({ selectedModel, onModelChange }: ModelSel
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  // Add selected model to the list if it's not already there
+  useEffect(() => {
+    if (selectedModel && models.length > 0 && !models.includes(selectedModel)) {
+      setModels(prev => [selectedModel, ...prev]);
+    }
+  }, [selectedModel, models]);
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onModelChange(e.target.value);

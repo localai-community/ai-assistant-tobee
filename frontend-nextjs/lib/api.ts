@@ -8,7 +8,8 @@ import {
   UserSettings,
   ChatDocument,
   HealthResponse,
-  ApiError
+  ApiError,
+  User
 } from './types';
 
 // Create axios instance with default config
@@ -122,6 +123,22 @@ export async function deleteDocument(documentId: string): Promise<void> {
 // Model operations
 export async function getAvailableModels(): Promise<string[]> {
   const response: AxiosResponse<string[]> = await api.get('/api/chat/models');
+  return response.data;
+}
+
+// User operations
+export async function getUsers(): Promise<User[]> {
+  const response: AxiosResponse<User[]> = await api.get('/api/users');
+  return response.data;
+}
+
+export async function getUser(userId: string): Promise<User> {
+  const response: AxiosResponse<User> = await api.get(`/api/users/${userId}`);
+  return response.data;
+}
+
+export async function createUser(userData: { username: string; email?: string }): Promise<User> {
+  const response: AxiosResponse<User> = await api.post('/api/users', userData);
   return response.data;
 }
 
