@@ -19,7 +19,9 @@ export default function ChatInterface() {
     isSSEConnected,
     sendMessage,
     clearMessages,
-    stopGeneration
+    loadMessages,
+    stopGeneration,
+    setConversationId
   } = useChat({ userSettings: settings });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -37,6 +39,11 @@ export default function ChatInterface() {
     setSidebarOpen(!sidebarOpen);
   };
 
+  const handleSelectConversation = async (conversationId: string) => {
+    setConversationId(conversationId);
+    await loadMessages(conversationId);
+  };
+
   return (
     <div className={styles.container}>
       {/* Sidebar */}
@@ -46,6 +53,8 @@ export default function ChatInterface() {
           onUpdateSetting={updateSetting}
           onClearMessages={handleClearMessages}
           onToggleSidebar={toggleSidebar}
+          onSelectConversation={handleSelectConversation}
+          currentConversationId={conversationId}
           isOpen={sidebarOpen}
         />
       </div>

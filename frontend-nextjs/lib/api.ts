@@ -81,7 +81,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 
 // Message operations
 export async function getMessages(conversationId: string): Promise<Message[]> {
-  const response: AxiosResponse<Message[]> = await api.get(`/api/v1/conversations/${conversationId}/messages`);
+  const response: AxiosResponse<Message[]> = await api.get(`/api/chat/conversations/${conversationId}/messages`);
   return response.data;
 }
 

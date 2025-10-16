@@ -21,6 +21,7 @@ from ..services.rag.document_processor import DocumentProcessor
 from ..services.rag.vector_store import VectorStore
 from ..core.database import get_db
 from ..core.models import ErrorResponse
+from ..models.schemas import Message
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -221,6 +222,40 @@ async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Failed to get conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/conversations/{conversation_id}/messages", response_model=List[Message])
+async def get_conversation_messages(conversation_id: str, db: Session = Depends(get_db)):
+    """
+    Get messages for a specific conversation.
+    
+    Args:
+        conversation_id: Unique conversation identifier
+        db: Database session
+        
+    Returns:
+        List[Message]: Messages in the conversation
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        # Check if conversation exists
+        conversation = chat_service.get_conversation(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Get messages for the conversation
+        if chat_service.message_repo:
+            messages = chat_service.message_repo.get_messages(conversation_id)
+            return messages
+        else:
+            return []
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get conversation messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/conversations/{conversation_id}")

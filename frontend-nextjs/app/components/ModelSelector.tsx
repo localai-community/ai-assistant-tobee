@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getAvailableModels } from '../../lib/api';
 import styles from './ModelSelector.module.css';
 
@@ -13,31 +13,39 @@ export default function ModelSelector({ selectedModel, onModelChange }: ModelSel
   const [models, setModels] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const loadModels = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const availableModels = await getAvailableModels();
+      setModels(availableModels);
+      setRetryCount(0); // Reset retry count on success
+      
+      // If selected model is not in the list, add it
+      if (selectedModel && !availableModels.includes(selectedModel)) {
+        setModels(prev => [selectedModel, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error loading models:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to load models: ${errorMessage}. Make sure Ollama is running on localhost:11434`);
+      // Fallback to common models
+      setModels(['llama3.2', 'llama2', 'codellama', 'mistral']);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedModel]);
+
+  const handleRetry = () => {
+    setRetryCount(prev => prev + 1);
+    loadModels();
+  };
 
   useEffect(() => {
-    const loadModels = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const availableModels = await getAvailableModels();
-        setModels(availableModels);
-        
-        // If selected model is not in the list, add it
-        if (selectedModel && !availableModels.includes(selectedModel)) {
-          setModels(prev => [selectedModel, ...prev]);
-        }
-      } catch (err) {
-        console.error('Error loading models:', err);
-        setError('Failed to load models');
-        // Fallback to common models
-        setModels(['llama3.2', 'llama2', 'codellama', 'mistral']);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadModels();
-  }, [selectedModel]);
+  }, [loadModels]);
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onModelChange(e.target.value);
@@ -59,7 +67,16 @@ export default function ModelSelector({ selectedModel, onModelChange }: ModelSel
       <div className={styles.container}>
         <div className={styles.error}>
           <span>⚠️</span>
-          <span>{error}</span>
+          <div className={styles.errorContent}>
+            <span>{error}</span>
+            <button
+              onClick={handleRetry}
+              className={styles.retryButton}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Retrying...' : 'Retry'}
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { UserSettings } from '../../lib/types';
+import { UserSettings, Conversation } from '../../lib/types';
+import { useConversations } from '../../lib/hooks/useConversations';
 import ModelSelector from './ModelSelector';
 import styles from './Sidebar.module.css';
 
@@ -10,6 +11,8 @@ interface SidebarProps {
   onUpdateSetting: (key: keyof UserSettings, value: any) => void;
   onClearMessages: () => void;
   onToggleSidebar: () => void;
+  onSelectConversation?: (conversationId: string) => void;
+  currentConversationId?: string | null;
   isOpen: boolean;
 }
 
@@ -18,9 +21,12 @@ export default function Sidebar({
   onUpdateSetting, 
   onClearMessages, 
   onToggleSidebar,
+  onSelectConversation,
+  currentConversationId,
   isOpen 
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'settings' | 'conversations'>('settings');
+  const { conversations, isLoading, error, refreshConversations } = useConversations();
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
     onUpdateSetting(key, value);
@@ -30,6 +36,26 @@ export default function Sidebar({
     if (confirm('Are you sure you want to clear all messages? This action cannot be undone.')) {
       onClearMessages();
     }
+  };
+
+  const handleConversationSelect = (conversationId: string) => {
+    if (onSelectConversation) {
+      onSelectConversation(conversationId);
+    }
+  };
+
+  const formatConversationTitle = (conversation: Conversation) => {
+    if (conversation.title) {
+      return conversation.title;
+    }
+    // Use first message content as title if no title is set
+    const firstMessage = conversation.messages?.[0];
+    if (firstMessage?.content) {
+      return firstMessage.content.length > 50 
+        ? firstMessage.content.substring(0, 50) + '...'
+        : firstMessage.content;
+    }
+    return 'Untitled Conversation';
   };
 
   return (
@@ -184,10 +210,73 @@ export default function Sidebar({
 
         {activeTab === 'conversations' && (
           <div className={styles.conversationsTab}>
-            <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>💬</div>
-              <p>No conversations yet</p>
-              <small>Start a new conversation to see it here</small>
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h3 className={styles.sectionTitle}>Recent Conversations</h3>
+                <button
+                  className={styles.refreshButton}
+                  onClick={refreshConversations}
+                  title="Refresh conversations"
+                >
+                  🔄
+                </button>
+              </div>
+              
+              {isLoading && (
+                <div className={styles.loadingState}>
+                  <p>Loading conversations...</p>
+                </div>
+              )}
+              
+              {error && (
+                <div className={styles.errorState}>
+                  <p>Error loading conversations: {error}</p>
+                  <button
+                    className="btn btn-sm"
+                    onClick={refreshConversations}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              
+              {!isLoading && !error && conversations.length === 0 && (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>💬</div>
+                  <p>No conversations yet</p>
+                  <small>Start a new conversation to see it here</small>
+                </div>
+              )}
+              
+              {!isLoading && !error && conversations.length > 0 && (
+                <div className={styles.conversationList}>
+                  {conversations.map((conversation) => {
+                    const isCurrent = currentConversationId === conversation.id;
+                    return (
+                      <div
+                        key={conversation.id}
+                        className={`${styles.conversationItem} ${isCurrent ? styles.currentConversation : ''}`}
+                        onClick={() => handleConversationSelect(conversation.id)}
+                      >
+                        <div className={styles.conversationTitle}>
+                          {formatConversationTitle(conversation)}
+                        </div>
+                        <div className={styles.conversationMeta}>
+                          <span className={styles.conversationModel}>
+                            {conversation.model || 'llama3.2'}
+                          </span>
+                          <span className={styles.conversationDate}>
+                            {new Date(conversation.updated_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {isCurrent && (
+                          <div className={styles.currentIndicator}>👈</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
