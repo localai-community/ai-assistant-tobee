@@ -62,8 +62,8 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         
         # Get or create conversation ID
         conversation_id = request.conversation_id
-        if not conversation_id and chat_service.conversation_repo:
-            # Create new conversation in database
+        if not conversation_id and chat_service.conversation_repo and request.user_id and request.user_id != "00000000-0000-0000-0000-000000000001":
+            # Only create new conversation in database if user_id is provided and not guest mode
             from app.models.schemas import ConversationCreate
             from datetime import datetime
             conversation_data = ConversationCreate(

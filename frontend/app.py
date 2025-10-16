@@ -247,7 +247,7 @@ def get_default_user_settings():
         "include_memory": False,
         "context_strategy": "conversation_only",
         "user_id": "leia",
-        "selected_model": "deepseek-r1:8b",
+        "selected_model": "llama3:latest",
         "use_rag": False,
         "use_advanced_rag": False,
         "use_phase2_reasoning": False,

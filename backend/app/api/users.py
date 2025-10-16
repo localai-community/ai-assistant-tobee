@@ -90,3 +90,55 @@ async def create_user(user: UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Failed to create user: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{user_id}")
+async def delete_user(user_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a user and all related data.
+    
+    Args:
+        user_id: User ID to delete
+        db: Database session
+        
+    Returns:
+        dict: Deletion status
+    """
+    try:
+        user_repo = UserRepository(db)
+        deleted = user_repo.delete_user(user_id)
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"message": f"User {user_id} and all related data deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/username/{username}")
+async def delete_user_by_username(username: str, db: Session = Depends(get_db)):
+    """
+    Delete a user by username and all related data.
+    
+    Args:
+        username: Username to delete
+        db: Database session
+        
+    Returns:
+        dict: Deletion status
+    """
+    try:
+        user_repo = UserRepository(db)
+        deleted = user_repo.delete_user_by_username(username)
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        return {"message": f"User '{username}' and all related data deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete user '{username}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))

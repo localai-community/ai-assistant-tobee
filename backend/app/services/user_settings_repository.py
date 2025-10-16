@@ -75,7 +75,7 @@ class UserSettingsRepository:
             "enable_context_awareness": True,
             "include_memory": False,
             "context_strategy": "conversation_only",
-            "selected_model": "deepseek-r1:8b",
+            "selected_model": "llama3:latest",
             "use_streaming": True,
             "use_rag": False,
             "use_advanced_rag": False,

@@ -21,6 +21,10 @@ class ConversationRepository:
     
     def create_conversation(self, conversation: ConversationCreate, conversation_id: Optional[str] = None) -> Conversation:
         """Create a new conversation."""
+        # Don't create conversations for guest users
+        if conversation.user_id == "00000000-0000-0000-0000-000000000001":
+            raise ValueError("Cannot create conversations for guest users")
+        
         db_conversation = Conversation(
             id=conversation_id,  # Use provided ID or let database generate one
             title=conversation.title,
@@ -161,6 +165,45 @@ class UserRepository:
         return self.db.query(User).filter(
             User.is_active == True
         ).order_by(User.created_at.desc()).limit(limit).all()
+    
+    def delete_user(self, user_id: str) -> bool:
+        """Delete a user and all related data (cascade delete)."""
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return False
+            
+            # Due to cascade="all, delete-orphan" in the User model,
+            # deleting the user will automatically delete all related:
+            # - conversations
+            # - messages (through conversations)
+            # - chat_documents (through conversations)
+            # - document_chunks (through chat_documents)
+            # - user_settings (if any)
+            self.db.delete(user)
+            self.db.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete user {user_id}: {e}")
+            self.db.rollback()
+            return False
+    
+    def delete_user_by_username(self, username: str) -> bool:
+        """Delete a user by username and all related data."""
+        try:
+            user = self.db.query(User).filter(User.username == username).first()
+            if not user:
+                return False
+            
+            user_id = user.id
+            self.db.delete(user)
+            self.db.commit()
+            logger.info(f"Deleted user '{username}' (ID: {user_id}) and all related data")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete user '{username}': {e}")
+            self.db.rollback()
+            return False
 
 class ChatDocumentRepository:
     """Repository for chat document operations."""

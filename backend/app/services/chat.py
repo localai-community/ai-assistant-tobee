@@ -362,8 +362,8 @@ class ChatService:
         if self.conversation_repo and conversation_id:
             conversation = self.conversation_repo.get_conversation(conversation_id)
         
-        if not conversation and self.conversation_repo:
-            # Create new conversation in database
+        if not conversation and self.conversation_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
+            # Only create new conversation in database if user_id is provided and not guest mode
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 model=model,
@@ -418,8 +418,8 @@ class ChatService:
                 logger.warning(f"MCP not available for streaming: {e}")
                 # Don't add tool results if MCP is not available
         
-        # Add user message to database
-        if self.message_repo:
+        # Add user message to database (only if user_id is provided and not guest mode)
+        if self.message_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
             user_message_data = MessageCreate(
                 conversation_id=conversation_id,
                 role="user",
@@ -427,6 +427,8 @@ class ChatService:
             )
             self.message_repo.create_message(user_message_data)
             logger.info(f"Stored user message in database for conversation {conversation_id}")
+        elif not user_id or user_id == "00000000-0000-0000-0000-000000000001":
+            logger.info(f"Guest mode: Not storing user message in database for conversation {conversation_id}")
         else:
             logger.warning("No message repository available for user message storage")
         
@@ -537,7 +539,8 @@ class ChatService:
                 
                 finally:
                     # Always store the assistant message, even if streaming was interrupted
-                    if full_response and self.message_repo and not assistant_message_stored:
+                    # But only if user_id is provided and not guest mode
+                    if full_response and self.message_repo and not assistant_message_stored and user_id and user_id != "00000000-0000-0000-0000-000000000001":
                         ai_message_data = MessageCreate(
                             conversation_id=conversation_id,
                             role="assistant",
