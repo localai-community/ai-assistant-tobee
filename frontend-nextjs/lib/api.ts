@@ -14,7 +14,7 @@ import {
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: '', // Use relative URLs to call Next.js API routes
+  baseURL: '', // Use Next.js API routes
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -44,7 +44,7 @@ api.interceptors.response.use(
 
 // Health check
 export async function checkHealth(): Promise<HealthResponse> {
-  const response: AxiosResponse<HealthResponse> = await api.get('/health');
+  const response: AxiosResponse<HealthResponse> = await api.get('/api/health');
   return response.data;
 }
 
@@ -103,7 +103,7 @@ export async function uploadDocument(file: File, conversationId: string): Promis
   formData.append('file', file);
   formData.append('conversation_id', conversationId);
 
-  const response: AxiosResponse<ChatDocument> = await api.post('/api/v1/chat/upload', formData, {
+  const response: AxiosResponse<ChatDocument> = await api.post('/api/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },

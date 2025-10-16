@@ -2,15 +2,18 @@
 
 import { useState, useRef, KeyboardEvent } from 'react';
 import FileUpload from './FileUpload';
+import { uploadDocument } from '../../lib/api';
 import styles from './ChatInput.module.css';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
+  onFileUploaded?: (document: any) => void;
+  conversationId?: string | null;
   disabled?: boolean;
   placeholder?: string;
 }
 
-export default function ChatInput({ onSendMessage, disabled = false, placeholder = "Type your message..." }: ChatInputProps) {
+export default function ChatInput({ onSendMessage, onFileUploaded, conversationId, disabled = false, placeholder = "Type your message..." }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -43,11 +46,34 @@ export default function ChatInput({ onSendMessage, disabled = false, placeholder
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
   };
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
+    if (!conversationId) {
+      console.error('No conversation ID provided for file upload');
+      return;
+    }
+
     setIsUploading(true);
-    // TODO: Implement file upload
-    console.log('File upload:', file);
-    setTimeout(() => setIsUploading(false), 2000); // Simulate upload
+    
+    try {
+      console.log('Uploading file:', file.name);
+      const result = await uploadDocument(file, conversationId);
+      console.log('File upload successful:', result);
+      
+      // Notify parent component about successful upload
+      if (onFileUploaded) {
+        onFileUploaded(result);
+      }
+      
+      // Send a message about the uploaded file
+      onSendMessage(`📄 I just uploaded a document: ${file.name}`);
+      
+    } catch (error) {
+      console.error('File upload failed:', error);
+      // You might want to show an error message to the user here
+      alert('File upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (

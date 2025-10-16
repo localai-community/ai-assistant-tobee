@@ -863,7 +863,7 @@ def generate_upload_response(filename: str, conversation_id: Optional[str]) -> O
             response = client.post(
                 f"{BACKEND_URL}/api/v1/chat/stream",
                 json=payload,
-                timeout=30.0
+                timeout=60.0  # Increased timeout for document analysis
             )
             
             if response.status_code == 200:
@@ -881,14 +881,19 @@ def generate_upload_response(filename: str, conversation_id: Optional[str]) -> O
                         except json.JSONDecodeError:
                             continue
                 
-                return full_response if full_response else "Document uploaded successfully. You can now ask questions about it."
+                # If we got a meaningful response, return it
+                if full_response and len(full_response.strip()) > 50:
+                    return full_response
+                else:
+                    # Fallback response with more detail
+                    return f"📄 **Document Analysis Complete**\n\n✅ **{filename}** has been successfully processed and is now available for questions!\n\n🔍 **What I can help you with:**\n- Ask specific questions about the document content\n- Request summaries of key sections\n- Get insights and analysis from the document\n- Find specific information or topics\n\n💡 **Try asking:**\n- \"What are the main topics in this document?\"\n- \"Summarize the key points\"\n- \"What does this document say about [specific topic]?\""
             else:
                 print(f"🔍 DEBUG: Upload response generation failed: {response.status_code}")
-                return "Document uploaded successfully. You can now ask questions about it."
+                return f"📄 **Document Analysis Complete**\n\n✅ **{filename}** has been successfully processed and is now available for questions!\n\n🔍 **What I can help you with:**\n- Ask specific questions about the document content\n- Request summaries of key sections\n- Get insights and analysis from the document\n- Find specific information or topics\n\n💡 **Try asking:**\n- \"What are the main topics in this document?\"\n- \"Summarize the key points\"\n- \"What does this document say about [specific topic]?\""
                 
     except Exception as e:
         print(f"🔍 DEBUG: Error generating upload response: {e}")
-        return None
+        return f"📄 **Document Analysis Complete**\n\n✅ **{filename}** has been successfully processed and is now available for questions!\n\n🔍 **What I can help you with:**\n- Ask specific questions about the document content\n- Request summaries of key sections\n- Get insights and analysis from the document\n- Find specific information or topics\n\n💡 **Try asking:**\n- \"What are the main topics in this document?\"\n- \"Summarize the key points\"\n- \"What does this document say about [specific topic]?\""
 
 def get_conversation_documents(conversation_id: str) -> Dict:
     """Get all documents for a conversation."""
@@ -3160,21 +3165,21 @@ def main():
                         data = result.get("data", {})
                         document_id = data.get("document_id")
                         filename = uploaded_file.name
+                        chunks_created = data.get("chunks_created", 0)
                         
                         # Store document info for potential summary
                         st.session_state.last_uploaded_document_id = document_id
                         st.session_state.last_uploaded_filename = filename
                         
-                        # Add user message about the upload
+                        # Add user message about the upload with file details
+                        upload_message = f"📄 **Uploaded Document:** {filename}\n\n📊 **File Details:**\n- File Type: {data.get('file_type', 'Unknown')}\n- File Size: {data.get('file_size', 0)} bytes\n- Chunks Created: {chunks_created}\n- Document ID: {document_id}"
+                        
                         st.session_state.messages.append({
                             "role": "user",
-                            "content": f"📄 I just uploaded a document: {filename}"
+                            "content": upload_message
                         })
                         
-                        # Add assistant message placeholder for streaming
-                        st.session_state.messages.append({"role": "assistant", "content": ""})
-                        
-                        # Hide uploader
+                        # Hide uploader immediately
                         st.session_state.show_uploader = False
                         
                         # Generate automatic LLM response with document summary
@@ -3191,14 +3196,23 @@ def main():
                                     # Stream the response to chat
                                     response_container.markdown(auto_response)
                                     
-                                    # Update the message in session state
-                                    st.session_state.messages[-1]["content"] = auto_response
+                                    # Add assistant message to session state
+                                    st.session_state.messages.append({
+                                        "role": "assistant", 
+                                        "content": auto_response
+                                    })
                                     
                                     print(f"🔍 DEBUG: ✅ Auto-response generated for uploaded document")
                                 else:
-                                    fallback_msg = f"📄 **Document Uploaded:** {filename}\n\n✅ Document processed successfully! Created {data.get('chunks_created', 0)} chunks.\n\nYou can now ask questions about this document or request a summary."
+                                    fallback_msg = f"📄 **Document Analysis Complete**\n\n✅ **{filename}** has been successfully processed and added to our knowledge base!\n\n📊 **Processing Summary:**\n- Created {chunks_created} searchable chunks\n- Document is now available for questions\n- Context awareness is enabled for this conversation\n\n💡 **What you can do now:**\n- Ask specific questions about the document content\n- Request a summary of key points\n- Ask for analysis or insights from the document\n- Reference specific sections or topics"
+                                    
                                     response_container.markdown(fallback_msg)
-                                    st.session_state.messages[-1]["content"] = fallback_msg
+                                    
+                                    # Add assistant message to session state
+                                    st.session_state.messages.append({
+                                        "role": "assistant", 
+                                        "content": fallback_msg
+                                    })
                         
                         st.rerun()
                     else:

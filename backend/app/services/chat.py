@@ -369,7 +369,8 @@ class ChatService:
                 model=model,
                 user_id=user_id
             )
-            conversation = self.conversation_repo.create_conversation(conversation_data)
+            # Use the provided conversation_id if available, otherwise let the database generate one
+            conversation = self.conversation_repo.create_conversation(conversation_data, conversation_id=conversation_id)
             conversation_id = conversation.id
         elif not conversation:
             # Fallback to in-memory if no database
@@ -666,7 +667,9 @@ class ChatService:
                                 user_message,  # Original user message
                                 doc.filename,  # Document filename
                                 "content text",  # Generic content search
-                                "document content"  # Another generic search
+                                "document content",  # Another generic search
+                                "main topics",  # For analysis queries
+                                "key points"  # For summary queries
                             ]
                             
                             found_content = False

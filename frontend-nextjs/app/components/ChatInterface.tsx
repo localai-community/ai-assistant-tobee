@@ -118,6 +118,7 @@ export default function ChatInterface() {
         <div className={styles.inputContainer}>
           <ChatInput
             onSendMessage={handleSendMessage}
+            conversationId={conversationId}
             disabled={isLoading}
             placeholder="Type your message here..."
           />
