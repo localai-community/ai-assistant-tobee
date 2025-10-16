@@ -7,6 +7,7 @@ import { useCurrentUser } from '../../lib/hooks/useCurrentUser';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import Sidebar from './Sidebar';
+import NoUserWarningModal from './NoUserWarningModal';
 import styles from './ChatInterface.module.css';
 
 export default function ChatInterface() {
@@ -27,9 +28,24 @@ export default function ChatInterface() {
   } = useChat({ userSettings: settings, userId: currentUserId });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showNoUserWarning, setShowNoUserWarning] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
+    
+    // Check if user is selected (not guest user)
+    const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+    const isGuestUser = currentUserId === GUEST_USER_ID;
+    
+    if (isGuestUser) {
+      // Show warning modal for guest user
+      setPendingMessage(message);
+      setShowNoUserWarning(true);
+      return;
+    }
+    
+    // User is selected, proceed with sending message
     await sendMessage(message);
   };
 
@@ -54,12 +70,19 @@ export default function ChatInterface() {
 
   const handleUserIdChange = async (newUserId: string) => {
     if (newUserId !== currentUserId) {
-      // Save the new user to the database
-      await saveCurrentUser(newUserId);
-      
-      // Clear current conversation to start fresh with new user
-      setConversationId(null);
-      clearMessages();
+      try {
+        console.log('Switching user from', currentUserId, 'to', newUserId);
+        // Save the new user to the database
+        await saveCurrentUser(newUserId);
+        
+        // Clear current conversation to start fresh with new user
+        setConversationId(null);
+        clearMessages();
+        console.log('User switch completed successfully');
+      } catch (error) {
+        console.error('Error switching user:', error);
+        throw error; // Re-throw to be caught by the calling function
+      }
     }
   };
 
@@ -67,6 +90,20 @@ export default function ChatInterface() {
     // If we don't have a conversation ID yet, set it from the uploaded document
     if (!conversationId && document.conversation_id) {
       setConversationId(document.conversation_id);
+    }
+  };
+
+  const handleNoUserWarningClose = () => {
+    setShowNoUserWarning(false);
+    setPendingMessage(null);
+  };
+
+  const handleNoUserWarningContinue = async () => {
+    setShowNoUserWarning(false);
+    if (pendingMessage) {
+      // Send message without saving to database (guest mode)
+      await sendMessage(pendingMessage);
+      setPendingMessage(null);
     }
   };
 
@@ -160,6 +197,13 @@ export default function ChatInterface() {
           />
         </div>
       </div>
+
+      {/* No User Warning Modal */}
+      <NoUserWarningModal
+        isOpen={showNoUserWarning}
+        onClose={handleNoUserWarningClose}
+        onContinue={handleNoUserWarningContinue}
+      />
     </div>
   );
 }

@@ -37,12 +37,15 @@ export function useCurrentUser() {
   // Save the current user to the database
   const saveCurrentUser = useCallback(async (userId: string) => {
     try {
+      console.log('Saving current user in hook:', userId);
       await setCurrentUser(userId, SESSION_KEY);
       setCurrentUserId(userId);
       setError(null);
+      console.log('User saved successfully in hook');
     } catch (err) {
-      console.error('Error saving current user:', err);
+      console.error('Error saving current user in hook:', err);
       setError(err instanceof Error ? err.message : 'Failed to save current user');
+      throw err; // Re-throw to be caught by the calling function
     }
   }, []);
 

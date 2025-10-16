@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { UserSettings, Conversation } from '../../lib/types';
+import { UserSettings, Conversation, User } from '../../lib/types';
 import { useConversations } from '../../lib/hooks/useConversations';
 import { useUsers } from '../../lib/hooks/useUsers';
-import { createUser } from '../../lib/api';
+import { createUser, deleteUser } from '../../lib/api';
 import ModelSelector from './ModelSelector';
+import DeleteUserModal from './DeleteUserModal';
 import styles from './Sidebar.module.css';
+
+const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface SidebarProps {
   settings: UserSettings;
@@ -38,6 +41,9 @@ export default function Sidebar({
   const [isManualInput, setIsManualInput] = useState(false);
   const [manualUserId, setManualUserId] = useState('');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const { conversations, isLoading, error, refreshConversations } = useConversations(currentUserId);
   const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
 
@@ -138,6 +144,63 @@ export default function Sidebar({
     }
   };
 
+  const handleDeleteUserClick = (user: User) => {
+    setUserToDelete(user);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteUserConfirm = async (user: User) => {
+    setIsDeletingUser(true);
+    try {
+      console.log('Attempting to delete user:', user);
+      const isCurrentUser = currentUserId === user.id;
+      
+      const result = await deleteUser(user.id);
+      console.log('Delete user result:', result);
+      
+      // Close the modal first
+      setDeleteModalOpen(false);
+      setUserToDelete(null);
+      
+      // If the deleted user is the current user, switch to guest first
+      if (isCurrentUser && onUserIdChange) {
+        try {
+          console.log('Switching to guest user after deleting current user');
+          // Use the proper guest user ID instead of empty string
+          await onUserIdChange(GUEST_USER_ID);
+          // Wait a bit for the user switch to complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error('Error switching to guest user after deletion:', error);
+          // Don't throw here, as the user deletion was successful
+        }
+      }
+      
+      // Refresh the users list after user switch (if needed)
+      refreshUsers();
+      
+      // Show success message
+      setUserIdChangeMessage(`✅ User "${user.username}" has been deleted`);
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setUserIdChangeMessage(`❌ Failed to delete user "${user.username}"`);
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      
+      // Close the modal even on error
+      setDeleteModalOpen(false);
+      setUserToDelete(null);
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  const handleDeleteModalClose = () => {
+    setDeleteModalOpen(false);
+    setUserToDelete(null);
+  };
+
   const formatConversationTitle = (conversation: Conversation) => {
     if (conversation.title) {
       return conversation.title;
@@ -215,6 +278,23 @@ export default function Sidebar({
                   >
                     {usersLoading ? '⏳' : '🔄'}
                   </button>
+                  {/* Delete User Button - only show if a user is selected */}
+                  {settings.user_id && !isManualInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectedUser = users.find(user => user.id === settings.user_id);
+                        if (selectedUser) {
+                          handleDeleteUserClick(selectedUser);
+                        }
+                      }}
+                      className={styles.deleteUserButton}
+                      title={`Delete selected user`}
+                      disabled={isDeletingUser}
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
 
                 {/* Manual Input Field */}
@@ -267,7 +347,7 @@ export default function Sidebar({
             <div className={styles.section}>
               <h3 className={styles.sectionTitle}>🤖 Model</h3>
               <ModelSelector
-                selectedModel={settings.selected_model || 'deepseek-r1:8b'}
+                selectedModel={settings.selected_model || 'llama3:latest'}
                 onModelChange={(model) => handleSettingChange('selected_model', model)}
               />
             </div>
@@ -446,7 +526,7 @@ export default function Sidebar({
                         </div>
                         <div className={styles.conversationMeta}>
                           <span className={styles.conversationModel}>
-                            {conversation.model || 'llama3.2'}
+                            {conversation.model || 'llama3:latest'}
                           </span>
                           <span className={styles.conversationDate}>
                             {new Date(conversation.updated_at).toLocaleDateString()}
@@ -464,6 +544,15 @@ export default function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Delete User Modal */}
+      <DeleteUserModal
+        user={userToDelete}
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteModalClose}
+        onConfirm={handleDeleteUserConfirm}
+        isDeleting={isDeletingUser}
+      />
     </div>
   );
 }

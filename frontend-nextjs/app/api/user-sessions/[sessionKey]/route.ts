@@ -4,10 +4,10 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:800
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionKey: string } }
+  { params }: { params: Promise<{ sessionKey: string }> }
 ) {
   try {
-    const { sessionKey } = params;
+    const { sessionKey } = await params;
     
     const response = await fetch(`${BACKEND_URL}/api/v1/user-sessions/${sessionKey}`, {
       method: 'GET',
@@ -39,10 +39,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { sessionKey: string } }
+  { params }: { params: Promise<{ sessionKey: string }> }
 ) {
   try {
-    const { sessionKey } = params;
+    const { sessionKey } = await params;
     const body = await request.json();
     
     const response = await fetch(`${BACKEND_URL}/api/v1/user-sessions/${sessionKey}`, {

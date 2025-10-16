@@ -4,10 +4,10 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:800
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { sessionKey: string; userId: string } }
+  { params }: { params: Promise<{ sessionKey: string; userId: string }> }
 ) {
   try {
-    const { sessionKey, userId } = params;
+    const { sessionKey, userId } = await params;
     
     const response = await fetch(`${BACKEND_URL}/api/v1/user-sessions/${sessionKey}/set-user/${userId}`, {
       method: 'POST',

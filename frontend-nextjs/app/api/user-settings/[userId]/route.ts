@@ -39,8 +39,9 @@ export async function PUT(
     const { userId } = await params;
     const body = await request.json();
     
-    const response = await fetch(`${BACKEND_URL}/api/v1/user-settings/${userId}`, {
-      method: 'PUT',
+    // Use upsert endpoint instead of PUT to handle cases where settings don't exist
+    const response = await fetch(`${BACKEND_URL}/api/v1/user-settings/${userId}/upsert`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -48,7 +49,9 @@ export async function PUT(
     });
 
     if (!response.ok) {
-      throw new Error(`Backend responded with status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Backend error response:', errorText);
+      throw new Error(`Backend responded with status: ${response.status} - ${errorText}`);
     }
 
     const settings = await response.json();

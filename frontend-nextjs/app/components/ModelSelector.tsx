@@ -32,7 +32,7 @@ export default function ModelSelector({ selectedModel, onModelChange }: ModelSel
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(`Failed to load models: ${errorMessage}. Make sure Ollama is running on localhost:11434`);
       // Fallback to common models
-      setModels(['llama3.2', 'llama2', 'codellama', 'mistral']);
+      setModels(['llama3:latest', 'llama2', 'codellama', 'mistral']);
     } finally {
       setIsLoading(false);
     }

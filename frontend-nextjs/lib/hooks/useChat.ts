@@ -136,13 +136,17 @@ export function useChat(options: UseChatOptions = {}) {
       // Don't create conversation explicitly - let the streaming endpoint handle it
       let currentConversationId = conversationId;
 
+      // Check if user is guest (don't save to database)
+      const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+      const isGuestUser = userId === GUEST_USER_ID;
+
       // Add user message to the list (conversation_id will be set when streaming starts)
       const userMessageId = `temp-${Date.now()}`;
       currentUserMessageIdRef.current = userMessageId;
       
       const userMessage: Message = {
         id: userMessageId,
-        conversation_id: currentConversationId || 'temp',
+        conversation_id: isGuestUser ? 'guest-temp' : (currentConversationId || 'temp'),
         role: 'user',
         content: message,
         created_at: new Date().toISOString()
@@ -152,11 +156,11 @@ export function useChat(options: UseChatOptions = {}) {
 
       // Prepare chat request
       const chatRequest: ChatRequest = {
-        conversation_id: currentConversationId || undefined,
+        conversation_id: isGuestUser ? undefined : (currentConversationId || undefined), // Don't save conversation for guest
         message,
-        model: userSettings?.selected_model || 'llama3.2',
+        model: userSettings?.selected_model || 'llama3:latest',
         temperature: userSettings?.temperature || 0.7,
-        user_id: userId,
+        user_id: isGuestUser ? undefined : userId, // Don't save user_id for guest
         use_rag: userSettings?.use_rag || false,
         use_advanced_rag: userSettings?.use_advanced_rag || false,
         use_phase2_reasoning: userSettings?.use_phase2_reasoning || false,

@@ -9,7 +9,7 @@ const defaultSettings: UserSettings = {
   enable_context_awareness: true,
   include_memory: true,
   context_strategy: 'conversation_only',
-  selected_model: 'deepseek-r1:8b',
+  selected_model: 'llama3:latest',
   use_streaming: true,
   use_rag: false,
   use_advanced_rag: false,

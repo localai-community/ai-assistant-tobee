@@ -37,7 +37,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: any) => {
-    console.error('API Response Error:', error.response?.data || error.message);
+    // More robust error logging
+    if (error.response) {
+      // Server responded with error status
+      console.error('API Response Error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        url: error.config?.url,
+        method: error.config?.method
+      });
+    } else if (error.request) {
+      // Request was made but no response received
+      console.error('API Request Error (No Response):', {
+        message: error.message,
+        url: error.config?.url,
+        method: error.config?.method
+      });
+    } else {
+      // Something else happened
+      console.error('API Error:', error.message);
+    }
     return Promise.reject(error);
   }
 );
@@ -85,7 +105,14 @@ export async function getCurrentUser(sessionKey: string = 'default_session'): Pr
 }
 
 export async function setCurrentUser(userId: string, sessionKey: string = 'default_session'): Promise<void> {
-  await api.post(`/api/user-sessions/${sessionKey}/set-user/${userId}`);
+  try {
+    console.log('Setting current user:', userId, 'for session:', sessionKey);
+    const response = await api.post(`/api/user-sessions/${sessionKey}/set-user/${userId}`);
+    console.log('User set successfully:', response.data);
+  } catch (error) {
+    console.error('Error in setCurrentUser API call:', error);
+    throw error;
+  }
 }
 
 export async function updateConversation(conversationId: string, data: Partial<Conversation>): Promise<Conversation> {
@@ -110,8 +137,15 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
 }
 
 export async function updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<UserSettings> {
-  const response: AxiosResponse<UserSettings> = await api.put(`/api/user-settings/${userId}`, settings);
-  return response.data;
+  try {
+    console.log('Updating user settings for user:', userId, 'with settings:', settings);
+    const response: AxiosResponse<UserSettings> = await api.put(`/api/user-settings/${userId}`, settings);
+    console.log('User settings updated successfully:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error in updateUserSettings API call:', error);
+    throw error;
+  }
 }
 
 // Document operations
@@ -157,6 +191,26 @@ export async function getUser(userId: string): Promise<User> {
 export async function createUser(userData: { username: string; email?: string }): Promise<User> {
   const response: AxiosResponse<User> = await api.post('/api/users', userData);
   return response.data;
+}
+
+export async function deleteUser(userId: string): Promise<{ message: string }> {
+  try {
+    const response: AxiosResponse<{ message: string }> = await api.delete(`/api/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error in deleteUser API call:', error);
+    throw error;
+  }
+}
+
+export async function deleteUserByUsername(username: string): Promise<{ message: string }> {
+  try {
+    const response: AxiosResponse<{ message: string }> = await api.delete(`/api/users/username/${username}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error in deleteUserByUsername API call:', error);
+    throw error;
+  }
 }
 
 // Error handling utility
