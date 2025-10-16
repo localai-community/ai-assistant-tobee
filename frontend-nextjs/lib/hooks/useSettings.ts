@@ -45,13 +45,25 @@ export function useSettings(userId: string = DEFAULT_USER_ID) {
       setSettings(prev => {
         // If this is the first load (no user_id set), use backend settings
         if (!prev.user_id || prev.user_id !== userId) {
+          // If switching to guest user, always use default settings
+          if (userId === DEFAULT_USER_ID) {
+            return { ...defaultSettings, user_id: userId };
+          }
           return { ...defaultSettings, ...userSettings };
         }
+        // If switching to guest user from another user, always reset to default settings
+        if (userId === DEFAULT_USER_ID && prev.user_id !== DEFAULT_USER_ID) {
+          return { ...defaultSettings, user_id: userId };
+        }
+        
         // Otherwise, merge backend settings with current settings to preserve local changes
         const mergedSettings = { ...prev, ...userSettings };
         
         // CRITICAL: Don't override the selected_model if it's already set and different from backend
-        if (prev.selected_model && prev.selected_model !== userSettings.selected_model) {
+        // UNLESS we're switching to guest user - then always use default model
+        if (userId === DEFAULT_USER_ID) {
+          mergedSettings.selected_model = defaultSettings.selected_model;
+        } else if (prev.selected_model && prev.selected_model !== userSettings.selected_model) {
           mergedSettings.selected_model = prev.selected_model;
         }
         
