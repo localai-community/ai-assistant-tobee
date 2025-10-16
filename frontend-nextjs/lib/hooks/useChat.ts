@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Message, ChatRequest, UserSettings } from '../types';
 import { getMessages } from '../api';
+import { isDeepSeekFormat, extractThinkingContent, extractAnswerContent } from '../utils/deepseekParser';
 
 interface UseChatOptions {
   initialMessages?: Message[];
@@ -18,6 +19,9 @@ export function useChat(options: UseChatOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const [currentMessage, setCurrentMessage] = useState<string>('');
   const [isSSEConnected, setIsSSEConnected] = useState(false);
+  const [isDeepSeekReasoning, setIsDeepSeekReasoning] = useState(false);
+  const [currentThinking, setCurrentThinking] = useState<string>('');
+  const [currentAnswer, setCurrentAnswer] = useState<string>('');
   
   const currentMessageRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -66,6 +70,8 @@ export function useChat(options: UseChatOptions = {}) {
           setMessages(prev => [...prev, assistantMessage]);
           setCurrentMessage('');
           currentMessageRef.current = '';
+          setCurrentThinking('');
+          setCurrentAnswer('');
           currentUserMessageIdRef.current = null;
           setIsLoading(false);
           setIsSSEConnected(false);
@@ -97,8 +103,23 @@ export function useChat(options: UseChatOptions = {}) {
               } else if (data.type === 'content') {
                 // Accumulate content
                 const content = data.content || '';
-                setCurrentMessage(prev => prev + content);
-                currentMessageRef.current += content;
+                const newContent = currentMessageRef.current + content;
+                setCurrentMessage(newContent);
+                currentMessageRef.current = newContent;
+                
+                // Check for DeepSeek reasoning format
+                if (!isDeepSeekReasoning && isDeepSeekFormat(newContent)) {
+                  setIsDeepSeekReasoning(true);
+                }
+                
+                // Extract thinking and answer content if in DeepSeek format
+                if (isDeepSeekReasoning) {
+                  const thinkingContent = extractThinkingContent(newContent);
+                  setCurrentThinking(thinkingContent);
+                  
+                  const answerContent = extractAnswerContent(newContent);
+                  setCurrentAnswer(answerContent);
+                }
               } else if (data.type === 'error') {
                 setError(data.error || 'An error occurred');
                 setIsLoading(false);
@@ -120,6 +141,8 @@ export function useChat(options: UseChatOptions = {}) {
       }
       setIsLoading(false);
       setIsSSEConnected(false);
+      setCurrentThinking('');
+      setCurrentAnswer('');
       currentUserMessageIdRef.current = null;
     }
   }, []);
@@ -131,6 +154,9 @@ export function useChat(options: UseChatOptions = {}) {
     setIsLoading(true);
     setCurrentMessage('');
     currentMessageRef.current = '';
+    setIsDeepSeekReasoning(false);
+    setCurrentThinking('');
+    setCurrentAnswer('');
 
     try {
       // Don't create conversation explicitly - let the streaming endpoint handle it
@@ -220,6 +246,9 @@ export function useChat(options: UseChatOptions = {}) {
     error,
     currentMessage,
     isSSEConnected,
+    isDeepSeekReasoning,
+    currentThinking,
+    currentAnswer,
     sendMessage: sendChatMessage,
     clearMessages,
     loadMessages,

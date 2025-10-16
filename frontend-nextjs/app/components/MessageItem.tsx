@@ -1,14 +1,19 @@
 'use client';
 
 import { Message } from '../../lib/types';
+import { parseDeepSeekReasoning } from '../../lib/utils/deepseekParser';
+import DeepSeekReasoning from './DeepSeekReasoning';
 import styles from './MessageItem.module.css';
 
 interface MessageItemProps {
   message: Message;
   isStreaming?: boolean;
+  isDeepSeekReasoning?: boolean;
+  currentThinking?: string;
+  currentAnswer?: string;
 }
 
-export default function MessageItem({ message, isStreaming = false }: MessageItemProps) {
+export default function MessageItem({ message, isStreaming = false, isDeepSeekReasoning = false, currentThinking = '', currentAnswer = '' }: MessageItemProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isSystem = message.role === 'system';
@@ -29,6 +34,13 @@ export default function MessageItem({ message, isStreaming = false }: MessageIte
       .replace(/\n/g, '<br>');
   };
 
+  // Parse DeepSeek reasoning format for assistant messages
+  const parsedReasoning = isAssistant ? parseDeepSeekReasoning(message.content) : null;
+  
+  // Only show DeepSeek reasoning if there's actual answer content or we're streaming
+  const shouldShowDeepSeek = parsedReasoning?.isDeepSeekFormat && 
+    (parsedReasoning.answer.trim() || isStreaming);
+
   return (
     <div className={`${styles.message} ${isUser ? styles.userMessage : styles.assistantMessage} ${isSystem ? styles.systemMessage : ''}`}>
       <div className={styles.messageContent}>
@@ -47,14 +59,24 @@ export default function MessageItem({ message, isStreaming = false }: MessageIte
         </div>
         
         <div className={styles.messageBody}>
-          <div 
-            className={styles.content}
-            dangerouslySetInnerHTML={{ 
-              __html: formatContent(message.content) 
-            }}
-          />
+          {/* Display DeepSeek reasoning format for assistant messages */}
+          {isAssistant && (shouldShowDeepSeek || isDeepSeekReasoning) ? (
+            <DeepSeekReasoning 
+              parsed={parsedReasoning || parseDeepSeekReasoning(message.content)} 
+              isStreaming={isStreaming}
+              currentThinking={currentThinking}
+              currentAnswer={currentAnswer}
+            />
+          ) : (
+            <div 
+              className={styles.content}
+              dangerouslySetInnerHTML={{ 
+                __html: formatContent(message.content) 
+              }}
+            />
+          )}
           
-          {isStreaming && (
+          {isStreaming && !shouldShowDeepSeek && !isDeepSeekReasoning && (
             <div className={styles.streamingIndicator}>
               <span className={styles.typingDots}>
                 <span></span>

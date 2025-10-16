@@ -20,6 +20,9 @@ export default function ChatInterface() {
     error,
     currentMessage,
     isSSEConnected,
+    isDeepSeekReasoning,
+    currentThinking,
+    currentAnswer,
     sendMessage,
     clearMessages,
     loadMessages,
@@ -182,6 +185,9 @@ export default function ChatInterface() {
           currentMessage={currentMessage}
           isLoading={isLoading}
           error={error}
+          isDeepSeekReasoning={isDeepSeekReasoning}
+          currentThinking={currentThinking}
+          currentAnswer={currentAnswer}
           onSendMessage={handleSendMessage}
         />
         </div>

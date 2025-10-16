@@ -88,8 +88,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 user_id=request.user_id
             ):
                 if first_chunk:
-                    # Send metadata in the first chunk
-                    yield f"data: {json.dumps({'content': chunk, 'conversation_id': conversation_id, 'type': 'metadata'})}\n\n"
+                    # Send conversation_id as metadata first, then the first content chunk
+                    yield f"data: {json.dumps({'conversation_id': conversation_id, 'type': 'metadata'})}\n\n"
+                    yield f"data: {json.dumps({'content': chunk, 'type': 'content'})}\n\n"
                     first_chunk = False
                 else:
                     # Send content chunks

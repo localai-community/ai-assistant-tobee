@@ -10,10 +10,13 @@ interface MessageListProps {
   currentMessage: string;
   isLoading: boolean;
   error: string | null;
+  isDeepSeekReasoning?: boolean;
+  currentThinking?: string;
+  currentAnswer?: string;
   onSendMessage?: (message: string) => void;
 }
 
-export default function MessageList({ messages, currentMessage, isLoading, error, onSendMessage }: MessageListProps) {
+export default function MessageList({ messages, currentMessage, isLoading, error, isDeepSeekReasoning, currentThinking, currentAnswer, onSendMessage }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -85,6 +88,9 @@ export default function MessageList({ messages, currentMessage, isLoading, error
               created_at: new Date().toISOString()
             }}
             isStreaming={true}
+            isDeepSeekReasoning={isDeepSeekReasoning}
+            currentThinking={currentThinking}
+            currentAnswer={currentAnswer}
           />
         )}
         
