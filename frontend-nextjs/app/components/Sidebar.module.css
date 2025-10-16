@@ -346,6 +346,31 @@
   margin-bottom: var(--spacing-md);
 }
 
+.headerButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.newConversationButton {
+  background-color: var(--accent-color);
+  color: white;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.newConversationButton:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
 .refreshButton {
   background: none;
   border: none;

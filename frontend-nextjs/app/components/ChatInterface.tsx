@@ -45,6 +45,12 @@ export default function ChatInterface() {
     await loadMessages(conversationId);
   };
 
+  const handleNewConversation = () => {
+    // Clear current conversation and messages to start fresh
+    setConversationId(null);
+    clearMessages();
+  };
+
   const handleUserIdChange = async (newUserId: string) => {
     if (newUserId !== currentUserId) {
       // Update the current user ID state
@@ -73,6 +79,7 @@ export default function ChatInterface() {
           onClearMessages={handleClearMessages}
           onToggleSidebar={toggleSidebar}
           onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
           onUserIdChange={handleUserIdChange}
           currentConversationId={conversationId}
           isOpen={sidebarOpen}

@@ -14,6 +14,7 @@ interface SidebarProps {
   onClearMessages: () => void;
   onToggleSidebar: () => void;
   onSelectConversation?: (conversationId: string) => void;
+  onNewConversation?: () => void;
   onUserIdChange?: (userId: string) => void;
   currentConversationId?: string | null;
   isOpen: boolean;
@@ -25,6 +26,7 @@ export default function Sidebar({
   onClearMessages, 
   onToggleSidebar,
   onSelectConversation,
+  onNewConversation,
   onUserIdChange,
   currentConversationId,
   isOpen 
@@ -50,6 +52,12 @@ export default function Sidebar({
   const handleConversationSelect = (conversationId: string) => {
     if (onSelectConversation) {
       onSelectConversation(conversationId);
+    }
+  };
+
+  const handleNewConversation = () => {
+    if (onNewConversation) {
+      onNewConversation();
     }
   };
 
@@ -374,13 +382,22 @@ export default function Sidebar({
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <h3 className={styles.sectionTitle}>Recent Conversations</h3>
-                <button
-                  className={styles.refreshButton}
-                  onClick={refreshConversations}
-                  title="Refresh conversations"
-                >
-                  🔄
-                </button>
+                <div className={styles.headerButtons}>
+                  <button
+                    className={styles.newConversationButton}
+                    onClick={handleNewConversation}
+                    title="Start new conversation"
+                  >
+                    ➕ New
+                  </button>
+                  <button
+                    className={styles.refreshButton}
+                    onClick={refreshConversations}
+                    title="Refresh conversations"
+                  >
+                    🔄
+                  </button>
+                </div>
               </div>
               
               {isLoading && (
