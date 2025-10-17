@@ -36,7 +36,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, description="Model temperature (0.0-1.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     conversation_id: Optional[str] = Field(default=None, description="Conversation ID for context")
-    user_id: Optional[str] = Field(default="leia", description="User ID for personalized context")
+    user_id: Optional[str] = Field(default="00000000-0000-0000-0000-000000000001", description="User ID for personalized context")
     # RAG parameters
     k: Optional[int] = Field(default=None, description="Number of documents to retrieve for RAG")
     filter_dict: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filter for RAG")
@@ -351,7 +351,7 @@ class ChatService:
         enable_context_awareness: bool = True,
         include_memory: bool = False,
         context_strategy: str = "conversation_only",
-        user_id: Optional[str] = "leia"
+        user_id: Optional[str] = "00000000-0000-0000-0000-000000000001"
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from Ollama."""
         
@@ -362,14 +362,15 @@ class ChatService:
         if self.conversation_repo and conversation_id:
             conversation = self.conversation_repo.get_conversation(conversation_id)
         
-        if not conversation and self.conversation_repo:
-            # Create new conversation in database
+        if not conversation and self.conversation_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
+            # Only create new conversation in database if user_id is provided and not guest mode
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 model=model,
                 user_id=user_id
             )
-            conversation = self.conversation_repo.create_conversation(conversation_data)
+            # Use the provided conversation_id if available, otherwise let the database generate one
+            conversation = self.conversation_repo.create_conversation(conversation_data, conversation_id=conversation_id)
             conversation_id = conversation.id
         elif not conversation:
             # Fallback to in-memory if no database
@@ -417,8 +418,8 @@ class ChatService:
                 logger.warning(f"MCP not available for streaming: {e}")
                 # Don't add tool results if MCP is not available
         
-        # Add user message to database
-        if self.message_repo:
+        # Add user message to database (only if user_id is provided and not guest mode)
+        if self.message_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
             user_message_data = MessageCreate(
                 conversation_id=conversation_id,
                 role="user",
@@ -426,6 +427,8 @@ class ChatService:
             )
             self.message_repo.create_message(user_message_data)
             logger.info(f"Stored user message in database for conversation {conversation_id}")
+        elif not user_id or user_id == "00000000-0000-0000-0000-000000000001":
+            logger.info(f"Guest mode: Not storing user message in database for conversation {conversation_id}")
         else:
             logger.warning("No message repository available for user message storage")
         
@@ -536,7 +539,8 @@ class ChatService:
                 
                 finally:
                     # Always store the assistant message, even if streaming was interrupted
-                    if full_response and self.message_repo and not assistant_message_stored:
+                    # But only if user_id is provided and not guest mode
+                    if full_response and self.message_repo and not assistant_message_stored and user_id and user_id != "00000000-0000-0000-0000-000000000001":
                         ai_message_data = MessageCreate(
                             conversation_id=conversation_id,
                             role="assistant",
@@ -613,10 +617,10 @@ class ChatService:
         # Return True if any indicator suggests incompleteness
         return any(incomplete_indicators)
     
-    def list_conversations(self) -> List[Conversation]:
-        """List all conversations."""
+    def list_conversations(self, user_id: Optional[str] = None) -> List[Conversation]:
+        """List conversations, optionally filtered by user."""
         if self.conversation_repo:
-            return self.conversation_repo.get_conversations()
+            return self.conversation_repo.get_conversations(user_id=user_id)
         return []
     
     def delete_conversation(self, conversation_id: str) -> bool:
@@ -666,7 +670,9 @@ class ChatService:
                                 user_message,  # Original user message
                                 doc.filename,  # Document filename
                                 "content text",  # Generic content search
-                                "document content"  # Another generic search
+                                "document content",  # Another generic search
+                                "main topics",  # For analysis queries
+                                "key points"  # For summary queries
                             ]
                             
                             found_content = False

@@ -1,0 +1,678 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { UserSettings, Conversation, User } from '../../lib/types';
+import { useConversations } from '../../lib/hooks/useConversations';
+import { useUsers } from '../../lib/hooks/useUsers';
+import { createUser, deleteUser, checkUsernameExists } from '../../lib/api';
+import ModelSelector from './ModelSelector';
+import DeleteUserModal from './DeleteUserModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
+import styles from './Sidebar.module.css';
+
+const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+interface SidebarProps {
+  settings: UserSettings;
+  onUpdateSetting: (key: keyof UserSettings, value: any) => void;
+  onClearMessages: () => void;
+  onToggleSidebar: () => void;
+  onSelectConversation?: (conversationId: string) => void;
+  onNewConversation?: () => void;
+  onUserIdChange?: (userId: string) => void;
+  currentConversationId?: string | null;
+  currentUserId?: string;
+  isOpen: boolean;
+}
+
+export default function Sidebar({ 
+  settings, 
+  onUpdateSetting, 
+  onClearMessages, 
+  onToggleSidebar,
+  onSelectConversation,
+  onNewConversation,
+  onUserIdChange,
+  currentConversationId,
+  currentUserId,
+  isOpen 
+}: SidebarProps) {
+  const [activeTab, setActiveTab] = useState<'settings' | 'conversations'>('settings');
+  const [userIdChangeMessage, setUserIdChangeMessage] = useState<string | null>(null);
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [manualUserId, setManualUserId] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
+  const [usernameExists, setUsernameExists] = useState<boolean>(false);
+  const [isCheckingUsername, setIsCheckingUsername] = useState<boolean>(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { conversations, isLoading, error, refreshConversations, deleteConversation } = useConversations(currentUserId);
+  const { users, isLoading: usersLoading, error: usersError, refreshUsers } = useUsers();
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSettingChange = (key: keyof UserSettings, value: any) => {
+    onUpdateSetting(key, value);
+  };
+
+  const handleClearMessages = () => {
+    if (confirm('Are you sure you want to clear all messages? This action cannot be undone.')) {
+      onClearMessages();
+    }
+  };
+
+  const handleConversationSelect = (conversationId: string) => {
+    if (onSelectConversation) {
+      onSelectConversation(conversationId);
+    }
+  };
+
+  const handleNewConversation = () => {
+    if (onNewConversation) {
+      onNewConversation();
+    }
+  };
+
+  const handleUserIdChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newUserId = event.target.value;
+    if (onUserIdChange && newUserId !== settings.user_id) {
+      onUserIdChange(newUserId);
+      setUserIdChangeMessage(`✅ Switched to user: ${newUserId || 'guest'}`);
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    }
+  };
+
+  const handleUserSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedUserId = event.target.value;
+    
+    if (selectedUserId === 'manual') {
+      setIsManualInput(true);
+    } else if (selectedUserId && onUserIdChange) {
+      onUserIdChange(selectedUserId);
+      // Find the selected user to get their username
+      const selectedUser = users.find(user => user.id === selectedUserId);
+      const displayName = selectedUser ? selectedUser.username : selectedUserId;
+      setUserIdChangeMessage(`✅ Switched to user: ${displayName}`);
+      setIsManualInput(false);
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    }
+  };
+
+  const handleManualInputToggle = () => {
+    setIsManualInput(!isManualInput);
+  };
+
+  const handleManualUserIdChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = event.target.value;
+    setManualUserId(newValue);
+    
+    // Clear existing timeout
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+    
+    // Check if username exists when user types (with debouncing)
+    if (newValue.trim()) {
+      checkTimeoutRef.current = setTimeout(() => {
+        checkUsernameExistence(newValue.trim());
+      }, 500); // Wait 500ms after user stops typing
+    } else {
+      setUsernameExists(false);
+    }
+  };
+
+  const checkUsernameExistence = async (username: string) => {
+    if (!username.trim()) {
+      setUsernameExists(false);
+      return;
+    }
+
+    setIsCheckingUsername(true);
+    try {
+      const result = await checkUsernameExists(username);
+      setUsernameExists(result.exists);
+    } catch (error) {
+      console.error('Error checking username existence:', error);
+      setUsernameExists(false);
+    } finally {
+      setIsCheckingUsername(false);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!manualUserId.trim()) {
+      setUserIdChangeMessage('❌ Please enter a user ID');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      return;
+    }
+
+    // Prevent creation if username already exists
+    if (usernameExists) {
+      setUserIdChangeMessage('❌ Username already exists. Please choose a different username.');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      // Create the user via API
+      const newUser = await createUser({
+        username: manualUserId,
+        email: `${manualUserId}@localai.com`
+      });
+      
+      // Refresh the user list
+      await refreshUsers();
+      
+      // Switch to the new user
+      if (onUserIdChange) {
+        onUserIdChange(newUser.id);
+        setUserIdChangeMessage(`✅ Created and switched to user: ${newUser.username}`);
+        setIsManualInput(false);
+        setManualUserId('');
+        setUsernameExists(false);
+      }
+      
+      // Clear message after 3 seconds
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      setUserIdChangeMessage('❌ Failed to create user');
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const handleManualInputKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      handleCreateUser();
+    }
+  };
+
+  const handleDeleteUserClick = (user: User) => {
+    setUserToDelete(user);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteUserConfirm = async (user: User) => {
+    setIsDeletingUser(true);
+    try {
+      console.log('Attempting to delete user:', user);
+      const isCurrentUser = currentUserId === user.id;
+      
+      const result = await deleteUser(user.id);
+      console.log('Delete user result:', result);
+      
+      // Close the modal first
+      setDeleteModalOpen(false);
+      setUserToDelete(null);
+      
+      // If the deleted user is the current user, switch to guest first
+      if (isCurrentUser && onUserIdChange) {
+        try {
+          console.log('Switching to guest user after deleting current user');
+          // Use the proper guest user ID instead of empty string
+          await onUserIdChange(GUEST_USER_ID);
+          // Wait a bit for the user switch to complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error('Error switching to guest user after deletion:', error);
+          // Don't throw here, as the user deletion was successful
+        }
+      }
+      
+      // Refresh the users list after user switch (if needed)
+      refreshUsers();
+      
+      // Show success message
+      setUserIdChangeMessage(`✅ User "${user.username}" has been deleted`);
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setUserIdChangeMessage(`❌ Failed to delete user "${user.username}"`);
+      setTimeout(() => setUserIdChangeMessage(null), 3000);
+      
+      // Close the modal even on error
+      setDeleteModalOpen(false);
+      setUserToDelete(null);
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  const handleDeleteModalClose = () => {
+    setDeleteModalOpen(false);
+    setUserToDelete(null);
+  };
+
+  const handleDeleteConversation = (conversationId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent conversation selection
+    
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (conversation) {
+      setConversationToDelete(conversation);
+      setDeleteConfirmationOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!conversationToDelete) return;
+    
+    try {
+      await deleteConversation(conversationToDelete.id);
+      setDeleteConfirmationOpen(false);
+      setConversationToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      alert('Failed to delete conversation. Please try again.');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmationOpen(false);
+    setConversationToDelete(null);
+  };
+
+  const formatConversationTitle = (conversation: Conversation) => {
+    if (conversation.title) {
+      return conversation.title;
+    }
+    // Use first message content as title if no title is set
+    const firstMessage = conversation.messages?.[0];
+    if (firstMessage?.content) {
+      return firstMessage.content.length > 50 
+        ? firstMessage.content.substring(0, 50) + '...'
+        : firstMessage.content;
+    }
+    return 'Untitled Conversation';
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      <div className={styles.header}>
+        <h2 className={styles.title}>Settings</h2>
+        <button
+          className={styles.closeButton}
+          onClick={onToggleSidebar}
+          aria-label="Close sidebar"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className={styles.tabs}>
+        <button
+          className={`${styles.tab} ${activeTab === 'settings' ? styles.active : ''}`}
+          onClick={() => setActiveTab('settings')}
+        >
+          ⚙️ Settings
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === 'conversations' ? styles.active : ''}`}
+          onClick={() => {
+            setActiveTab('conversations');
+            refreshConversations();
+          }}
+        >
+          💬 Conversations
+        </button>
+      </div>
+
+      <div className={styles.content}>
+        {activeTab === 'settings' && (
+          <div className={styles.settingsTab}>
+            {/* User ID Input */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>👤 User ID</h3>
+              <div className={styles.inputGroup}>
+                {/* User Selection Dropdown */}
+                <div className={styles.selectGroup}>
+                  <select
+                    value={isManualInput ? 'manual' : (settings.user_id || '')}
+                    onChange={handleUserSelect}
+                    className={styles.selectInput}
+                    title="Select an existing user or choose manual input"
+                  >
+                    <option value="">Select a user...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.username}
+                      </option>
+                    ))}
+                    <option value="manual">➕ Enter manually</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={refreshUsers}
+                    className={styles.refreshButton}
+                    title="Refresh user list"
+                    disabled={usersLoading}
+                  >
+                    {usersLoading ? '⏳' : '🔄'}
+                  </button>
+                  {/* Delete User Button - only show if a user is selected */}
+                  {settings.user_id && !isManualInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectedUser = users.find(user => user.id === settings.user_id);
+                        if (selectedUser) {
+                          handleDeleteUserClick(selectedUser);
+                        }
+                      }}
+                      className={styles.deleteUserButton}
+                      title={`Delete selected user`}
+                      disabled={isDeletingUser}
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+
+                {/* Manual Input Field */}
+                {isManualInput && (
+                  <div className={styles.manualInputGroup}>
+                    <input
+                      type="text"
+                      value={manualUserId}
+                      onChange={handleManualUserIdChange}
+                      onKeyPress={handleManualInputKeyPress}
+                      placeholder="Enter new username"
+                      className={styles.textInput}
+                      title="Enter a new username to create a user"
+                      disabled={isCreatingUser}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateUser}
+                      className={styles.submitButton}
+                      disabled={isCreatingUser || !manualUserId.trim() || usernameExists}
+                      title={usernameExists ? "Username already exists" : "Create new user"}
+                    >
+                      {isCreatingUser ? '⏳' : (usernameExists ? '❌' : '✅')}
+                    </button>
+                  </div>
+                )}
+
+                <small className={styles.helpText}>
+                  {isManualInput 
+                    ? "Enter a new username and click submit to create a new user"
+                    : "Select an existing user or enter a new user ID manually"
+                  }
+                </small>
+
+                {/* Username existence warning */}
+                {isManualInput && manualUserId.trim() && (
+                  <div className={styles.warningMessage}>
+                    {isCheckingUsername ? (
+                      <span>⏳ Checking username availability...</span>
+                    ) : usernameExists ? (
+                      <span>⚠️ Username "{manualUserId}" already exists. Please choose a different username.</span>
+                    ) : (
+                      <span>✅ Username "{manualUserId}" is available.</span>
+                    )}
+                  </div>
+                )}
+
+                {usersError && (
+                  <div className={styles.errorMessage}>
+                    Error loading users: {usersError}
+                  </div>
+                )}
+
+                {userIdChangeMessage && (
+                  <div className={styles.successMessage}>
+                    {userIdChangeMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>🤖 Model</h3>
+              <ModelSelector
+                selectedModel={settings.selected_model || 'llama3:latest'}
+                onModelChange={(model) => handleSettingChange('selected_model', model)}
+              />
+            </div>
+
+            {/* Temperature */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Temperature</h3>
+              <div className={styles.rangeContainer}>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={settings.temperature || 0.7}
+                  onChange={(e) => handleSettingChange('temperature', parseFloat(e.target.value))}
+                  className={styles.range}
+                />
+                <span className={styles.rangeValue}>{settings.temperature || 0.7}</span>
+              </div>
+            </div>
+
+            {/* RAG Settings */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>RAG & Context</h3>
+              <div className={styles.checkboxGroup}>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_rag || false}
+                    onChange={(e) => handleSettingChange('use_rag', e.target.checked)}
+                  />
+                  <span>Enable RAG</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_advanced_rag || false}
+                    onChange={(e) => handleSettingChange('use_advanced_rag', e.target.checked)}
+                  />
+                  <span>Advanced RAG</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.enable_context_awareness || false}
+                    onChange={(e) => handleSettingChange('enable_context_awareness', e.target.checked)}
+                  />
+                  <span>Context Awareness</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.include_memory || false}
+                    onChange={(e) => handleSettingChange('include_memory', e.target.checked)}
+                  />
+                  <span>Include Memory</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Reasoning Settings */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Reasoning</h3>
+              <div className={styles.checkboxGroup}>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_unified_reasoning || false}
+                    onChange={(e) => handleSettingChange('use_unified_reasoning', e.target.checked)}
+                  />
+                  <span>Unified Reasoning</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_phase2_reasoning || false}
+                    onChange={(e) => handleSettingChange('use_phase2_reasoning', e.target.checked)}
+                  />
+                  <span>Phase 2 Reasoning</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_phase3_reasoning || false}
+                    onChange={(e) => handleSettingChange('use_phase3_reasoning', e.target.checked)}
+                  />
+                  <span>Phase 3 Reasoning</span>
+                </label>
+                <label className={styles.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={settings.use_reasoning_chat || false}
+                    onChange={(e) => handleSettingChange('use_reasoning_chat', e.target.checked)}
+                  />
+                  <span>Reasoning Chat</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Actions</h3>
+              <div className={styles.buttonGroup}>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={handleClearMessages}
+                >
+                  Clear Messages
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'conversations' && (
+          <div className={styles.conversationsTab}>
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h3 className={styles.sectionTitle}>Recent Conversations</h3>
+                <div className={styles.headerButtons}>
+                  <button
+                    className={styles.newConversationButton}
+                    onClick={handleNewConversation}
+                    title="Start new conversation"
+                  >
+                    ➕ New
+                  </button>
+                  <button
+                    className={styles.refreshButton}
+                    onClick={refreshConversations}
+                    title="Refresh conversations"
+                  >
+                    🔄
+                  </button>
+                </div>
+              </div>
+              
+              {isLoading && (
+                <div className={styles.loadingState}>
+                  <p>Loading conversations...</p>
+                </div>
+              )}
+              
+              {error && (
+                <div className={styles.errorState}>
+                  <p>Error loading conversations: {error}</p>
+                  <button
+                    className="btn btn-sm"
+                    onClick={refreshConversations}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              
+              {!isLoading && !error && conversations.length === 0 && (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>💬</div>
+                  <p>No conversations yet</p>
+                  <small>Start a new conversation to see it here</small>
+                </div>
+              )}
+              
+              {!isLoading && !error && conversations.length > 0 && (
+                <div className={styles.conversationList}>
+                  {conversations.map((conversation) => {
+                    const isCurrent = currentConversationId === conversation.id;
+                    return (
+                      <div
+                        key={conversation.id}
+                        className={`${styles.conversationItem} ${isCurrent ? styles.currentConversation : ''}`}
+                        onClick={() => handleConversationSelect(conversation.id)}
+                      >
+                        <div className={styles.conversationHeader}>
+                          <div className={styles.conversationTitle}>
+                            {formatConversationTitle(conversation)}
+                          </div>
+                          {!isCurrent && (
+                            <button
+                              className={styles.deleteConversationButton}
+                              onClick={(e) => handleDeleteConversation(conversation.id, e)}
+                              title="Delete conversation"
+                              aria-label="Delete conversation"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                        <div className={styles.conversationMeta}>
+                          <span className={styles.conversationModel}>
+                            {conversation.model || 'llama3:latest'}
+                          </span>
+                          <span className={styles.conversationDate}>
+                            {new Date(conversation.updated_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {isCurrent && (
+                          <div className={styles.currentIndicator}>👈</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Delete User Modal */}
+      <DeleteUserModal
+        user={userToDelete}
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteModalClose}
+        onConfirm={handleDeleteUserConfirm}
+        isDeleting={isDeletingUser}
+      />
+
+      {/* Delete Conversation Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmationOpen}
+        conversationTitle={conversationToDelete ? formatConversationTitle(conversationToDelete) : ''}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
+    </div>
+  );
+}

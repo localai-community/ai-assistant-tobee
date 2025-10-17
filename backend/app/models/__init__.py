@@ -1,5 +1,5 @@
 # Database models
-from .database import Base, Conversation, Message, User
+from .database import Base, Conversation, Message, User, UserSession
 from .schemas import ConversationCreate, ConversationUpdate, MessageCreate, UserCreate
 
 __all__ = [
@@ -7,6 +7,7 @@ __all__ = [
     "Conversation", 
     "Message",
     "User",
+    "UserSession",
     "ConversationCreate",
     "ConversationUpdate", 
     "MessageCreate",

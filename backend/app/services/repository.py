@@ -8,8 +8,8 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk
-from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate
+from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk, UserSession
+from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate, UserSessionCreate, UserSessionUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,10 @@ class ConversationRepository:
     
     def create_conversation(self, conversation: ConversationCreate, conversation_id: Optional[str] = None) -> Conversation:
         """Create a new conversation."""
+        # Don't create conversations for guest users
+        if conversation.user_id == "00000000-0000-0000-0000-000000000001":
+            raise ValueError("Cannot create conversations for guest users")
+        
         db_conversation = Conversation(
             id=conversation_id,  # Use provided ID or let database generate one
             title=conversation.title,
@@ -161,6 +165,45 @@ class UserRepository:
         return self.db.query(User).filter(
             User.is_active == True
         ).order_by(User.created_at.desc()).limit(limit).all()
+    
+    def delete_user(self, user_id: str) -> bool:
+        """Delete a user and all related data (cascade delete)."""
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return False
+            
+            # Due to cascade="all, delete-orphan" in the User model,
+            # deleting the user will automatically delete all related:
+            # - conversations
+            # - messages (through conversations)
+            # - chat_documents (through conversations)
+            # - document_chunks (through chat_documents)
+            # - user_settings (if any)
+            self.db.delete(user)
+            self.db.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete user {user_id}: {e}")
+            self.db.rollback()
+            return False
+    
+    def delete_user_by_username(self, username: str) -> bool:
+        """Delete a user by username and all related data."""
+        try:
+            user = self.db.query(User).filter(User.username == username).first()
+            if not user:
+                return False
+            
+            user_id = user.id
+            self.db.delete(user)
+            self.db.commit()
+            logger.info(f"Deleted user '{username}' (ID: {user_id}) and all related data")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete user '{username}': {e}")
+            self.db.rollback()
+            return False
 
 class ChatDocumentRepository:
     """Repository for chat document operations."""
@@ -287,4 +330,72 @@ class DocumentChunkRepository:
         except Exception as e:
             self.db.rollback()
             logger.error(f"Error deleting document chunks: {e}")
+            raise
+
+class UserSessionRepository:
+    """Repository for user session operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def create_session(self, session: UserSessionCreate) -> UserSession:
+        """Create a new user session."""
+        db_session = UserSession(
+            session_key=session.session_key,
+            current_user_id=session.current_user_id
+        )
+        self.db.add(db_session)
+        self.db.commit()
+        self.db.refresh(db_session)
+        return db_session
+    
+    def get_session(self, session_key: str) -> Optional[UserSession]:
+        """Get a user session by session key."""
+        return self.db.query(UserSession).filter(
+            UserSession.session_key == session_key
+        ).first()
+    
+    def update_session(self, session_key: str, update_data: UserSessionUpdate) -> Optional[UserSession]:
+        """Update a user session."""
+        try:
+            session = self.get_session(session_key)
+            if not session:
+                return None
+            
+            if update_data.current_user_id is not None:
+                session.current_user_id = update_data.current_user_id
+            
+            session.updated_at = datetime.now()
+            self.db.commit()
+            self.db.refresh(session)
+            return session
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating user session: {e}")
+            raise
+    
+    def upsert_session(self, session_key: str, current_user_id: str) -> UserSession:
+        """Create or update a user session."""
+        try:
+            session = self.get_session(session_key)
+            if session:
+                # Update existing session
+                session.current_user_id = current_user_id
+                session.updated_at = datetime.now()
+                self.db.commit()
+                self.db.refresh(session)
+                return session
+            else:
+                # Create new session
+                new_session = UserSession(
+                    session_key=session_key,
+                    current_user_id=current_user_id
+                )
+                self.db.add(new_session)
+                self.db.commit()
+                self.db.refresh(new_session)
+                return new_session
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error upserting user session: {e}")
             raise 

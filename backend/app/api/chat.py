@@ -21,6 +21,7 @@ from ..services.rag.document_processor import DocumentProcessor
 from ..services.rag.vector_store import VectorStore
 from ..core.database import get_db
 from ..core.models import ErrorResponse
+from ..models.schemas import Message
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -61,13 +62,14 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
         
         # Get or create conversation ID
         conversation_id = request.conversation_id
-        if not conversation_id and chat_service.conversation_repo:
-            # Create new conversation in database
+        if not conversation_id and chat_service.conversation_repo and request.user_id and request.user_id != "00000000-0000-0000-0000-000000000001":
+            # Only create new conversation in database if user_id is provided and not guest mode
             from app.models.schemas import ConversationCreate
             from datetime import datetime
             conversation_data = ConversationCreate(
                 title=f"Conversation {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                model=request.model
+                model=request.model,
+                user_id=request.user_id
             )
             conversation = chat_service.conversation_repo.create_conversation(conversation_data)
             conversation_id = conversation.id
@@ -86,8 +88,9 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
                 user_id=request.user_id
             ):
                 if first_chunk:
-                    # Send metadata in the first chunk
-                    yield f"data: {json.dumps({'content': chunk, 'conversation_id': conversation_id, 'type': 'metadata'})}\n\n"
+                    # Send conversation_id as metadata first, then the first content chunk
+                    yield f"data: {json.dumps({'conversation_id': conversation_id, 'type': 'metadata'})}\n\n"
+                    yield f"data: {json.dumps({'content': chunk, 'type': 'content'})}\n\n"
                     first_chunk = False
                 else:
                     # Send content chunks
@@ -180,20 +183,21 @@ async def chat_health(db: Session = Depends(get_db)):
         }
 
 @router.get("/conversations", response_model=List[Conversation])
-async def list_conversations(db: Session = Depends(get_db)):
+async def list_conversations(user_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    List all conversations.
+    List conversations, optionally filtered by user.
     
     Args:
+        user_id: Optional user ID to filter conversations
         db: Database session
         
     Returns:
-        List[Conversation]: All conversations
+        List[Conversation]: Conversations for the specified user (or all if no user_id)
     """
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         chat_service = ChatService(ollama_url=ollama_url, db=db)
-        return chat_service.list_conversations()
+        return chat_service.list_conversations(user_id=user_id)
     except Exception as e:
         logger.error(f"Failed to list conversations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -221,6 +225,40 @@ async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Failed to get conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/conversations/{conversation_id}/messages", response_model=List[Message])
+async def get_conversation_messages(conversation_id: str, db: Session = Depends(get_db)):
+    """
+    Get messages for a specific conversation.
+    
+    Args:
+        conversation_id: Unique conversation identifier
+        db: Database session
+        
+    Returns:
+        List[Message]: Messages in the conversation
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        chat_service = ChatService(ollama_url=ollama_url, db=db)
+        
+        # Check if conversation exists
+        conversation = chat_service.get_conversation(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Get messages for the conversation
+        if chat_service.message_repo:
+            messages = chat_service.message_repo.get_messages(conversation_id)
+            return messages
+        else:
+            return []
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get conversation messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/conversations/{conversation_id}")

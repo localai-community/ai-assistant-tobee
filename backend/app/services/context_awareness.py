@@ -419,7 +419,63 @@ class ContextAwarenessService:
                         if doc.summary:
                             doc_context_parts.append(f"Document '{doc.filename}': {doc.summary}")
                         else:
-                            doc_context_parts.append(f"Document '{doc.filename}' is available (no summary)")
+                            # Try to get content from vector store for documents without summaries
+                            try:
+                                from .rag.vector_store import VectorStore
+                                from .rag.retriever import RAGRetriever
+                                
+                                # Initialize vector store and retriever for this conversation
+                                vector_store = VectorStore(conversation_id=conversation_id)
+                                rag_retriever = RAGRetriever(vector_store=vector_store)
+                                
+                                # Try multiple search strategies to get document content
+                                search_queries = [
+                                    current_message,  # Original query
+                                    doc.filename,     # Document filename
+                                    "content",        # Generic content search
+                                    "document"        # Another generic search
+                                ]
+                                
+                                found_content = False
+                                for search_query in search_queries:
+                                    try:
+                                        # Try to retrieve content from the document
+                                        relevant_docs = rag_retriever.retrieve_relevant_documents(
+                                            query=search_query, 
+                                            k=3, 
+                                            filter_dict=None  # Don't filter by filename as it might not match exactly
+                                        )
+                                        
+                                        if relevant_docs:
+                                            # Find chunks that belong to this document
+                                            doc_chunks = []
+                                            for chunk_doc, score in relevant_docs:
+                                                chunk_filename = chunk_doc.metadata.get('filename', '')
+                                                # Check if this chunk belongs to our document
+                                                if doc.filename in chunk_filename or chunk_filename in doc.filename:
+                                                    doc_chunks.append((chunk_doc, score))
+                                            
+                                            if doc_chunks:
+                                                # Get the best chunk content
+                                                best_chunk = max(doc_chunks, key=lambda x: x[1])
+                                                content_snippet = best_chunk[0].page_content
+                                                
+                                                # Limit content length to avoid token limits
+                                                if len(content_snippet) > 500:
+                                                    content_snippet = content_snippet[:500] + "..."
+                                                
+                                                doc_context_parts.append(f"Document '{doc.filename}': {content_snippet}")
+                                                found_content = True
+                                                break
+                                    except Exception as search_error:
+                                        logger.warning(f"Search failed for query '{search_query}': {search_error}")
+                                        continue
+                                
+                                if not found_content:
+                                    doc_context_parts.append(f"Document '{doc.filename}' is available (content accessible)")
+                            except Exception as content_error:
+                                logger.warning(f"Could not retrieve content for {doc.filename}: {content_error}")
+                                doc_context_parts.append(f"Document '{doc.filename}' is available (content accessible)")
                     
                     if doc_context_parts:
                         # Add document context as a separate section for better AI understanding
@@ -427,6 +483,7 @@ class ContextAwarenessService:
                         enhanced_query += document_section
                         context_metadata["documents_available"] = len(document_context)
                         context_metadata["document_context"] = True
+                        logger.info(f"Added document context with {len(document_context)} documents")
             except Exception as e:
                 logger.warning(f"Error adding document context: {e}")
             
@@ -748,6 +805,26 @@ class ContextAwarenessService:
             if not documents:
                 logger.info(f"No documents found for conversation {conversation_id}")
                 return []
+            
+            # For document analysis queries, always return all documents
+            # This ensures that uploaded documents are always available for analysis
+            document_analysis_keywords = [
+                "analyze", "analysis", "overview", "summary", "main topics", 
+                "key points", "contents", "document", "uploaded", "file"
+            ]
+            
+            is_document_analysis_query = any(
+                keyword in query.lower() for keyword in document_analysis_keywords
+            )
+            
+            if is_document_analysis_query:
+                logger.info(f"Document analysis query detected, returning all {len(documents)} documents")
+                # Update access counts and return all documents
+                for doc in documents:
+                    doc.access_count += 1
+                    doc.last_accessed = datetime.now()
+                    doc.relevance_score = 1.0  # High relevance for analysis queries
+                return documents
             
             # Calculate relevance scores for each document
             for doc in documents:

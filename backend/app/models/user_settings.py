@@ -9,7 +9,7 @@ class UserSettings(Base):
     enable_context_awareness = Column(Boolean, default=True)
     include_memory = Column(Boolean, default=False)
     context_strategy = Column(String(50), default="conversation_only")
-    selected_model = Column(String(100), default="deepseek-r1:8b")
+    selected_model = Column(String(100), default="llama3:latest")
     use_streaming = Column(Boolean, default=True)
     use_rag = Column(Boolean, default=False)
     use_advanced_rag = Column(Boolean, default=False)

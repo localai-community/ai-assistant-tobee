@@ -47,6 +47,22 @@ cd ai-assistant
 ./start.sh stop             # Stop all services
 ```
 
+## 🎨 Frontend Options
+
+This project offers two frontend interfaces:
+
+### 1. **Next.js Frontend** (Recommended - Modern)
+- **Location**: `frontend-nextjs/`
+- **Technology**: Next.js 15 + React 19 + TypeScript
+- **Features**: Modern UI, real-time streaming, responsive design
+- **Start**: `cd frontend-nextjs && ./start.sh`
+
+### 2. **Streamlit Frontend** (Legacy)
+- **Location**: `frontend/`
+- **Technology**: Streamlit + Python
+- **Features**: Simple interface, quick setup
+- **Start**: `cd frontend && ./start_frontend.sh`
+
 **The script will detect your system and recommend the best option:**
 
 - **🍎 macOS M1/M2**: GPU acceleration (recommended)

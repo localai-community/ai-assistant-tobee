@@ -56,7 +56,7 @@ class Message(MessageBase):
 class ConversationBase(BaseModel):
     """Base conversation schema."""
     title: Optional[str] = Field(None, max_length=200)
-    model: str = Field(default="llama3.2", max_length=50)
+    model: str = Field(default="llama3:latest", max_length=50)
 
 class ConversationCreate(ConversationBase):
     """Schema for creating a conversation."""
@@ -139,7 +139,7 @@ class UserSettingsBase(BaseModel):
     enable_context_awareness: bool = True
     include_memory: bool = False
     context_strategy: str = "conversation_only"
-    selected_model: str = "deepseek-r1:8b"
+    selected_model: str = "llama3:latest"
     use_streaming: bool = True
     use_rag: bool = False
     use_advanced_rag: bool = False
@@ -154,6 +154,24 @@ class UserSettingsBase(BaseModel):
 
 class UserSettingsCreate(UserSettingsBase):
     pass
+
+class UserSessionBase(BaseModel):
+    session_key: str = Field(..., max_length=100)
+    current_user_id: str = Field(..., max_length=36)
+
+class UserSessionCreate(UserSessionBase):
+    pass
+
+class UserSessionUpdate(BaseModel):
+    current_user_id: Optional[str] = Field(None, max_length=36)
+
+class UserSession(UserSessionBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 class UserSettingsUpdate(BaseModel):
     enable_context_awareness: Optional[bool] = None
