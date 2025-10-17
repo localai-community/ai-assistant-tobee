@@ -9,7 +9,11 @@ import {
   ChatDocument,
   HealthResponse,
   ApiError,
-  User
+  User,
+  UserQuestion,
+  AIPrompt,
+  ContextAwarenessData,
+  QuestionDetails
 } from './types';
 
 // Create axios instance with default config
@@ -227,6 +231,52 @@ export function handleApiError(error: any): string {
     return error.message;
   }
   return 'An unexpected error occurred';
+}
+
+// View Prompts Context API Functions
+export async function getQuestionPrompt(questionId: string): Promise<AIPrompt> {
+  const response: AxiosResponse<AIPrompt> = await api.get(`/api/view-prompts-context/questions/${questionId}/prompt`);
+  return response.data;
+}
+
+export async function getQuestionContext(questionId: string): Promise<ContextAwarenessData[]> {
+  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/questions/${questionId}/context`);
+  return response.data;
+}
+
+export async function getQuestionDetails(questionId: string): Promise<QuestionDetails> {
+  const response: AxiosResponse<QuestionDetails> = await api.get(`/api/view-prompts-context/questions/${questionId}/details`);
+  return response.data;
+}
+
+export async function getConversationQuestions(conversationId: string, limit: number = 100): Promise<UserQuestion[]> {
+  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/questions?limit=${limit}`);
+  return response.data;
+}
+
+export async function getConversationPrompts(conversationId: string, limit: number = 100): Promise<AIPrompt[]> {
+  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/prompts?limit=${limit}`);
+  return response.data;
+}
+
+export async function getConversationContext(conversationId: string, limit: number = 100): Promise<ContextAwarenessData[]> {
+  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/context?limit=${limit}`);
+  return response.data;
+}
+
+export async function getUserQuestions(userId: string, limit: number = 100): Promise<UserQuestion[]> {
+  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/users/${userId}/questions?limit=${limit}`);
+  return response.data;
+}
+
+export async function getUserPrompts(userId: string, limit: number = 100): Promise<AIPrompt[]> {
+  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/users/${userId}/prompts?limit=${limit}`);
+  return response.data;
+}
+
+export async function getUserContext(userId: string, limit: number = 100): Promise<ContextAwarenessData[]> {
+  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/users/${userId}/context?limit=${limit}`);
+  return response.data;
 }
 
 export default api;

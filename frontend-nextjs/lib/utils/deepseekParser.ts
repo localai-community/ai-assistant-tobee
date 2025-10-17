@@ -18,7 +18,7 @@ export interface DeepSeekParsed {
  */
 export function parseDeepSeekReasoning(responseText: string): DeepSeekParsed {
   // Check if response contains DeepSeek reasoning format with both tags
-  const thinkPattern = /<think>(.*?)<\/think>/s;
+  const thinkPattern = /<think>([\s\S]*?)<\/think>/;
   const matches = responseText.match(thinkPattern);
   
   if (matches) {
@@ -26,7 +26,7 @@ export function parseDeepSeekReasoning(responseText: string): DeepSeekParsed {
     const thinkingContent = matches[1].trim();
     
     // Extract answer content (everything after </think>)
-    const answerPattern = /<\/think>(.*)/s;
+    const answerPattern = /<\/think>([\s\S]*)/;
     const answerMatch = responseText.match(answerPattern);
     const answerContent = answerMatch ? answerMatch[1].trim() : "";
     
