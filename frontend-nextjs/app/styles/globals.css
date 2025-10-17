@@ -76,6 +76,7 @@
 
 html {
   height: 100%;
+  box-sizing: border-box;
 }
 
 body {
@@ -86,19 +87,24 @@ body {
   background-color: var(--bg-primary);
   height: 100%;
   overflow: hidden;
+  padding: 20px 0;
+  box-sizing: border-box;
 }
 
 #root {
-  height: 100vh;
+  height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 /* Main container */
 .main-container {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 40px);
   background-color: var(--bg-primary);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Typography */
@@ -350,8 +356,17 @@ p {
     --sidebar-width: 100%;
   }
   
+  body {
+    padding: 20px 0;
+  }
+  
+  #root {
+    height: calc(100vh - 40px);
+  }
+  
   .main-container {
     flex-direction: column;
+    height: calc(100vh - 40px);
   }
   
   .btn {

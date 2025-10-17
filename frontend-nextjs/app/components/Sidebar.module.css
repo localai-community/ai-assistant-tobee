@@ -1,7 +1,7 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
 }
@@ -10,9 +10,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 60px;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-primary);
+  flex-shrink: 0;
 }
 
 .title {
@@ -530,10 +532,11 @@
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
-    top: 0;
+    top: 20px;
     left: 0;
     width: 100%;
     max-width: 300px;
+    height: calc(100vh - 40px);
     z-index: 1000;
     box-shadow: var(--shadow-lg);
   }
