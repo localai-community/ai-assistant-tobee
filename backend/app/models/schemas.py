@@ -3,7 +3,7 @@ Pydantic schemas for database operations.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class UserBase(BaseModel):
@@ -194,5 +194,85 @@ class UserSettingsResponse(UserSettingsBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    class Config:
+        from_attributes = True
+
+# View Prompts Context Schemas
+class UserQuestionBase(BaseModel):
+    """Base user question schema."""
+    question_text: str = Field(..., description="The user's question text")
+
+class UserQuestionCreate(UserQuestionBase):
+    """Schema for creating a user question."""
+    conversation_id: str
+    user_id: str
+
+class UserQuestion(UserQuestionBase):
+    """Schema for user question responses."""
+    id: str
+    conversation_id: str
+    user_id: str
+    question_timestamp: datetime
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class AIPromptBase(BaseModel):
+    """Base AI prompt schema."""
+    final_prompt: str = Field(..., description="The final prompt sent to the AI model")
+    model_used: str = Field(..., max_length=50, description="The AI model used")
+    temperature: Optional[float] = Field(None, description="Model temperature setting")
+    max_tokens: Optional[int] = Field(None, description="Maximum tokens setting")
+
+class AIPromptCreate(AIPromptBase):
+    """Schema for creating an AI prompt."""
+    question_id: str
+    conversation_id: str
+    user_id: str
+
+class AIPrompt(AIPromptBase):
+    """Schema for AI prompt responses."""
+    id: str
+    question_id: str
+    conversation_id: str
+    user_id: str
+    prompt_timestamp: datetime
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ContextAwarenessDataBase(BaseModel):
+    """Base context awareness data schema."""
+    context_type: str = Field(..., max_length=50, description="Type of context data")
+    context_data: Dict[str, Any] = Field(..., description="The context data as JSON")
+    context_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata as JSON")
+
+class ContextAwarenessDataCreate(ContextAwarenessDataBase):
+    """Schema for creating context awareness data."""
+    question_id: str
+    conversation_id: str
+    user_id: str
+
+class ContextAwarenessData(ContextAwarenessDataBase):
+    """Schema for context awareness data responses."""
+    id: str
+    question_id: str
+    conversation_id: str
+    user_id: str
+    context_timestamp: datetime
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class QuestionDetails(BaseModel):
+    """Schema for complete question details including prompt and context."""
+    question: UserQuestion
+    prompt: Optional[AIPrompt] = None
+    context_data: List[ContextAwarenessData] = []
+    
     class Config:
         from_attributes = True

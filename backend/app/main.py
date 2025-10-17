@@ -11,6 +11,7 @@ from app.api.reasoning import router as reasoning_router
 from app.api.user_settings import router as user_settings_router
 from app.api.users import router as users_router
 from app.api.user_sessions import router as user_sessions_router
+from app.api.view_prompts_context import router as view_prompts_context_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -100,6 +101,7 @@ app.include_router(reasoning_router)
 app.include_router(user_settings_router)
 app.include_router(users_router)
 app.include_router(user_sessions_router)
+app.include_router(view_prompts_context_router)
 
 @app.get("/", response_model=RootResponse)
 async def root():
@@ -129,7 +131,8 @@ async def api_status():
             "streaming_chat": "enabled",
             "mcp": "enabled",
             "reasoning": "enabled",
-            "user_settings": "enabled"
+            "user_settings": "enabled",
+            "view_prompts_context": "enabled"
         }
     )
 

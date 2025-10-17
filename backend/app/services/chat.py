@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 import logging
 
 from sqlalchemy.orm import Session
-from .repository import ConversationRepository, MessageRepository
-from ..models.schemas import ConversationCreate, MessageCreate
+from .repository import ConversationRepository, MessageRepository, UserQuestionRepository, AIPromptRepository, ContextAwarenessRepository
+from ..models.schemas import ConversationCreate, MessageCreate, UserQuestionCreate, AIPromptCreate, ContextAwarenessDataCreate
 from ..mcp import MCPManager
 from .context_awareness import ContextAwarenessService
 
@@ -89,9 +89,15 @@ class ChatService:
         if self.db:
             self.conversation_repo = ConversationRepository(self.db)
             self.message_repo = MessageRepository(self.db)
+            self.user_question_repo = UserQuestionRepository(self.db)
+            self.ai_prompt_repo = AIPromptRepository(self.db)
+            self.context_awareness_repo = ContextAwarenessRepository(self.db)
         else:
             self.conversation_repo = None
             self.message_repo = None
+            self.user_question_repo = None
+            self.ai_prompt_repo = None
+            self.context_awareness_repo = None
         
         # Initialize context awareness service lazily
         self.context_service = None
@@ -418,6 +424,73 @@ class ChatService:
                 logger.warning(f"MCP not available for streaming: {e}")
                 # Don't add tool results if MCP is not available
         
+        # Store user question and context data (only if user_id is provided and not guest mode)
+        question_id = None
+        if self.user_question_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
+            try:
+                # Create user question record
+                question_data = UserQuestionCreate(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    question_text=message
+                )
+                user_question = self.user_question_repo.create_question(question_data)
+                question_id = user_question.id
+                logger.info(f"Stored user question in database with ID: {question_id}")
+                
+                # Store context awareness data if available
+                if enable_context_awareness and conversation_id:
+                    try:
+                        self._ensure_context_service_initialized()
+                        # Get context metadata that was used for enhancement
+                        _, context_metadata = self.context_service.build_context_aware_query(
+                            current_message=message,
+                            conversation_id=conversation_id,
+                            user_id=user_id,
+                            include_memory=include_memory
+                        )
+                        
+                        # Store different types of context data
+                        if context_metadata.get("conversation_history"):
+                            context_data = ContextAwarenessDataCreate(
+                                question_id=question_id,
+                                conversation_id=conversation_id,
+                                user_id=user_id,
+                                context_type="conversation_history",
+                                context_data=context_metadata["conversation_history"],
+                                context_metadata={"strategy": context_strategy}
+                            )
+                            self.context_awareness_repo.create_context_data(context_data)
+                        
+                        if context_metadata.get("document_context"):
+                            context_data = ContextAwarenessDataCreate(
+                                question_id=question_id,
+                                conversation_id=conversation_id,
+                                user_id=user_id,
+                                context_type="document_context",
+                                context_data=context_metadata["document_context"],
+                                context_metadata={"document_count": len(context_metadata.get("document_context", []))}
+                            )
+                            self.context_awareness_repo.create_context_data(context_data)
+                        
+                        if context_metadata.get("user_memory"):
+                            context_data = ContextAwarenessDataCreate(
+                                question_id=question_id,
+                                conversation_id=conversation_id,
+                                user_id=user_id,
+                                context_type="user_memory",
+                                context_data=context_metadata["user_memory"],
+                                context_metadata={"memory_chunks": len(context_metadata.get("user_memory", []))}
+                            )
+                            self.context_awareness_repo.create_context_data(context_data)
+                        
+                        logger.info(f"Stored context awareness data for question {question_id}")
+                    except Exception as e:
+                        logger.error(f"Error storing context awareness data: {e}")
+                
+            except Exception as e:
+                logger.error(f"Error storing user question: {e}")
+        
         # Add user message to database (only if user_id is provided and not guest mode)
         if self.message_repo and user_id and user_id != "00000000-0000-0000-0000-000000000001":
             user_message_data = MessageCreate(
@@ -550,6 +623,26 @@ class ChatService:
                         self.message_repo.create_message(ai_message_data)
                         assistant_message_stored = True
                         logger.info(f"Stored assistant message in database for conversation {conversation_id} (interrupted or completed)")
+                        
+                        # Store AI prompt data if we have a question_id
+                        if question_id and self.ai_prompt_repo:
+                            try:
+                                # Create the final prompt that was sent to the AI model
+                                final_prompt = json.dumps(messages, indent=2)
+                                
+                                prompt_data = AIPromptCreate(
+                                    question_id=question_id,
+                                    conversation_id=conversation_id,
+                                    user_id=user_id,
+                                    final_prompt=final_prompt,
+                                    model_used=model,
+                                    temperature=temperature,
+                                    max_tokens=max_tokens
+                                )
+                                self.ai_prompt_repo.create_prompt(prompt_data)
+                                logger.info(f"Stored AI prompt for question {question_id}")
+                            except Exception as e:
+                                logger.error(f"Error storing AI prompt: {e}")
                         
                         # Add stream interruption marker if the response seems incomplete
                         if self._is_response_incomplete(full_response):

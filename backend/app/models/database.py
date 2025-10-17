@@ -2,7 +2,7 @@
 SQLAlchemy database models for LocalAI Community.
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -125,4 +125,70 @@ class UserSession(Base):
     user = relationship("User", backref="sessions")
     
     def __repr__(self):
-        return f"<UserSession(id={self.id}, session_key='{self.session_key}', current_user_id='{self.current_user_id}')>" 
+        return f"<UserSession(id={self.id}, session_key='{self.session_key}', current_user_id='{self.current_user_id}')>"
+
+class UserQuestion(Base):
+    """User question model for tracking individual questions in conversations."""
+    __tablename__ = "user_questions"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    question_timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    conversation = relationship("Conversation", backref="user_questions")
+    user = relationship("User", backref="user_questions")
+    ai_prompts = relationship("AIPrompt", back_populates="question", cascade="all, delete-orphan")
+    context_data = relationship("ContextAwarenessData", back_populates="question", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<UserQuestion(id={self.id}, conversation_id='{self.conversation_id}', user_id='{self.user_id}')>"
+
+class AIPrompt(Base):
+    """AI prompt model for storing final prompts sent to AI models."""
+    __tablename__ = "ai_prompts"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    question_id = Column(String(36), ForeignKey("user_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    final_prompt = Column(Text, nullable=False)
+    model_used = Column(String(50), nullable=False)
+    temperature = Column(Float, nullable=True)
+    max_tokens = Column(Integer, nullable=True)
+    prompt_timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    question = relationship("UserQuestion", back_populates="ai_prompts")
+    conversation = relationship("Conversation", backref="ai_prompts")
+    user = relationship("User", backref="ai_prompts")
+    
+    def __repr__(self):
+        return f"<AIPrompt(id={self.id}, question_id='{self.question_id}', model_used='{self.model_used}')>"
+
+class ContextAwarenessData(Base):
+    """Context awareness data model for storing context information used for questions."""
+    __tablename__ = "context_awareness_data"
+    
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    question_id = Column(String(36), ForeignKey("user_questions.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    context_type = Column(String(50), nullable=False, index=True)  # 'conversation_history', 'document_context', 'user_memory', 'rag_context'
+    context_data = Column(JSON, nullable=False)
+    context_metadata = Column(JSON, nullable=True)
+    context_timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    question = relationship("UserQuestion", back_populates="context_data")
+    conversation = relationship("Conversation", backref="context_data")
+    user = relationship("User", backref="context_data")
+    
+    def __repr__(self):
+        return f"<ContextAwarenessData(id={self.id}, question_id='{self.question_id}', context_type='{self.context_type}')>" 

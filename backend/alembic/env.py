@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
 from app.models.database import Base
-from app.models.database import User, Conversation, Message
+from app.models.database import User, Conversation, Message, UserQuestion, AIPrompt, ContextAwarenessData
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
