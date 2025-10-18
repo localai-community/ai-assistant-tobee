@@ -1,0 +1,374 @@
+.container {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.questionInfo {
+  flex: 1;
+  margin-right: 16px;
+}
+
+.questionTitle {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.questionText {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+  max-height: 3.5em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.closeButton:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.tabs {
+  display: flex;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.activeTab {
+  color: #3b82f6;
+  background-color: white;
+  border-bottom-color: #3b82f6;
+}
+
+.content {
+  min-height: 200px;
+  position: relative;
+}
+
+.tabContent {
+  padding: 20px;
+  min-height: 200px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e7eb;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Prompt and Context Content Styles */
+.error {
+  text-align: center;
+  color: #dc2626;
+  padding: 20px;
+}
+
+.retryButton {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 12px;
+  font-size: 0.875rem;
+}
+
+.retryButton:hover {
+  background-color: #2563eb;
+}
+
+.promptContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.metadataItem {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.metadataItem strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.promptSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.promptText {
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #374151;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.contextContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.contextItem {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.contextHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.contextType {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.contextTimestamp {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.contextData {
+  padding: 16px;
+}
+
+.contextText {
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #374151;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.contextMetadata {
+  padding: 12px 16px;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.contextMetadata h5 {
+  margin: 0 0 8px 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.metadataText {
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #6b7280;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.noData {
+  text-align: center;
+  color: #6b7280;
+  padding: 40px 20px;
+  font-style: italic;
+}
+
+/* Animation for tab switching */
+.content > * {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .header {
+    padding: 12px 16px;
+  }
+  
+  .questionTitle {
+    font-size: 0.875rem;
+  }
+  
+  .questionText {
+    font-size: 0.8125rem;
+  }
+  
+  .tab {
+    padding: 10px 12px;
+    font-size: 0.8125rem;
+  }
+  
+  .content {
+    min-height: 150px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .container {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .header {
+    background-color: #111827;
+    border-bottom-color: #374151;
+  }
+  
+  .questionTitle {
+    color: #f9fafb;
+  }
+  
+  .questionText {
+    color: #d1d5db;
+  }
+  
+  .closeButton {
+    color: #d1d5db;
+  }
+  
+  .closeButton:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .tabs {
+    background-color: #111827;
+    border-bottom-color: #374151;
+  }
+  
+  .tab {
+    color: #d1d5db;
+  }
+  
+  .tab:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .activeTab {
+    color: #60a5fa;
+    background-color: #1f2937;
+    border-bottom-color: #60a5fa;
+  }
+}

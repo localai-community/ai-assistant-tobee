@@ -139,3 +139,45 @@ export interface HealthResponse {
   version: string;
   timestamp: string;
 }
+
+// View Prompts Context Types
+export interface UserQuestion {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  question_text: string;
+  question_timestamp: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIPrompt {
+  id: string;
+  question_id: string;
+  conversation_id: string;
+  user_id: string;
+  final_prompt: string;
+  model_used: string;
+  temperature?: number;
+  max_tokens?: number;
+  prompt_timestamp: string;
+  created_at: string;
+}
+
+export interface ContextAwarenessData {
+  id: string;
+  question_id: string;
+  conversation_id: string;
+  user_id: string;
+  context_type: string;
+  context_data: any;
+  context_metadata?: any;
+  context_timestamp: string;
+  created_at: string;
+}
+
+export interface QuestionDetails {
+  question: UserQuestion;
+  prompt?: AIPrompt;
+  context_data: ContextAwarenessData[];
+}

@@ -8,8 +8,8 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk, UserSession
-from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate, UserSessionCreate, UserSessionUpdate
+from ..models.database import Conversation, Message, User, ChatDocument, DocumentChunk, UserSession, UserQuestion, AIPrompt, ContextAwarenessData
+from ..models.schemas import ConversationCreate, MessageCreate, UserCreate, ChatDocumentCreate, DocumentChunkCreate, UserSessionCreate, UserSessionUpdate, UserQuestionCreate, AIPromptCreate, ContextAwarenessDataCreate
 
 logger = logging.getLogger(__name__)
 
@@ -398,4 +398,154 @@ class UserSessionRepository:
         except Exception as e:
             self.db.rollback()
             logger.error(f"Error upserting user session: {e}")
-            raise 
+            raise
+
+class UserQuestionRepository:
+    """Repository for user question operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def create_question(self, question_data: UserQuestionCreate) -> UserQuestion:
+        """Create a new user question."""
+        db_question = UserQuestion(
+            conversation_id=question_data.conversation_id,
+            user_id=question_data.user_id,
+            question_text=question_data.question_text
+        )
+        self.db.add(db_question)
+        self.db.commit()
+        self.db.refresh(db_question)
+        return db_question
+    
+    def get_question(self, question_id: str) -> Optional[UserQuestion]:
+        """Get a question by ID."""
+        return self.db.query(UserQuestion).filter(UserQuestion.id == question_id).first()
+    
+    def get_questions_by_conversation(self, conversation_id: str, limit: int = 100) -> List[UserQuestion]:
+        """Get questions for a conversation."""
+        return self.db.query(UserQuestion).filter(
+            UserQuestion.conversation_id == conversation_id
+        ).order_by(UserQuestion.question_timestamp.desc()).limit(limit).all()
+    
+    def get_questions_by_user(self, user_id: str, limit: int = 100) -> List[UserQuestion]:
+        """Get questions for a user."""
+        return self.db.query(UserQuestion).filter(
+            UserQuestion.user_id == user_id
+        ).order_by(UserQuestion.question_timestamp.desc()).limit(limit).all()
+    
+    def delete_question(self, question_id: str) -> bool:
+        """Delete a question."""
+        question = self.get_question(question_id)
+        if not question:
+            return False
+        
+        self.db.delete(question)
+        self.db.commit()
+        return True
+
+class AIPromptRepository:
+    """Repository for AI prompt operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def create_prompt(self, prompt_data: AIPromptCreate) -> AIPrompt:
+        """Create a new AI prompt."""
+        db_prompt = AIPrompt(
+            question_id=prompt_data.question_id,
+            conversation_id=prompt_data.conversation_id,
+            user_id=prompt_data.user_id,
+            final_prompt=prompt_data.final_prompt,
+            model_used=prompt_data.model_used,
+            temperature=prompt_data.temperature,
+            max_tokens=prompt_data.max_tokens
+        )
+        self.db.add(db_prompt)
+        self.db.commit()
+        self.db.refresh(db_prompt)
+        return db_prompt
+    
+    def get_prompt_by_question(self, question_id: str) -> Optional[AIPrompt]:
+        """Get prompt for a specific question."""
+        return self.db.query(AIPrompt).filter(AIPrompt.question_id == question_id).first()
+    
+    def get_prompts_by_conversation(self, conversation_id: str, limit: int = 100) -> List[AIPrompt]:
+        """Get prompts for a conversation."""
+        return self.db.query(AIPrompt).filter(
+            AIPrompt.conversation_id == conversation_id
+        ).order_by(AIPrompt.prompt_timestamp.desc()).limit(limit).all()
+    
+    def get_prompts_by_user(self, user_id: str, limit: int = 100) -> List[AIPrompt]:
+        """Get prompts for a user."""
+        return self.db.query(AIPrompt).filter(
+            AIPrompt.user_id == user_id
+        ).order_by(AIPrompt.prompt_timestamp.desc()).limit(limit).all()
+    
+    def delete_prompt(self, prompt_id: str) -> bool:
+        """Delete a prompt."""
+        prompt = self.db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        if not prompt:
+            return False
+        
+        self.db.delete(prompt)
+        self.db.commit()
+        return True
+
+class ContextAwarenessRepository:
+    """Repository for context awareness data operations."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+    
+    def create_context_data(self, context_data: ContextAwarenessDataCreate) -> ContextAwarenessData:
+        """Create new context awareness data."""
+        db_context = ContextAwarenessData(
+            question_id=context_data.question_id,
+            conversation_id=context_data.conversation_id,
+            user_id=context_data.user_id,
+            context_type=context_data.context_type,
+            context_data=context_data.context_data,
+            context_metadata=context_data.context_metadata
+        )
+        self.db.add(db_context)
+        self.db.commit()
+        self.db.refresh(db_context)
+        return db_context
+    
+    def get_context_by_question(self, question_id: str) -> List[ContextAwarenessData]:
+        """Get all context data for a specific question."""
+        return self.db.query(ContextAwarenessData).filter(
+            ContextAwarenessData.question_id == question_id
+        ).order_by(ContextAwarenessData.context_timestamp.asc()).all()
+    
+    def get_context_by_type(self, question_id: str, context_type: str) -> Optional[ContextAwarenessData]:
+        """Get context data of a specific type for a question."""
+        return self.db.query(ContextAwarenessData).filter(
+            and_(
+                ContextAwarenessData.question_id == question_id,
+                ContextAwarenessData.context_type == context_type
+            )
+        ).first()
+    
+    def get_context_by_conversation(self, conversation_id: str, limit: int = 100) -> List[ContextAwarenessData]:
+        """Get context data for a conversation."""
+        return self.db.query(ContextAwarenessData).filter(
+            ContextAwarenessData.conversation_id == conversation_id
+        ).order_by(ContextAwarenessData.context_timestamp.desc()).limit(limit).all()
+    
+    def get_context_by_user(self, user_id: str, limit: int = 100) -> List[ContextAwarenessData]:
+        """Get context data for a user."""
+        return self.db.query(ContextAwarenessData).filter(
+            ContextAwarenessData.user_id == user_id
+        ).order_by(ContextAwarenessData.context_timestamp.desc()).limit(limit).all()
+    
+    def delete_context_data(self, context_id: str) -> bool:
+        """Delete context data."""
+        context = self.db.query(ContextAwarenessData).filter(ContextAwarenessData.id == context_id).first()
+        if not context:
+            return False
+        
+        self.db.delete(context)
+        self.db.commit()
+        return True 
