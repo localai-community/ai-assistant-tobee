@@ -11,5 +11,47 @@
     "ai.chat.model": "gpt-4",
     "ai.chat.maxTokens": 4000,
     "python.testing.pytestEnabled": true,
-    "python.testing.pytestArgs": ["tests"]
+    "python.testing.pytestArgs": ["tests"],
+    
+    // Python interpreter settings
+    "python.defaultInterpreterPath": "./backend/venv/bin/python3",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    
+    // Workspace-specific Python paths
+    "python.analysis.extraPaths": [
+        "./backend",
+        "./frontend",
+        "./backend/app",
+        "./frontend"
+    ],
+    
+    // Auto-activate virtual environment in terminal
+    "python.terminal.executeInFileDir": false,
+    "python.terminal.launchArgs": ["-c", "source ./backend/venv/bin/activate"],
+    
+    // Linting and formatting
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": ["--line-length", "88"],
+    
+    // IntelliSense
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.typeCheckingMode": "basic",
+    
+    // Test discovery
+    "python.testing.unittestEnabled": false,
+    "python.testing.nosetestsEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests",
+        "-v"
+    ],
+    
+    // File associations
+    "files.associations": {
+        "*.py": "python"
+    }
 }
