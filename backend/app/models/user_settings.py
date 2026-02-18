@@ -21,6 +21,7 @@ class UserSettings(Base):
     use_unified_reasoning = Column(Boolean, default=False)
     selected_reasoning_mode = Column(String(50), default="auto")
     temperature = Column(Float, default=0.7)
+    theme = Column(String(20), default="system")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -43,6 +44,7 @@ class UserSettings(Base):
             "use_unified_reasoning": self.use_unified_reasoning,
             "selected_reasoning_mode": self.selected_reasoning_mode,
             "temperature": self.temperature,
+            "theme": self.theme,
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }

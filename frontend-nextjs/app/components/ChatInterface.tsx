@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useChat } from '../../lib/hooks/useChat';
 import { useSettings } from '../../lib/hooks/useSettings';
+import { useTheme } from '../../lib/hooks/useTheme';
 import { useCurrentUser } from '../../lib/hooks/useCurrentUser';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
@@ -13,6 +14,8 @@ import styles from './ChatInterface.module.css';
 export default function ChatInterface() {
   const { currentUserId, saveCurrentUser, isLoading: userLoading } = useCurrentUser();
   const { settings, updateSetting } = useSettings(currentUserId);
+  const settingsReady = !userLoading && settings.user_id === currentUserId;
+  useTheme(settingsReady ? settings.theme : undefined);
   const {
     messages,
     conversationId,
@@ -33,6 +36,12 @@ export default function ChatInterface() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNoUserWarning, setShowNoUserWarning] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [minLoadDone, setMinLoadDone] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinLoadDone(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
@@ -110,20 +119,12 @@ export default function ChatInterface() {
     }
   };
 
-  // Show loading state while user is being loaded
-  if (userLoading) {
+  // Show loading state while user is being loaded (minimum 1 second)
+  if (userLoading || !minLoadDone) {
     return (
-      <div className={styles.container}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: '100vh',
-          fontSize: '18px',
-          color: '#666'
-        }}>
-          Loading user session...
-        </div>
+      <div className={styles.pageLoader}>
+        <div className={styles.pageLoaderSpinner} />
+        <span>Loading user session...</span>
       </div>
     );
   }

@@ -12,42 +12,42 @@
   gap: 8px;
   width: 100%;
   padding: 8px 12px;
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 14px;
-  color: #495057;
+  color: var(--text-secondary);
 }
 
 .expandButton.thinking {
-  background: #e3f2fd;
-  border-color: #bbdefb;
-  color: #1976d2;
+  background: rgba(77, 171, 247, 0.15);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
   animation: thinkingPulse 2s ease-in-out infinite;
 }
 
 @keyframes thinkingPulse {
-  0%, 100% { 
-    background: #e3f2fd;
-    border-color: #bbdefb;
+  0%, 100% {
+    background: rgba(77, 171, 247, 0.15);
+    border-color: var(--accent-color);
   }
-  50% { 
-    background: #f3e5f5;
-    border-color: #ce93d8;
+  50% {
+    background: rgba(77, 171, 247, 0.25);
+    border-color: var(--accent-hover);
   }
 }
 
 .expandButton:hover {
-  background: #e9ecef;
-  border-color: #dee2e6;
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
 }
 
 .expandButton.expanded {
-  background: #e3f2fd;
-  border-color: #bbdefb;
-  color: #1976d2;
+  background: rgba(77, 171, 247, 0.15);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .icon {
@@ -63,7 +63,7 @@
 .arrow {
   font-size: 12px;
   transition: transform 0.2s ease;
-  color: #6c757d;
+  color: var(--text-muted);
 }
 
 .arrowUp {
@@ -77,8 +77,8 @@
 .reasoningContent {
   margin-top: 8px;
   padding: 12px;
-  background: #ffffff;
-  border: 1px solid #e9ecef;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   border-top: none;
   border-top-left-radius: 0;
@@ -86,8 +86,8 @@
 }
 
 .thinkingText {
-  color: #000000;
-  background-color: #ffffff;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
   font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -98,35 +98,34 @@
   margin-top: 8px;
 }
 
-/* Answer content styling - always black text on white background */
 .answerContent {
   font-size: 15px;
   line-height: 1.6;
-  color: #000000;
+  color: var(--text-primary);
   font-weight: normal;
   opacity: 1;
-  background-color: #ffffff;
+  background-color: var(--bg-primary);
 }
 
 .answerContent * {
-  color: #000000;
+  color: var(--text-primary);
 }
 
 .cursor {
-  color: #007bff;
+  color: var(--accent-color);
   animation: blink 1s infinite;
 }
 
 .thinkingIndicator {
-  color: #000000;
-  background-color: #ffffff;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
   font-style: italic;
   font-size: 14px;
 }
 
 .noAnswerMessage {
-  color: #000000;
-  background-color: #ffffff;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
   font-style: italic;
   font-size: 14px;
 }
@@ -142,8 +141,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-top: 8px;
 }
@@ -154,7 +153,7 @@
 }
 
 .thinkingLoader .loaderText {
-  color: #495057;
+  color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
 }
@@ -168,7 +167,7 @@
 .thinkingLoader .loaderDot {
   width: 6px;
   height: 6px;
-  background: #6c757d;
+  background: var(--text-muted);
   border-radius: 50%;
   animation: thinkingDots 1.4s ease-in-out infinite both;
 }
@@ -196,4 +195,3 @@
     opacity: 1;
   }
 }
-

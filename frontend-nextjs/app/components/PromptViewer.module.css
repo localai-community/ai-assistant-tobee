@@ -13,9 +13,9 @@
 }
 
 .modal {
-  background: white;
+  background: var(--bg-primary);
   border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-lg);
   max-width: 90vw;
   max-height: 90vh;
   width: 800px;
@@ -29,15 +29,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .title {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .closeButton {
@@ -45,15 +45,15 @@
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--text-secondary);
   padding: 4px;
   border-radius: 4px;
   transition: all 0.2s;
 }
 
 .closeButton:hover {
-  background-color: #e5e7eb;
-  color: #374151;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .content {
@@ -68,14 +68,14 @@
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top: 3px solid #3b82f6;
+  border: 3px solid var(--border-color);
+  border-top: 3px solid var(--accent-color);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
@@ -89,11 +89,11 @@
 .error {
   text-align: center;
   padding: 40px;
-  color: #dc2626;
+  color: var(--error-color);
 }
 
 .retryButton {
-  background-color: #3b82f6;
+  background-color: var(--accent-color);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -104,7 +104,7 @@
 }
 
 .retryButton:hover {
-  background-color: #2563eb;
+  background-color: var(--accent-hover);
 }
 
 .promptContent {
@@ -118,9 +118,9 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   padding: 16px;
-  background-color: #f3f4f6;
+  background-color: var(--bg-tertiary);
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color);
 }
 
 .metadataItem {
@@ -130,13 +130,13 @@
 }
 
 .metadataItem strong {
-  color: #374151;
+  color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 600;
 }
 
 .metadataItem span {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 
@@ -150,7 +150,7 @@
   margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .promptText {
@@ -173,15 +173,15 @@
     width: 95vw;
     max-height: 95vh;
   }
-  
+
   .header {
     padding: 16px 20px;
   }
-  
+
   .content {
     padding: 20px;
   }
-  
+
   .metadata {
     grid-template-columns: 1fr;
   }

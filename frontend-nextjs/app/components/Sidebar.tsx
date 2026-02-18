@@ -8,6 +8,7 @@ import { createUser, deleteUser, checkUsernameExists } from '../../lib/api';
 import ModelSelector from './ModelSelector';
 import DeleteUserModal from './DeleteUserModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
+import ThemeToggle from './ThemeToggle';
 import styles from './Sidebar.module.css';
 
 const GUEST_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -336,6 +337,15 @@ export default function Sidebar({
       <div className={styles.content}>
         {activeTab === 'settings' && (
           <div className={styles.settingsTab}>
+            {/* Theme */}
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Theme</h3>
+              <ThemeToggle
+                theme={settings.theme || 'system'}
+                onThemeChange={(value) => handleSettingChange('theme', value)}
+              />
+            </div>
+
             {/* User ID Input */}
             <div className={styles.section}>
               <h3 className={styles.sectionTitle}>👤 User ID</h3>

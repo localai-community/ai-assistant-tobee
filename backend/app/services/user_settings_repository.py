@@ -84,5 +84,6 @@ class UserSettingsRepository:
             "use_phase3_reasoning": False,
             "selected_phase2_engine": "auto",
             "selected_phase3_strategy": "auto",
-            "temperature": 0.7
+            "temperature": 0.7,
+            "theme": "system"
         }

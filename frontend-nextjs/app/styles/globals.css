@@ -84,15 +84,18 @@ body {
   font-size: var(--font-size-base);
   line-height: 1.6;
   color: var(--text-primary);
-  background-color: var(--bg-primary);
+  background-color: #1a1a1a;
   height: 100%;
   overflow: hidden;
-  padding: 20px 0;
   box-sizing: border-box;
 }
 
+[data-theme] body {
+  background-color: var(--bg-primary);
+}
+
 #root {
-  height: calc(100vh - 40px);
+  height: 100vh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -101,7 +104,7 @@ body {
 /* Main container */
 .main-container {
   display: flex;
-  height: calc(100vh - 40px);
+  height: 100vh;
   background-color: var(--bg-primary);
   overflow: hidden;
   box-sizing: border-box;
@@ -356,17 +359,13 @@ p {
     --sidebar-width: 100%;
   }
   
-  body {
-    padding: 20px 0;
-  }
-  
   #root {
-    height: calc(100vh - 40px);
+    height: 100vh;
   }
-  
+
   .main-container {
     flex-direction: column;
-    height: calc(100vh - 40px);
+    height: 100vh;
   }
   
   .btn {

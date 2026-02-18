@@ -91,6 +91,7 @@ export interface UserSettings {
   temperature?: number;
   use_unified_reasoning?: boolean;
   selected_reasoning_mode?: string;
+  theme?: string;
   created_at?: string;
   updated_at?: string;
 }
