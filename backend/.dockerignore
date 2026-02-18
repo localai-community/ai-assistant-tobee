@@ -1,0 +1,43 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Storage (runtime data)
+storage/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+
+# Documentation
+*.md
+
+# Test and utility scripts
+tests/
+test_*.py
+cleanup_conversations.py
+delete_user.py
+migrate_db.py
+invoke_lambda.py
+Makefile
+
+# Old requirements files
+requirements*.txt
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
