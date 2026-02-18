@@ -15,14 +15,15 @@ A FastAPI-based backend for the LocalAI Community AI assistant with MCP and RAG 
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
 - Ollama running locally (default: http://localhost:11434)
 
 ### Installation
 
 1. Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 2. Create a `.env` file (optional):
@@ -34,10 +35,10 @@ cp .env.example .env
 3. Run the application:
 ```bash
 # Development
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 
 # Production
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 **Note:** Database migrations run automatically on startup. See [MIGRATIONS.md](MIGRATIONS.md) for manual migration options.
@@ -83,7 +84,8 @@ backend/
 ├── storage/
 │   ├── uploads/      # File uploads
 │   └── vector_db/    # Vector database
-├── requirements.txt
+├── pyproject.toml
+├── uv.lock
 ├── Dockerfile
 └── README.md
 ```
@@ -95,10 +97,10 @@ Test the chat functionality and Ollama integration:
 
 ```bash
 # Test chat service and API
-python test_chat.py
+uv run python test_chat.py
 
 # Or run individual tests
-python -c "from app.services.chat import ChatService; print('Chat service imported successfully')"
+uv run python -c "from app.services.chat import ChatService; print('Chat service imported successfully')"
 ```
 
 ### Prerequisites for Testing
