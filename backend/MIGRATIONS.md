@@ -15,7 +15,7 @@ Migrations are version-controlled changes to your database schema. When we add n
 Just start your backend normally:
 ```bash
 cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 You'll see:
@@ -38,7 +38,7 @@ Manually migrate without starting the backend:
 
 ```bash
 cd backend
-python migrate_db.py
+uv run python migrate_db.py
 ```
 
 This will:
@@ -48,17 +48,17 @@ This will:
 
 **Check if you need to migrate:**
 ```bash
-python migrate_db.py --check-pending
+uv run python migrate_db.py --check-pending
 ```
 
 **Check your current version:**
 ```bash
-python migrate_db.py --check
+uv run python migrate_db.py --check
 ```
 
 **View migration history:**
 ```bash
-python migrate_db.py --history
+uv run python migrate_db.py --history
 ```
 
 ### Option 3: Using Alembic Directly
@@ -67,8 +67,7 @@ If you're familiar with Alembic:
 
 ```bash
 cd backend
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ## For Developers: Creating New Migrations
@@ -90,8 +89,7 @@ class UserSettings(Base):
 
 ```bash
 cd backend
-source venv/bin/activate
-alembic revision -m "add_new_field_to_user_settings"
+uv run alembic revision -m "add_new_field_to_user_settings"
 ```
 
 This creates a new migration file in `backend/alembic/versions/`.
@@ -115,13 +113,13 @@ def downgrade() -> None:
 
 ```bash
 # Test upgrade
-alembic upgrade head
+uv run alembic upgrade head
 
 # Test downgrade
-alembic downgrade -1
+uv run alembic downgrade -1
 
 # Re-upgrade
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### 5. Commit
@@ -136,25 +134,25 @@ git commit -m "feat: add new_field to user_settings"
 
 ```bash
 # Show current revision
-alembic current
+uv run alembic current
 
 # Show history
-alembic history
+uv run alembic history
 
 # Upgrade to latest
-alembic upgrade head
+uv run alembic upgrade head
 
 # Upgrade by 1 version
-alembic upgrade +1
+uv run alembic upgrade +1
 
 # Downgrade by 1 version
-alembic downgrade -1
+uv run alembic downgrade -1
 
 # Downgrade to specific revision
-alembic downgrade abc123
+uv run alembic downgrade abc123
 
 # Show SQL without executing
-alembic upgrade head --sql
+uv run alembic upgrade head --sql
 ```
 
 ## Troubleshooting
@@ -171,7 +169,7 @@ sqlite3 backend/localai_community.db "SELECT * FROM alembic_version"
 sqlite3 backend/localai_community.db "UPDATE alembic_version SET version_num='correct_version'"
 
 # Or use Python:
-python migrate_db.py --check
+uv run python migrate_db.py --check
 ```
 
 ### Migration Failed Mid-Way
@@ -180,14 +178,14 @@ Alembic doesn't use transactions for SQLite by default, so failed migrations can
 
 ```bash
 # Option 1: Fix the migration and re-run
-alembic upgrade head
+uv run alembic upgrade head
 
 # Option 2: Restore from backup
 cp backend/localai_community.db.backup backend/localai_community.db
 
 # Option 3: Start fresh (⚠️ loses data)
 rm backend/localai_community.db
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### Auto-Generate Migrations
@@ -195,7 +193,7 @@ alembic upgrade head
 Alembic can auto-detect model changes:
 
 ```bash
-alembic revision --autogenerate -m "auto detected changes"
+uv run alembic revision --autogenerate -m "auto detected changes"
 ```
 
 **Note:** Always review auto-generated migrations! They may not detect everything correctly.
@@ -220,13 +218,13 @@ Adds support for unified reasoning settings:
 
 **To apply:**
 ```bash
-python migrate_db.py
+uv run python migrate_db.py
 ```
 
 ## Need Help?
 
-- Check `alembic history` to see migration chain
-- Use `python migrate_db.py --check` to see current state
+- Check `uv run alembic history` to see migration chain
+- Use `uv run python migrate_db.py --check` to see current state
 - Look at existing migrations in `backend/alembic/versions/` for examples
 - Read Alembic docs: https://alembic.sqlalchemy.org/
 
