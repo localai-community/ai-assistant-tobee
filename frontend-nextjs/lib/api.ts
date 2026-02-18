@@ -1,19 +1,18 @@
 import axios, { AxiosResponse } from 'axios';
 import {
+  AIPrompt,
+  ChatDocument,
   ChatRequest,
   ChatResponse,
+  ContextAwarenessData,
   Conversation,
   ConversationCreate,
-  Message,
-  UserSettings,
-  ChatDocument,
   HealthResponse,
-  ApiError,
+  Message,
+  QuestionDetails,
   User,
   UserQuestion,
-  AIPrompt,
-  ContextAwarenessData,
-  QuestionDetails
+  UserSettings
 } from './types';
 
 // Create axios instance with default config
@@ -250,32 +249,44 @@ export async function getQuestionDetails(questionId: string): Promise<QuestionDe
 }
 
 export async function getConversationQuestions(conversationId: string, limit: number = 100): Promise<UserQuestion[]> {
-  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/questions?limit=${limit}`);
+  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/questions`, {
+    params: { limit }
+  });
   return response.data;
 }
 
 export async function getConversationPrompts(conversationId: string, limit: number = 100): Promise<AIPrompt[]> {
-  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/prompts?limit=${limit}`);
+  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/prompts`, {
+    params: { limit }
+  });
   return response.data;
 }
 
 export async function getConversationContext(conversationId: string, limit: number = 100): Promise<ContextAwarenessData[]> {
-  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/context?limit=${limit}`);
+  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/conversations/${conversationId}/context`, {
+    params: { limit }
+  });
   return response.data;
 }
 
 export async function getUserQuestions(userId: string, limit: number = 100): Promise<UserQuestion[]> {
-  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/users/${userId}/questions?limit=${limit}`);
+  const response: AxiosResponse<UserQuestion[]> = await api.get(`/api/view-prompts-context/users/${userId}/questions`, {
+    params: { limit }
+  });
   return response.data;
 }
 
 export async function getUserPrompts(userId: string, limit: number = 100): Promise<AIPrompt[]> {
-  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/users/${userId}/prompts?limit=${limit}`);
+  const response: AxiosResponse<AIPrompt[]> = await api.get(`/api/view-prompts-context/users/${userId}/prompts`, {
+    params: { limit }
+  });
   return response.data;
 }
 
 export async function getUserContext(userId: string, limit: number = 100): Promise<ContextAwarenessData[]> {
-  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/users/${userId}/context?limit=${limit}`);
+  const response: AxiosResponse<ContextAwarenessData[]> = await api.get(`/api/view-prompts-context/users/${userId}/context`, {
+    params: { limit }
+  });
   return response.data;
 }
 
