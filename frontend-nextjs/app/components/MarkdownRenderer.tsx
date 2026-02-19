@@ -11,9 +11,9 @@ interface MarkdownRendererProps {
 }
 
 const components: Components = {
-  code({ className, children, ...props }) {
+  code({ className, children, node, ...props }) {
     const match = /language-(\w+)/.exec(className || '');
-    const isBlock = match || (typeof children === 'string' && children.includes('\n'));
+    const isBlock = match || String(children).includes('\n');
 
     if (isBlock) {
       return (
