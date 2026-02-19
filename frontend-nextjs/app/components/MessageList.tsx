@@ -17,11 +17,14 @@ interface MessageListProps {
 }
 
 export default function MessageList({ messages, currentMessage, isLoading, error, isDeepSeekReasoning, currentThinking, currentAnswer, onSendMessage }: MessageListProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = containerRef.current?.parentElement;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
   }, [messages, currentMessage]);
 
   if (messages.length === 0 && !isLoading && !error) {
@@ -71,12 +74,12 @@ export default function MessageList({ messages, currentMessage, isLoading, error
   }
 
   return (
-    <div className={styles.container}>
+    <div ref={containerRef} className={styles.container}>
       <div className={styles.messages}>
         {messages.map((message) => (
           <MessageItem key={message.id} message={message} />
         ))}
-        
+
         {/* Show current streaming message */}
         {isLoading && currentMessage && (
           <MessageItem
@@ -93,7 +96,7 @@ export default function MessageList({ messages, currentMessage, isLoading, error
             currentAnswer={currentAnswer}
           />
         )}
-        
+
         {/* Show error message */}
         {error && (
           <div className={styles.errorMessage}>
@@ -104,9 +107,6 @@ export default function MessageList({ messages, currentMessage, isLoading, error
             </div>
           </div>
         )}
-        
-        {/* Auto-scroll anchor */}
-        <div ref={messagesEndRef} />
       </div>
     </div>
   );

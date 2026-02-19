@@ -43,6 +43,16 @@ export default function ChatInterface() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Reopen sidebar when switching to large screen
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 769px)');
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) setSidebarOpen(true);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
     

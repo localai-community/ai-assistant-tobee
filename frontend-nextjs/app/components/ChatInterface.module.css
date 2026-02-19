@@ -26,6 +26,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
 .header {
@@ -36,6 +37,7 @@
   background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   height: var(--header-height);
+  flex-shrink: 0;
 }
 
 .headerLeft {
@@ -101,6 +103,8 @@
 
 .messagesContainer {
   flex: 1;
+  max-width: 100%;
+  margin: 0 auto;
   overflow-y: auto;
   padding: var(--spacing-md);
   display: flex;
@@ -113,6 +117,7 @@
   background-color: var(--bg-primary);
   border-top: 1px solid var(--border-color);
   height: var(--chat-input-height);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
 }
