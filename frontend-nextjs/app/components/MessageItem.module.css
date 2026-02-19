@@ -90,25 +90,9 @@
 .content {
   line-height: 1.6;
   word-wrap: break-word;
-  white-space: pre-wrap;
 }
 
-.content strong {
-  font-weight: 600;
-}
-
-.content em {
-  font-style: italic;
-}
-
-.content code {
-  background-color: rgba(0, 0, 0, 0.1);
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.9em;
-}
-
+/* Inline code in user messages needs lighter background */
 .userMessage .content code {
   background-color: rgba(255, 255, 255, 0.2);
 }

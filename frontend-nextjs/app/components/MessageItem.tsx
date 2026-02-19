@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Message } from '../../lib/types';
 import { parseDeepSeekReasoning } from '../../lib/utils/deepseekParser';
 import DeepSeekReasoning from './DeepSeekReasoning';
+import MarkdownRenderer from './MarkdownRenderer';
 import QuestionDetails from './QuestionDetails';
 import { getConversationQuestions } from '../../lib/api';
 import styles from './MessageItem.module.css';
@@ -92,15 +93,6 @@ export default function MessageItem({ message, isStreaming = false, isDeepSeekRe
     });
   };
 
-  const formatContent = (content: string) => {
-    // Simple markdown-like formatting
-    return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
-  };
-
   // Parse DeepSeek reasoning format for assistant messages
   const parsedReasoning = isAssistant ? parseDeepSeekReasoning(message.content) : null;
   
@@ -135,12 +127,7 @@ export default function MessageItem({ message, isStreaming = false, isDeepSeekRe
               currentAnswer={currentAnswer}
             />
           ) : (
-            <div 
-              className={styles.content}
-              dangerouslySetInnerHTML={{ 
-                __html: formatContent(message.content) 
-              }}
-            />
+            <MarkdownRenderer content={message.content} className={styles.content} />
           )}
           
           {isStreaming && !shouldShowDeepSeek && !isDeepSeekReasoning && (

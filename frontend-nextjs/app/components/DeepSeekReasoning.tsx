@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DeepSeekParsed } from '../../lib/utils/deepseekParser';
+import MarkdownRenderer from './MarkdownRenderer';
 import styles from './DeepSeekReasoning.module.css';
 
 interface DeepSeekReasoningProps {
@@ -18,15 +19,6 @@ export default function DeepSeekReasoning({
   currentAnswer
 }: DeepSeekReasoningProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-
-  const formatContent = (content: string) => {
-    // Simple markdown-like formatting
-    return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
-  };
 
   if (!parsed.isDeepSeekFormat) {
     return null;
@@ -101,12 +93,7 @@ export default function DeepSeekReasoning({
       {/* Answer Section - Only show if there's actual answer content */}
       {answerContent.trim() && (
         <div className={styles.answerSection}>
-          <div 
-            className={styles.answerContent}
-            dangerouslySetInnerHTML={{ 
-              __html: formatContent(answerContent)
-            }}
-          />
+          <MarkdownRenderer content={answerContent} className={styles.answerContent} />
           {isStreaming && !answerContent.includes('▌') && <span className={styles.cursor}>▌</span>}
         </div>
       )}
