@@ -62,18 +62,30 @@ async def startup_event():
             try:
                 # Check if migrations are needed
                 script = ScriptDirectory.from_config(alembic_cfg)
-                
+
                 # Get database engine
                 from app.core.database import engine
+                from sqlalchemy import inspect
                 with engine.connect() as connection:
                     context = MigrationContext.configure(connection)
                     current_rev = context.get_current_revision()
                     head_rev = script.get_current_head()
-                    
+
                     if current_rev == head_rev:
                         print("✅ Database schema is up to date")
+                    elif current_rev is None:
+                        # Fresh database - tables created by SQLAlchemy, just stamp at head
+                        inspector = inspect(engine)
+                        if inspector.has_table("users"):
+                            print("📌 Stamping database at head (tables created by SQLAlchemy)...")
+                            command.stamp(alembic_cfg, "head")
+                            print("✅ Database stamped at head")
+                        else:
+                            print(f"🔄 Running database migrations (empty → {head_rev})...")
+                            command.upgrade(alembic_cfg, "head")
+                            print("✅ Database migrations completed successfully")
                     else:
-                        print(f"🔄 Running database migrations ({current_rev or 'empty'} → {head_rev})...")
+                        print(f"🔄 Running database migrations ({current_rev} → {head_rev})...")
                         command.upgrade(alembic_cfg, "head")
                         print("✅ Database migrations completed successfully")
             except Exception as migration_error:
